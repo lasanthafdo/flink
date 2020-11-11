@@ -33,7 +33,9 @@ public enum ScheduleMode {
 	LAZY_FROM_SOURCES_WITH_BATCH_SLOT_REQUEST(true),
 
 	/** Schedules all tasks immediately. */
-	EAGER(false);
+	EAGER(false),
+
+	ADAPTIVE(false);
 
 	private final boolean allowLazyDeployment;
 
