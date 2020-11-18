@@ -56,4 +56,11 @@ public class DeploymentOptions {
 					.noDefaultValue()
 					.withDescription("Custom JobListeners to be registered with the execution environment." +
 							" The registered listeners cannot have constructors with arguments.");
+
+	public static final ConfigOption<Boolean> ALLOW_PIN_TO_CPU =
+		key("execution.pin-to-cpu")
+			.booleanType()
+			.defaultValue(false)
+			.withDescription("Specifies if tasks to should pin to a single CPU or not when running.");
+
 }

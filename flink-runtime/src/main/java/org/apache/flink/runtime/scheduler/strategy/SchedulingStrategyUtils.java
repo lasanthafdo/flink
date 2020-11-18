@@ -39,8 +39,8 @@ class SchedulingStrategyUtils {
 	}
 
 	static Set<SchedulingExecutionVertex> getVerticesFromIds(
-			final SchedulingTopology topology,
-			final Set<ExecutionVertexID> vertexIds) {
+		final SchedulingTopology topology,
+		final Set<ExecutionVertexID> vertexIds) {
 
 		return vertexIds.stream()
 			.map(topology::getVertex)
@@ -48,22 +48,36 @@ class SchedulingStrategyUtils {
 	}
 
 	static List<ExecutionVertexDeploymentOption> createExecutionVertexDeploymentOptionsInTopologicalOrder(
-			final SchedulingTopology topology,
-			final Set<ExecutionVertexID> verticesToDeploy,
-			final Function<ExecutionVertexID, DeploymentOption> deploymentOptionRetriever) {
+		final SchedulingTopology topology,
+		final Set<ExecutionVertexID> verticesToDeploy,
+		final Function<ExecutionVertexID, DeploymentOption> deploymentOptionRetriever) {
+
+		return createExecutionVertexDeploymentOptionsInTopologicalOrder(
+			topology,
+			verticesToDeploy,
+			deploymentOptionRetriever,
+			false);
+	}
+
+	static List<ExecutionVertexDeploymentOption> createExecutionVertexDeploymentOptionsInTopologicalOrder(
+		final SchedulingTopology topology,
+		final Set<ExecutionVertexID> verticesToDeploy,
+		final Function<ExecutionVertexID, DeploymentOption> deploymentOptionRetriever,
+		final boolean pinToCpu) {
 
 		return IterableUtils.toStream(topology.getVertices())
 			.map(SchedulingExecutionVertex::getId)
 			.filter(verticesToDeploy::contains)
 			.map(executionVertexID -> new ExecutionVertexDeploymentOption(
 				executionVertexID,
-				deploymentOptionRetriever.apply(executionVertexID)))
+				deploymentOptionRetriever.apply(executionVertexID),
+				pinToCpu))
 			.collect(Collectors.toList());
 	}
 
 	static List<SchedulingPipelinedRegion> sortPipelinedRegionsInTopologicalOrder(
-			final SchedulingTopology topology,
-			final Set<SchedulingPipelinedRegion> regions) {
+		final SchedulingTopology topology,
+		final Set<SchedulingPipelinedRegion> regions) {
 
 		return IterableUtils.toStream(topology.getVertices())
 			.map(SchedulingExecutionVertex::getId)

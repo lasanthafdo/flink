@@ -59,6 +59,7 @@ import org.apache.flink.core.execution.PipelineExecutor;
 import org.apache.flink.core.execution.PipelineExecutorFactory;
 import org.apache.flink.core.execution.PipelineExecutorServiceLoader;
 import org.apache.flink.core.fs.Path;
+import org.apache.flink.runtime.jobgraph.ScheduleMode;
 import org.apache.flink.runtime.state.AbstractStateBackend;
 import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
 import org.apache.flink.runtime.state.StateBackend;
@@ -154,6 +155,8 @@ public class StreamExecutionEnvironment {
 	private long bufferTimeout = StreamingJobGraphGenerator.UNDEFINED_NETWORK_BUFFER_TIMEOUT;
 
 	protected boolean isChainingEnabled = true;
+
+	protected boolean allowPinToCpu = false;
 
 	/** The state backend used for storing k/v state and state snapshots. */
 	private StateBackend defaultStateBackend;
@@ -781,6 +784,8 @@ public class StreamExecutionEnvironment {
 			.ifPresent(t -> this.setBufferTimeout(t.toMillis()));
 		configuration.getOptional(DeploymentOptions.JOB_LISTENERS)
 			.ifPresent(listeners -> registerCustomListeners(classLoader, listeners));
+		configuration.getOptional(DeploymentOptions.ALLOW_PIN_TO_CPU)
+			.ifPresent(c -> this.allowPinToCpu = c);
 		configuration.getOptional(PipelineOptions.CACHED_FILES)
 			.ifPresent(f -> {
 				this.cacheFile.clear();
@@ -1874,7 +1879,8 @@ public class StreamExecutionEnvironment {
 			.setChaining(isChainingEnabled)
 			.setUserArtifacts(cacheFile)
 			.setTimeCharacteristic(timeCharacteristic)
-			.setDefaultBufferTimeout(bufferTimeout);
+			.setDefaultBufferTimeout(bufferTimeout)
+			.setScheduleMode(allowPinToCpu ? ScheduleMode.PINNED : ScheduleMode.EAGER);
 	}
 
 	/**

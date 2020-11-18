@@ -146,6 +146,8 @@ public final class TaskDeploymentDescriptor implements Serializable {
 	@Nullable
 	private final JobManagerTaskRestore taskRestore;
 
+	private final boolean pinToCpu;
+
 	public TaskDeploymentDescriptor(
 		JobID jobId,
 		MaybeOffloaded<JobInformation> serializedJobInformation,
@@ -175,7 +177,44 @@ public final class TaskDeploymentDescriptor implements Serializable {
 
 		Preconditions.checkArgument(0 <= targetSlotNumber, "The target slot number must be positive.");
 		this.targetSlotNumber = targetSlotNumber;
+		this.pinToCpu = false;
+		this.taskRestore = taskRestore;
 
+		this.producedPartitions = Preconditions.checkNotNull(resultPartitionDeploymentDescriptors);
+		this.inputGates = Preconditions.checkNotNull(inputGateDeploymentDescriptors);
+	}
+
+	public TaskDeploymentDescriptor(
+		JobID jobId,
+		MaybeOffloaded<JobInformation> serializedJobInformation,
+		MaybeOffloaded<TaskInformation> serializedTaskInformation,
+		ExecutionAttemptID executionAttemptId,
+		AllocationID allocationId,
+		int subtaskIndex,
+		int attemptNumber,
+		int targetSlotNumber,
+		boolean pinToCpu,
+		@Nullable JobManagerTaskRestore taskRestore,
+		List<ResultPartitionDeploymentDescriptor> resultPartitionDeploymentDescriptors,
+		List<InputGateDeploymentDescriptor> inputGateDeploymentDescriptors) {
+
+		this.jobId = Preconditions.checkNotNull(jobId);
+
+		this.serializedJobInformation = Preconditions.checkNotNull(serializedJobInformation);
+		this.serializedTaskInformation = Preconditions.checkNotNull(serializedTaskInformation);
+
+		this.executionId = Preconditions.checkNotNull(executionAttemptId);
+		this.allocationId = Preconditions.checkNotNull(allocationId);
+
+		Preconditions.checkArgument(0 <= subtaskIndex, "The subtask index must be positive.");
+		this.subtaskIndex = subtaskIndex;
+
+		Preconditions.checkArgument(0 <= attemptNumber, "The attempt number must be positive.");
+		this.attemptNumber = attemptNumber;
+
+		Preconditions.checkArgument(0 <= targetSlotNumber, "The target slot number must be positive.");
+		this.targetSlotNumber = targetSlotNumber;
+		this.pinToCpu = pinToCpu;
 		this.taskRestore = taskRestore;
 
 		this.producedPartitions = Preconditions.checkNotNull(resultPartitionDeploymentDescriptors);

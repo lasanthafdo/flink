@@ -60,6 +60,7 @@ public class TaskDeploymentDescriptorFactory {
 	private final MaybeOffloaded<TaskInformation> taskInfo;
 	private final JobID jobID;
 	private final boolean allowUnknownPartitions;
+	private final boolean pinToCpu;
 	private final int subtaskIndex;
 	private final ExecutionEdge[][] inputEdges;
 
@@ -70,6 +71,7 @@ public class TaskDeploymentDescriptorFactory {
 			MaybeOffloaded<TaskInformation> taskInfo,
 			JobID jobID,
 			boolean allowUnknownPartitions,
+			boolean pinToCpu,
 			int subtaskIndex,
 			ExecutionEdge[][] inputEdges) {
 		this.executionId = executionId;
@@ -78,6 +80,7 @@ public class TaskDeploymentDescriptorFactory {
 		this.taskInfo = taskInfo;
 		this.jobID = jobID;
 		this.allowUnknownPartitions = allowUnknownPartitions;
+		this.pinToCpu = pinToCpu;
 		this.subtaskIndex = subtaskIndex;
 		this.inputEdges = inputEdges;
 	}
@@ -96,6 +99,7 @@ public class TaskDeploymentDescriptorFactory {
 			subtaskIndex,
 			attemptNumber,
 			targetSlotNumber,
+			pinToCpu,
 			taskRestore,
 			new ArrayList<>(producedPartitions),
 			createInputGateDeploymentDescriptors());
@@ -147,6 +151,7 @@ public class TaskDeploymentDescriptorFactory {
 			getSerializedTaskInformation(executionVertex.getJobVertex().getTaskInformationOrBlobKey()),
 			executionGraph.getJobID(),
 			executionGraph.getScheduleMode().allowLazyDeployment(),
+			executionVertex.getDeploymentConstraint().getPinToCpu(),
 			executionVertex.getParallelSubtaskIndex(),
 			executionVertex.getAllInputEdges());
 	}

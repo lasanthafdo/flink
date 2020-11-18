@@ -37,6 +37,7 @@ import org.apache.flink.runtime.jobgraph.JobEdge;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobmanager.scheduler.CoLocationConstraint;
 import org.apache.flink.runtime.jobmanager.scheduler.CoLocationGroup;
+import org.apache.flink.runtime.jobmanager.scheduler.DeploymentConstraint;
 import org.apache.flink.runtime.jobmanager.scheduler.LocationPreferenceConstraint;
 import org.apache.flink.runtime.jobmaster.LogicalSlot;
 import org.apache.flink.runtime.scheduler.strategy.ExecutionVertexID;
@@ -93,6 +94,8 @@ public class ExecutionVertex implements AccessExecutionVertex, Archiveable<Archi
 	private final String taskNameWithSubtask;
 
 	private CoLocationConstraint locationConstraint;
+
+	private DeploymentConstraint deploymentConstraint;
 
 	/** The current or latest execution attempt of this vertex's task. */
 	private Execution currentExecution;	// this field must never be null
@@ -901,5 +904,9 @@ public class ExecutionVertex implements AccessExecutionVertex, Archiveable<Archi
 
 	public boolean isLegacyScheduling() {
 		return getExecutionGraph().isLegacyScheduling();
+	}
+
+	public DeploymentConstraint getDeploymentConstraint() {
+		return deploymentConstraint;
 	}
 }

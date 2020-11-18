@@ -44,6 +44,9 @@ public class TaskInformation implements Serializable {
 	/** The maximum parallelism == number of key groups. */
 	private final int maxNumberOfSubtasks;
 
+	/** The CPU ID affinity for this task **/
+	private final int cpuIdAffinity;
+
 	/** Class name of the invokable to run. */
 	private final String invokableClassName;
 
@@ -63,6 +66,8 @@ public class TaskInformation implements Serializable {
 		this.maxNumberOfSubtasks = maxNumberOfSubtasks;
 		this.invokableClassName = Preconditions.checkNotNull(invokableClassName);
 		this.taskConfiguration = Preconditions.checkNotNull(taskConfiguration);
+		//TODO Fix properly
+		this.cpuIdAffinity = 5;
 	}
 
 	public JobVertexID getJobVertexId() {
@@ -87,5 +92,9 @@ public class TaskInformation implements Serializable {
 
 	public Configuration getTaskConfiguration() {
 		return taskConfiguration;
+	}
+
+	public int getCpuIdAffinity() {
+		return cpuIdAffinity;
 	}
 }

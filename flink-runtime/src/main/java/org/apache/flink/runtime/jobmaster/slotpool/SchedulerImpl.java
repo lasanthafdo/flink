@@ -104,6 +104,15 @@ public class SchedulerImpl implements Scheduler {
 
 	//---------------------------
 
+	/**
+	 * Implementation of the {@link SlotProvider#allocateSlot(SlotRequestId, ScheduledUnit, SlotProfile, Time)} method
+	 *
+	 * @param slotRequestId identifying the slot request
+	 * @param scheduledUnit The task to allocate the slot for
+	 * @param slotProfile profile of the requested slot
+	 * @param allocationTimeout after which the allocation fails with a timeout exception
+	 * @return {@link CompletableFuture<LogicalSlot>} indicating the allocation result
+	 */
 	@Override
 	public CompletableFuture<LogicalSlot> allocateSlot(
 			SlotRequestId slotRequestId,
