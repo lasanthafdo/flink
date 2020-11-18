@@ -27,7 +27,7 @@ public class DeploymentConstraint {
 
 	private final int cpuId;
 
-	DeploymentConstraint(boolean pinToCpu) {
+	public DeploymentConstraint(boolean pinToCpu) {
 		this.pinToCpu = pinToCpu;
 		this.cpuId = -1;
 	}

@@ -266,7 +266,8 @@ public class BackPressureRequestCoordinatorTest extends TestLogger {
 				timeout,
 				initialGlobalModVersion,
 				createTimestamp,
-				JobManagerOptions.MAX_ATTEMPTS_HISTORY_SIZE.defaultValue());
+				JobManagerOptions.MAX_ATTEMPTS_HISTORY_SIZE.defaultValue(),
+				false);
 			execution = new TestingExecution(
 				Runnable::run,
 				this,

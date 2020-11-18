@@ -121,7 +121,8 @@ public class ExecutionVertex implements AccessExecutionVertex, Archiveable<Archi
 			timeout,
 			1L,
 			System.currentTimeMillis(),
-			JobManagerOptions.MAX_ATTEMPTS_HISTORY_SIZE.defaultValue());
+			JobManagerOptions.MAX_ATTEMPTS_HISTORY_SIZE.defaultValue(),
+			false);
 	}
 
 	/**
@@ -143,7 +144,8 @@ public class ExecutionVertex implements AccessExecutionVertex, Archiveable<Archi
 			Time timeout,
 			long initialGlobalModVersion,
 			long createTimestamp,
-			int maxPriorExecutionHistoryLength) {
+			int maxPriorExecutionHistoryLength,
+			boolean pinToCpu) {
 
 		this.jobVertex = jobVertex;
 		this.subTaskIndex = subTaskIndex;
@@ -185,6 +187,7 @@ public class ExecutionVertex implements AccessExecutionVertex, Archiveable<Archi
 
 		this.timeout = timeout;
 		this.inputSplits = new ArrayList<>();
+		this.deploymentConstraint  = new DeploymentConstraint(pinToCpu);
 	}
 
 

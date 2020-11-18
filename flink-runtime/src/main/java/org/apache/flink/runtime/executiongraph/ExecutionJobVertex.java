@@ -44,6 +44,7 @@ import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.JobEdge;
 import org.apache.flink.runtime.jobgraph.JobVertex;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
+import org.apache.flink.runtime.jobgraph.ScheduleMode;
 import org.apache.flink.runtime.jobmanager.scheduler.CoLocationGroup;
 import org.apache.flink.runtime.jobmanager.scheduler.SlotSharingGroup;
 import org.apache.flink.runtime.operators.coordination.OperatorCoordinator;
@@ -54,12 +55,10 @@ import org.apache.flink.util.IOUtils;
 import org.apache.flink.util.OptionalFailure;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.SerializedValue;
-
 import org.slf4j.Logger;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -217,7 +216,8 @@ public class ExecutionJobVertex implements AccessExecutionJobVertex, Archiveable
 					timeout,
 					initialGlobalModVersion,
 					createTimestamp,
-					maxPriorAttemptsHistoryLength);
+					maxPriorAttemptsHistoryLength,
+					graph.getScheduleMode() == ScheduleMode.PINNED);
 
 			this.taskVertices[i] = vertex;
 		}
