@@ -210,6 +210,7 @@ public final class TestTaskBuilder {
 			resultPartitions,
 			inputGates,
 			0,
+			false,
 			MemoryManagerBuilder.newBuilder().setMemorySize(1024 * 1024).build(),
 			mock(IOManager.class),
 			shuffleEnvironment,

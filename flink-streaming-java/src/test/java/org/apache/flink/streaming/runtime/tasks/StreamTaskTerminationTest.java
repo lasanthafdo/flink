@@ -167,6 +167,7 @@ public class StreamTaskTerminationTest extends TestLogger {
 			Collections.<ResultPartitionDeploymentDescriptor>emptyList(),
 			Collections.<InputGateDeploymentDescriptor>emptyList(),
 			0,
+			false,
 			MemoryManagerBuilder.newBuilder().setMemorySize(32L * 1024L).build(),
 			new IOManagerAsync(),
 			shuffleEnvironment,

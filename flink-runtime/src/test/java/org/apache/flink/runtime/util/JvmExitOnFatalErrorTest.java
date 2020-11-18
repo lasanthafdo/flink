@@ -203,6 +203,7 @@ public class JvmExitOnFatalErrorTest {
 						Collections.<ResultPartitionDeploymentDescriptor>emptyList(),
 						Collections.<InputGateDeploymentDescriptor>emptyList(),
 						0,       // targetSlotNumber
+						false,
 						memoryManager,
 						ioManager,
 						shuffleEnvironment,

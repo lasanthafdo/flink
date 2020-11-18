@@ -44,6 +44,10 @@ public final class TaskDeploymentDescriptor implements Serializable {
 
 	private static final long serialVersionUID = -3233562176034358530L;
 
+	public boolean isPinnedToCpu() {
+		return pinnedToCpu;
+	}
+
 	/**
 	 * Wrapper class for serialized values which may be offloaded to the {@link
 	 * org.apache.flink.runtime.blob.BlobServer} or not.
@@ -146,7 +150,7 @@ public final class TaskDeploymentDescriptor implements Serializable {
 	@Nullable
 	private final JobManagerTaskRestore taskRestore;
 
-	private final boolean pinToCpu;
+	private final boolean pinnedToCpu;
 
 	public TaskDeploymentDescriptor(
 		JobID jobId,
@@ -177,7 +181,7 @@ public final class TaskDeploymentDescriptor implements Serializable {
 
 		Preconditions.checkArgument(0 <= targetSlotNumber, "The target slot number must be positive.");
 		this.targetSlotNumber = targetSlotNumber;
-		this.pinToCpu = false;
+		this.pinnedToCpu = false;
 		this.taskRestore = taskRestore;
 
 		this.producedPartitions = Preconditions.checkNotNull(resultPartitionDeploymentDescriptors);
@@ -214,7 +218,7 @@ public final class TaskDeploymentDescriptor implements Serializable {
 
 		Preconditions.checkArgument(0 <= targetSlotNumber, "The target slot number must be positive.");
 		this.targetSlotNumber = targetSlotNumber;
-		this.pinToCpu = pinToCpu;
+		this.pinnedToCpu = pinToCpu;
 		this.taskRestore = taskRestore;
 
 		this.producedPartitions = Preconditions.checkNotNull(resultPartitionDeploymentDescriptors);

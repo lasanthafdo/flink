@@ -248,6 +248,7 @@ public class SynchronousCheckpointITCase {
 				Collections.<ResultPartitionDeploymentDescriptor>emptyList(),
 				Collections.<InputGateDeploymentDescriptor>emptyList(),
 				0,
+				false,
 				mock(MemoryManager.class),
 				mock(IOManager.class),
 				shuffleEnvironment,

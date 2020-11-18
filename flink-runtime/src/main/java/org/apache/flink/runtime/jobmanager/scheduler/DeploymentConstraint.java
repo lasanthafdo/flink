@@ -18,9 +18,6 @@
 
 package org.apache.flink.runtime.jobmanager.scheduler;
 
-import static org.apache.flink.util.Preconditions.checkNotNull;
-import static org.apache.flink.util.Preconditions.checkState;
-
 /**
  * DeploymentConstraint
  */
