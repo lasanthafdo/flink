@@ -80,6 +80,7 @@ public abstract class SlotProviderStrategy {
 				return new BatchSlotProviderStrategy(slotProvider);
 			case LAZY_FROM_SOURCES:
 			case EAGER:
+			case PINNED:
 				return new NormalSlotProviderStrategy(slotProvider, allocationTimeout);
 			default:
 				throw new IllegalArgumentException(String.format("Unknown scheduling mode: %s", scheduleMode));
