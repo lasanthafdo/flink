@@ -63,4 +63,10 @@ public class DeploymentOptions {
 			.defaultValue(false)
 			.withDescription("Specifies if tasks to should pin to a single CPU or not when running.");
 
+	public static final ConfigOption<String> SCHEDULING_AGENT_CONFIG_STRING =
+		key("execution.scheduling-config")
+			.stringType()
+			.defaultValue("1,120,500")
+			.withDescription("Specifies the configuration string for the scheduling agent.");
+
 }

@@ -30,7 +30,6 @@ import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 import org.apache.flink.util.Preconditions;
 
 import javax.annotation.Nullable;
-
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 
@@ -71,11 +70,11 @@ public class SingleLogicalSlot implements LogicalSlot, PhysicalSlot.Payload {
 	private volatile Payload payload;
 
 	public SingleLogicalSlot(
-			SlotRequestId slotRequestId,
-			SlotContext slotContext,
-			@Nullable SlotSharingGroupId slotSharingGroupId,
-			Locality locality,
-			SlotOwner slotOwner) {
+		SlotRequestId slotRequestId,
+		SlotContext slotContext,
+		@Nullable SlotSharingGroupId slotSharingGroupId,
+		Locality locality,
+		SlotOwner slotOwner) {
 		this.slotRequestId = Preconditions.checkNotNull(slotRequestId);
 		this.slotContext = Preconditions.checkNotNull(slotContext);
 		this.slotSharingGroupId = slotSharingGroupId;
@@ -122,6 +121,16 @@ public class SingleLogicalSlot implements LogicalSlot, PhysicalSlot.Payload {
 	public CompletableFuture<?> releaseSlot(@Nullable Throwable cause) {
 		if (STATE_UPDATER.compareAndSet(this, State.ALIVE, State.RELEASING)) {
 			signalPayloadRelease(cause);
+			returnSlotToOwner(payload.getTerminalStateFuture());
+		}
+
+		return releaseFuture;
+	}
+
+	@Override
+	public CompletableFuture<?> releaseSlot() {
+		if (STATE_UPDATER.compareAndSet(this, State.ALIVE, State.RELEASING)) {
+			PAYLOAD_UPDATER.compareAndSet(this, payload, null);
 			returnSlotToOwner(payload.getTerminalStateFuture());
 		}
 

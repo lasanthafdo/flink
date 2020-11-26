@@ -289,7 +289,7 @@ public abstract class SchedulerBase implements SchedulerNG {
 	/**
 	 * Tries to restore the given {@link ExecutionGraph} from the provided {@link SavepointRestoreSettings}.
 	 *
-	 * @param executionGraphToRestore {@link ExecutionGraph} which is supposed to be restored
+	 * @param executionGraphToRestore  {@link ExecutionGraph} which is supposed to be restored
 	 * @param savepointRestoreSettings {@link SavepointRestoreSettings} containing information about the savepoint to restore from
 	 * @throws Exception if the {@link ExecutionGraph} could not be restored
 	 */
@@ -312,7 +312,7 @@ public abstract class SchedulerBase implements SchedulerNG {
 			final ExecutionVertex ev = getExecutionVertex(executionVertexId);
 
 			final CoLocationGroup cgroup = ev.getJobVertex().getCoLocationGroup();
-			if (cgroup != null && !colGroups.contains(cgroup)){
+			if (cgroup != null && !colGroups.contains(cgroup)) {
 				cgroup.resetConstraints();
 				colGroups.add(cgroup);
 			}
@@ -334,7 +334,7 @@ public abstract class SchedulerBase implements SchedulerNG {
 		// i) enable new checkpoint triggering without waiting for last checkpoint expired.
 		// ii) ensure the EXACTLY_ONCE semantics if needed.
 		checkpointCoordinator.abortPendingCheckpoints(
-				new CheckpointException(CheckpointFailureReason.JOB_FAILOVER_REGION));
+			new CheckpointException(CheckpointFailureReason.JOB_FAILOVER_REGION));
 
 		final Set<ExecutionJobVertex> jobVerticesToRestore = getInvolvedExecutionJobVertices(vertices);
 		if (isGlobalRecovery) {
@@ -345,7 +345,7 @@ public abstract class SchedulerBase implements SchedulerNG {
 	}
 
 	private Set<ExecutionJobVertex> getInvolvedExecutionJobVertices(
-			final Set<ExecutionVertexID> executionVertices) {
+		final Set<ExecutionVertexID> executionVertices) {
 
 		final Set<ExecutionJobVertex> tasks = new HashSet<>();
 		for (ExecutionVertexID executionVertexID : executionVertices) {
@@ -380,12 +380,20 @@ public abstract class SchedulerBase implements SchedulerNG {
 		return schedulingTopology;
 	}
 
+	protected ExecutionGraph getExecutionGraph() {
+		return executionGraph;
+	}
+
 	protected final ResultPartitionAvailabilityChecker getResultPartitionAvailabilityChecker() {
 		return executionGraph.getResultPartitionAvailabilityChecker();
 	}
 
 	protected final InputsLocationsRetriever getInputsLocationsRetriever() {
 		return inputsLocationsRetriever;
+	}
+
+	protected ScheduledExecutorService getFutureExecutor() {
+		return futureExecutor;
 	}
 
 	protected final void prepareExecutionGraphForNgScheduling() {
@@ -509,8 +517,8 @@ public abstract class SchedulerBase implements SchedulerNG {
 	}
 
 	private boolean isNotifiable(
-			final ExecutionVertexID executionVertexId,
-			final TaskExecutionState taskExecutionState) {
+		final ExecutionVertexID executionVertexId,
+		final TaskExecutionState taskExecutionState) {
 
 		final ExecutionVertex executionVertex = getExecutionVertex(executionVertexId);
 
@@ -587,8 +595,7 @@ public abstract class SchedulerBase implements SchedulerNG {
 		final Execution execution = executionGraph.getRegisteredExecutions().get(resultPartitionId.getProducerId());
 		if (execution != null) {
 			return execution.getState();
-		}
-		else {
+		} else {
 			final IntermediateResult intermediateResult =
 				executionGraph.getAllIntermediateResults().get(intermediateResultId);
 
@@ -924,9 +931,9 @@ public abstract class SchedulerBase implements SchedulerNG {
 
 	@Override
 	public void deliverOperatorEventToCoordinator(
-			final ExecutionAttemptID taskExecutionId,
-			final OperatorID operatorId,
-			final OperatorEvent evt) throws FlinkException {
+		final ExecutionAttemptID taskExecutionId,
+		final OperatorID operatorId,
+		final OperatorEvent evt) throws FlinkException {
 
 		// Failure semantics (as per the javadocs of the method):
 		// If the task manager sends an event for a non-running task or an non-existing operator
@@ -958,11 +965,11 @@ public abstract class SchedulerBase implements SchedulerNG {
 
 	@Override
 	public CompletableFuture<CoordinationResponse> deliverCoordinationRequestToCoordinator(
-			OperatorID operator,
-			CoordinationRequest request) throws FlinkException {
+		OperatorID operator,
+		CoordinationRequest request) throws FlinkException {
 
 		final OperatorCoordinatorHolder coordinatorHolder = coordinatorMap.get(operator);
-		if (coordinatorHolder == null){
+		if (coordinatorHolder == null) {
 			throw new FlinkException("Coordinator of operator " + operator + " does not exist");
 		}
 
@@ -986,8 +993,7 @@ public abstract class SchedulerBase implements SchedulerNG {
 			for (OperatorCoordinatorHolder coordinator : coordinators) {
 				coordinator.start();
 			}
-		}
-		catch (Throwable t) {
+		} catch (Throwable t) {
 			ExceptionUtils.rethrowIfFatalErrorOrOOM(t);
 			coordinators.forEach(IOUtils::closeQuietly);
 			throw new FlinkRuntimeException("Failed to start the operator coordinators", t);
@@ -1011,6 +1017,7 @@ public abstract class SchedulerBase implements SchedulerNG {
 		}
 		return coordinatorMap;
 	}
+
 
 	// ------------------------------------------------------------------------
 	//  access utils for testing

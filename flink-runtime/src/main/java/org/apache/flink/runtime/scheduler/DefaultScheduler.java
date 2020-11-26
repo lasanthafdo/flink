@@ -37,6 +37,7 @@ import org.apache.flink.runtime.executiongraph.restart.ThrowingRestartStrategy;
 import org.apache.flink.runtime.io.network.partition.JobMasterPartitionTracker;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 import org.apache.flink.runtime.jobgraph.JobGraph;
+import org.apache.flink.runtime.jobgraph.ScheduleMode;
 import org.apache.flink.runtime.jobmanager.scheduler.NoResourceAvailableException;
 import org.apache.flink.runtime.jobmaster.LogicalSlot;
 import org.apache.flink.runtime.jobmaster.slotpool.ThrowingSlotProvider;
@@ -93,6 +94,8 @@ public class DefaultScheduler extends SchedulerBase implements SchedulerOperatio
 	private final ExecutionVertexOperations executionVertexOperations;
 
 	private final Set<ExecutionVertexID> verticesWaitingForRestart;
+
+	private final PeriodicSchedulingAgent periodicSchedulingAgent;
 
 	DefaultScheduler(
 		final Logger log,
@@ -155,6 +158,13 @@ public class DefaultScheduler extends SchedulerBase implements SchedulerOperatio
 		this.executionSlotAllocator = checkNotNull(executionSlotAllocatorFactory).createInstance(getInputsLocationsRetriever());
 
 		this.verticesWaitingForRestart = new HashSet<>();
+
+		if (jobGraph.getScheduleMode() == ScheduleMode.PINNED) {
+			this.periodicSchedulingAgent = new PeriodicSchedulingAgent(
+				log, getExecutionGraph(), this.schedulingStrategy);
+		} else {
+			this.periodicSchedulingAgent = null;
+		}
 	}
 
 	// ------------------------------------------------------------------------
@@ -171,6 +181,9 @@ public class DefaultScheduler extends SchedulerBase implements SchedulerOperatio
 		log.info("Starting scheduling with scheduling strategy [{}]", schedulingStrategy.getClass().getName());
 		prepareExecutionGraphForNgScheduling();
 		schedulingStrategy.startScheduling();
+		if (getJobGraph().getScheduleMode() == ScheduleMode.PINNED) {
+			getFutureExecutor().scheduleAtFixedRate(periodicSchedulingAgent, 1, 1, TimeUnit.MINUTES);
+		}
 	}
 
 	@Override
@@ -329,10 +342,10 @@ public class DefaultScheduler extends SchedulerBase implements SchedulerOperatio
 	}
 
 	private static Map<ExecutionVertexID, ExecutionVertexDeploymentOption> groupDeploymentOptionsByVertexId(
-			final Collection<ExecutionVertexDeploymentOption> executionVertexDeploymentOptions) {
+		final Collection<ExecutionVertexDeploymentOption> executionVertexDeploymentOptions) {
 		return executionVertexDeploymentOptions.stream().collect(Collectors.toMap(
-				ExecutionVertexDeploymentOption::getExecutionVertexId,
-				Function.identity()));
+			ExecutionVertexDeploymentOption::getExecutionVertexId,
+			Function.identity()));
 	}
 
 	private List<SlotExecutionVertexAssignment> allocateSlots(final List<ExecutionVertexDeploymentOption> executionVertexDeploymentOptions) {
@@ -481,8 +494,8 @@ public class DefaultScheduler extends SchedulerBase implements SchedulerOperatio
 
 		final ExecutionState currentState = vertex.getExecutionState();
 		if (currentState == ExecutionState.FAILED ||
-				currentState == ExecutionState.CANCELING ||
-				currentState == ExecutionState.CANCELED) {
+			currentState == ExecutionState.CANCELING ||
+			currentState == ExecutionState.CANCELED) {
 			return;
 		}
 
