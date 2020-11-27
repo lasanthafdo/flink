@@ -28,11 +28,9 @@ import org.apache.flink.runtime.jobmanager.scheduler.LocationPreferenceConstrain
 import org.apache.flink.runtime.jobmanager.scheduler.NoResourceAvailableException;
 import org.apache.flink.runtime.jobmaster.slotpool.Scheduler;
 import org.apache.flink.runtime.jobmaster.slotpool.SlotProvider;
-import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategy;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.FlinkException;
-
 import org.slf4j.Logger;
 
 import java.util.ArrayList;
@@ -210,8 +208,9 @@ public class SchedulingUtils {
 	 *
 	 * @param executionGraph     execution graph
 	 * @param schedulingStrategy schedulingStrategy
+	 * @return CompletableFuture
 	 */
-	public static void rescheduleEager(
+	public static CompletableFuture<Collection<Void>> rescheduleEager(
 		final ExecutionGraph executionGraph,
 		final SchedulingStrategy schedulingStrategy,
 		final Logger log) {
@@ -225,41 +224,37 @@ public class SchedulingUtils {
 
 		// collecting all the slots may resize and fail in that operation without slots getting lost
 		final Iterable<ExecutionVertex> vertices = executionGraph.getAllExecutionVertices();
-		final ArrayList<CompletableFuture<Acknowledge>> allHaltFutures = new ArrayList<>();
-		final ArrayList<CompletableFuture<Execution>> allAllocationFutures = new ArrayList<>();
-		final SlotProviderStrategy slotProviderStrategy = executionGraph.getSlotProviderStrategy();
-		final Set<AllocationID> allPreviousAllocationIds = Collections.unmodifiableSet(
-			computePriorAllocationIdsIfRequiredByScheduling(vertices, slotProviderStrategy.asSlotProvider()));
+		final ArrayList<CompletableFuture<Void>> allHaltFutures = new ArrayList<>();
 
 		for (ExecutionVertex ev : vertices) {
 			Execution attempt = ev.getCurrentExecutionAttempt();
-			CompletableFuture<Acknowledge> haltFuture = attempt.haltExecution().whenCompleteAsync((ack, failure) -> {
-				if (failure != null) {
-					throw new CompletionException("Could not halt execution for execution attempt " +
-						attempt.getAttemptId() + " in job " + attempt.getVertex().getTaskNameWithSubtaskIndex(),
-						failure);
-				} else {
-					//TODO Ugly code!! Please fix when you have time
-					try {
-						int retryCount = 120;
-						while (attempt.getState() != ExecutionState.CREATED && retryCount > 0) {
-							Thread.sleep(500);
-							retryCount--;
-						}
-					} catch (InterruptedException ignore) {
-					} finally {
-						if (attempt.getState() != ExecutionState.CREATED) {
-							log.info("Forcefully transitioning the state for attempt {}.", attempt.getVertex().getTaskNameWithSubtaskIndex());
-							attempt.transitionState(ExecutionState.CREATED);
-						}
+			CompletableFuture<Void> haltFuture = attempt.haltExecution().thenAcceptAsync(ack -> {
+				//TODO Ugly code!! Please fix when you have time
+				try {
+					int retryCount = 120;
+					while (attempt.getState() != ExecutionState.CREATED && retryCount > 0) {
+						Thread.sleep(500);
+						retryCount--;
+					}
+				} catch (InterruptedException ignore) {
+				} finally {
+					if (attempt.getState() != ExecutionState.CREATED) {
+						log.error("Couldn't transition state for attempt {}.", attempt.getVertex().getTaskNameWithSubtaskIndex());
+						FutureUtils.completedExceptionally(new Exception("Could not halt execution for execution attempt " +
+							attempt.getAttemptId() + " in job " + attempt.getVertex().getTaskNameWithSubtaskIndex()));
 					}
 				}
 			});
 			allHaltFutures.add(haltFuture);
 		}
-		final ConjunctFuture<Collection<Acknowledge>> allHaltsFuture = FutureUtils.combineAll(allHaltFutures);
-		allHaltsFuture.thenAccept(acknowledges -> {
-			schedulingStrategy.startScheduling();
+		final ConjunctFuture<Collection<Void>> allHaltsFuture = FutureUtils.combineAll(allHaltFutures);
+		return allHaltsFuture.whenComplete((ack, fail) -> {
+			if (fail != null) {
+				log.error("Encountered exception when halting process.", fail);
+				throw new CompletionException("Halt process unsuccessful", fail);
+			} else {
+				schedulingStrategy.startScheduling();
+			}
 		});
 	}
 

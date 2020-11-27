@@ -170,7 +170,7 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 
 	private final CompletableFuture<?> releaseFuture;
 
-	private final CompletableFuture<TaskManagerLocation> taskManagerLocationFuture;
+	private CompletableFuture<TaskManagerLocation> taskManagerLocationFuture;
 
 	private volatile ExecutionState state = CREATED;
 
@@ -789,7 +789,11 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 
 	public CompletableFuture<Acknowledge> haltExecution() {
 		//TODO Handle state transitions properly
-		return sendCancelRpcCallForHalt(NUM_CANCEL_CALL_TRIES);
+		CompletableFuture<Acknowledge> cancelFuture = sendCancelRpcCallForHalt(NUM_CANCEL_CALL_TRIES);
+		if (taskManagerLocationFuture.isDone()) {
+			taskManagerLocationFuture = new CompletableFuture<>();
+		}
+		return cancelFuture;
 	}
 
 	public void cancel() {

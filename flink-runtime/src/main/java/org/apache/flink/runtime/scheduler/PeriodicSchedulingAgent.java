@@ -6,6 +6,9 @@ import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategy;
 
 import org.slf4j.Logger;
 
+import java.util.Collection;
+import java.util.concurrent.CompletableFuture;
+
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /**
@@ -16,6 +19,7 @@ public class PeriodicSchedulingAgent implements Runnable {
 	private final ExecutionGraph executionGraph;
 	private final SchedulingStrategy schedulingStrategy;
 	private final Logger log;
+	private CompletableFuture<Collection<Void>> previousRescheduleFuture;
 
 	public PeriodicSchedulingAgent(Logger log, ExecutionGraph executionGraph, SchedulingStrategy schedulingStrategy) {
 		this.log = log;
@@ -40,7 +44,9 @@ public class PeriodicSchedulingAgent implements Runnable {
 			}
 		} else {
 */
-		log.info("Rescheduling job '" + executionGraph.getJobName() + "'");
-		SchedulingUtils.rescheduleEager(executionGraph, schedulingStrategy, log);
+		if (previousRescheduleFuture == null || previousRescheduleFuture.isDone()) {
+			log.info("Rescheduling job '" + executionGraph.getJobName() + "'");
+			previousRescheduleFuture = SchedulingUtils.rescheduleEager(executionGraph, schedulingStrategy, log);
+		}
 	}
 }

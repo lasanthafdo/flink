@@ -130,8 +130,14 @@ public class SingleLogicalSlot implements LogicalSlot, PhysicalSlot.Payload {
 	@Override
 	public CompletableFuture<?> releaseSlot() {
 		if (STATE_UPDATER.compareAndSet(this, State.ALIVE, State.RELEASING)) {
-			PAYLOAD_UPDATER.compareAndSet(this, payload, null);
+/*
+			if (!PAYLOAD_UPDATER.compareAndSet(this, payload, null)) {
+				throw new CompletionException(
+					new FlinkException("Could not release the payload for allocation " + this.getAllocationId()));
+			}
+*/
 			returnSlotToOwner(payload.getTerminalStateFuture());
+			PAYLOAD_UPDATER.set(this, null);
 		}
 
 		return releaseFuture;

@@ -182,7 +182,7 @@ public class DefaultScheduler extends SchedulerBase implements SchedulerOperatio
 		prepareExecutionGraphForNgScheduling();
 		schedulingStrategy.startScheduling();
 		if (getJobGraph().getScheduleMode() == ScheduleMode.PINNED) {
-			getFutureExecutor().scheduleAtFixedRate(periodicSchedulingAgent, 1, 1, TimeUnit.MINUTES);
+			getFutureExecutor().scheduleAtFixedRate(periodicSchedulingAgent, 20, 20, TimeUnit.SECONDS);
 		}
 	}
 
