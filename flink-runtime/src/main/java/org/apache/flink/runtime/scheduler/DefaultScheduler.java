@@ -37,7 +37,6 @@ import org.apache.flink.runtime.executiongraph.restart.ThrowingRestartStrategy;
 import org.apache.flink.runtime.io.network.partition.JobMasterPartitionTracker;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 import org.apache.flink.runtime.jobgraph.JobGraph;
-import org.apache.flink.runtime.jobgraph.ScheduleMode;
 import org.apache.flink.runtime.jobmanager.scheduler.NoResourceAvailableException;
 import org.apache.flink.runtime.jobmaster.LogicalSlot;
 import org.apache.flink.runtime.jobmaster.slotpool.ThrowingSlotProvider;
@@ -158,13 +157,10 @@ public class DefaultScheduler extends SchedulerBase implements SchedulerOperatio
 		this.executionSlotAllocator = checkNotNull(executionSlotAllocatorFactory).createInstance(getInputsLocationsRetriever());
 
 		this.verticesWaitingForRestart = new HashSet<>();
-
-		if (jobGraph.getScheduleMode() == ScheduleMode.PINNED) {
-			this.periodicSchedulingAgent = new PeriodicSchedulingAgent(
-				log, getExecutionGraph(), this.schedulingStrategy);
-		} else {
-			this.periodicSchedulingAgent = null;
-		}
+		this.periodicSchedulingAgent = SchedulingAgentUtils.buildSchedulingAgent(log,
+			getExecutionGraph(),
+			this.schedulingStrategy,
+			jobMasterConfiguration);
 	}
 
 	// ------------------------------------------------------------------------
@@ -181,8 +177,9 @@ public class DefaultScheduler extends SchedulerBase implements SchedulerOperatio
 		log.info("Starting scheduling with scheduling strategy [{}]", schedulingStrategy.getClass().getName());
 		prepareExecutionGraphForNgScheduling();
 		schedulingStrategy.startScheduling();
-		if (getJobGraph().getScheduleMode() == ScheduleMode.PINNED) {
-			getFutureExecutor().scheduleAtFixedRate(periodicSchedulingAgent, 20, 20, TimeUnit.SECONDS);
+		if (periodicSchedulingAgent != null) {
+			long triggerPeriod = periodicSchedulingAgent.getTriggerPeriod();
+			getFutureExecutor().scheduleAtFixedRate(periodicSchedulingAgent, triggerPeriod, triggerPeriod, TimeUnit.SECONDS);
 		}
 	}
 

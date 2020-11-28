@@ -1431,17 +1431,28 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 				() -> taskManagerGateway.cancelTask(attemptId, rpcTimeout),
 				numberRetries,
 				jobMasterMainThreadExecutor)
-				.whenComplete(
-					(ack, failure) -> {
-						if (failure != null) {
-							fail(new Exception("Task could not be canceled.", failure));
+				.thenCompose(
+					ack -> {
+						if (ack == null) {
+							fail(new Exception(
+								"Task could not be canceled for rescheduling for the execution [" +
+									getAttemptId() + "]."));
+							throw new CompletionException(new FlinkException("Task could not be canceled for rescheduling for the execution [" +
+								getAttemptId() + "]."));
 						} else {
 							transitionState(HALTED);
 							markTimestamp(HALTED);
-							releaseAssignedResource();
-							assignedResource = null;
+							return releaseAssignedResource();
 						}
-					});
+					})
+				.handle((ack, fail) -> {
+					if (fail != null) {
+						return null;
+					} else {
+						assignedResource = null;
+						return Acknowledge.get();
+					}
+				});
 			return cancelFuture;
 		} else {
 			return FutureUtils.completedExceptionally(new Exception("Slot for execution [" + getAttemptId() + "] was not assigned."));
@@ -1567,17 +1578,16 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 	 * Releases the assigned resource and completes the release future
 	 * once the assigned resource has been successfully released.
 	 */
-	private void releaseAssignedResource() {
+	private CompletableFuture<?> releaseAssignedResource() {
 
 		assertRunningInJobMasterMainThread();
 
 		final LogicalSlot slot = assignedResource;
-
 		if (slot != null) {
 			ComponentMainThreadExecutor jobMasterMainThreadExecutor =
 				getVertex().getExecutionGraph().getJobMasterMainThreadExecutor();
 
-			slot.releaseSlot()
+			return slot.releaseSlot()
 				.whenComplete((Object ignored, Throwable throwable) -> {
 					jobMasterMainThreadExecutor.assertRunningInMainThread();
 					if (throwable != null) {
@@ -1589,6 +1599,7 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 		} else {
 			// no assigned resource --> we can directly complete the release future
 			releaseFuture.complete(null);
+			return FutureUtils.completedVoidFuture();
 		}
 	}
 

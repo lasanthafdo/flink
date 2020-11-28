@@ -131,8 +131,6 @@ public class StreamExecutionEnvironment {
 	/** The time characteristic that is used if none other is set. */
 	private static final TimeCharacteristic DEFAULT_TIME_CHARACTERISTIC = TimeCharacteristic.ProcessingTime;
 
-	private static final String DEFAULT_SCHEDULING_AGENT_CONFIG_STRING = "1,120,500";
-
 	/**
 	 * The environment of the context (local by default, cluster if invoked through command line).
 	 */
@@ -159,8 +157,6 @@ public class StreamExecutionEnvironment {
 	protected boolean isChainingEnabled = true;
 
 	protected boolean allowPinToCpu = false;
-
-	protected String schedulingAgentConfiguration = DEFAULT_SCHEDULING_AGENT_CONFIG_STRING;
 
 	/** The state backend used for storing k/v state and state snapshots. */
 	private StateBackend defaultStateBackend;
@@ -790,8 +786,6 @@ public class StreamExecutionEnvironment {
 			.ifPresent(listeners -> registerCustomListeners(classLoader, listeners));
 		configuration.getOptional(DeploymentOptions.ALLOW_PIN_TO_CPU)
 			.ifPresent(b -> this.allowPinToCpu = b);
-		configuration.getOptional(DeploymentOptions.SCHEDULING_AGENT_CONFIG_STRING)
-			.ifPresent(s -> this.schedulingAgentConfiguration = s);
 		configuration.getOptional(PipelineOptions.CACHED_FILES)
 			.ifPresent(f -> {
 				this.cacheFile.clear();

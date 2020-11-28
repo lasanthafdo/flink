@@ -22,16 +22,13 @@ import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.concurrent.FutureUtils;
 import org.apache.flink.runtime.concurrent.FutureUtils.ConjunctFuture;
-import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.jobgraph.ScheduleMode;
 import org.apache.flink.runtime.jobmanager.scheduler.LocationPreferenceConstraint;
 import org.apache.flink.runtime.jobmanager.scheduler.NoResourceAvailableException;
 import org.apache.flink.runtime.jobmaster.slotpool.Scheduler;
 import org.apache.flink.runtime.jobmaster.slotpool.SlotProvider;
-import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategy;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.FlinkException;
-import org.slf4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -51,9 +48,9 @@ import static org.apache.flink.util.Preconditions.checkState;
 public class SchedulingUtils {
 
 	public static CompletableFuture<Void> schedule(
-		ScheduleMode scheduleMode,
-		final Iterable<ExecutionVertex> vertices,
-		final ExecutionGraph executionGraph) {
+			ScheduleMode scheduleMode,
+			final Iterable<ExecutionVertex> vertices,
+			final ExecutionGraph executionGraph) {
 
 		switch (scheduleMode) {
 			case LAZY_FROM_SOURCES:
@@ -71,12 +68,12 @@ public class SchedulingUtils {
 	/**
 	 * Schedule vertices lazy. That means only vertices satisfying its input constraint will be scheduled.
 	 *
-	 * @param vertices       Topologically sorted vertices to schedule.
+	 * @param vertices Topologically sorted vertices to schedule.
 	 * @param executionGraph The graph the given vertices belong to.
 	 */
 	public static CompletableFuture<Void> scheduleLazy(
-		final Iterable<ExecutionVertex> vertices,
-		final ExecutionGraph executionGraph) {
+			final Iterable<ExecutionVertex> vertices,
+			final ExecutionGraph executionGraph) {
 
 		executionGraph.assertRunningInJobMasterMainThread();
 
@@ -105,12 +102,12 @@ public class SchedulingUtils {
 	/**
 	 * Schedule vertices eagerly. That means all vertices will be scheduled at once.
 	 *
-	 * @param vertices       Topologically sorted vertices to schedule.
+	 * @param vertices Topologically sorted vertices to schedule.
 	 * @param executionGraph The graph the given vertices belong to.
 	 */
 	public static CompletableFuture<Void> scheduleEager(
-		final Iterable<ExecutionVertex> vertices,
-		final ExecutionGraph executionGraph) {
+			final Iterable<ExecutionVertex> vertices,
+			final ExecutionGraph executionGraph) {
 
 		executionGraph.assertRunningInJobMasterMainThread();
 
@@ -204,68 +201,13 @@ public class SchedulingUtils {
 	}
 
 	/**
-	 * Reschedule vertices eagerly
-	 *
-	 * @param executionGraph     execution graph
-	 * @param schedulingStrategy schedulingStrategy
-	 * @return CompletableFuture
-	 */
-	public static CompletableFuture<Collection<Void>> rescheduleEager(
-		final ExecutionGraph executionGraph,
-		final SchedulingStrategy schedulingStrategy,
-		final Logger log) {
-
-		checkState(executionGraph.getState() == JobStatus.RUNNING, "job is not running currently");
-
-		// Important: reserve all the space we need up front.
-		// that way we do not have any operation that can fail between allocating the slots
-		// and adding them to the list. If we had a failure in between there, that would
-		// cause the slots to get lost
-
-		// collecting all the slots may resize and fail in that operation without slots getting lost
-		final Iterable<ExecutionVertex> vertices = executionGraph.getAllExecutionVertices();
-		final ArrayList<CompletableFuture<Void>> allHaltFutures = new ArrayList<>();
-
-		for (ExecutionVertex ev : vertices) {
-			Execution attempt = ev.getCurrentExecutionAttempt();
-			CompletableFuture<Void> haltFuture = attempt.haltExecution().thenAcceptAsync(ack -> {
-				//TODO Ugly code!! Please fix when you have time
-				try {
-					int retryCount = 120;
-					while (attempt.getState() != ExecutionState.CREATED && retryCount > 0) {
-						Thread.sleep(500);
-						retryCount--;
-					}
-				} catch (InterruptedException ignore) {
-				} finally {
-					if (attempt.getState() != ExecutionState.CREATED) {
-						log.error("Couldn't transition state for attempt {}.", attempt.getVertex().getTaskNameWithSubtaskIndex());
-						FutureUtils.completedExceptionally(new Exception("Could not halt execution for execution attempt " +
-							attempt.getAttemptId() + " in job " + attempt.getVertex().getTaskNameWithSubtaskIndex()));
-					}
-				}
-			});
-			allHaltFutures.add(haltFuture);
-		}
-		final ConjunctFuture<Collection<Void>> allHaltsFuture = FutureUtils.combineAll(allHaltFutures);
-		return allHaltsFuture.whenComplete((ack, fail) -> {
-			if (fail != null) {
-				log.error("Encountered exception when halting process.", fail);
-				throw new CompletionException("Halt process unsuccessful", fail);
-			} else {
-				schedulingStrategy.startScheduling();
-			}
-		});
-	}
-
-	/**
 	 * Returns the result of {@link #computePriorAllocationIds(Iterable)},
 	 * but only if the scheduling really requires it.
 	 * Otherwise this method simply returns an empty set.
 	 */
 	private static Set<AllocationID> computePriorAllocationIdsIfRequiredByScheduling(
-		final Iterable<ExecutionVertex> vertices,
-		final SlotProvider slotProvider) {
+			final Iterable<ExecutionVertex> vertices,
+			final SlotProvider slotProvider) {
 		// This is a temporary optimization to avoid computing all previous allocations if not required
 		// This can go away when we progress with the implementation of the Scheduler.
 		if (slotProvider instanceof Scheduler &&

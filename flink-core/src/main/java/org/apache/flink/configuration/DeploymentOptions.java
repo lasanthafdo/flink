@@ -66,7 +66,7 @@ public class DeploymentOptions {
 	public static final ConfigOption<String> SCHEDULING_AGENT_CONFIG_STRING =
 		key("execution.scheduling-config")
 			.stringType()
-			.defaultValue("1,120,500")
+			.noDefaultValue()
 			.withDescription("Specifies the configuration string for the scheduling agent.");
 
 }
