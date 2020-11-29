@@ -201,4 +201,8 @@ public class DefaultExecutionTopology implements SchedulingTopology {
 			}
 		}
 	}
+
+	private static void updateResultPartitionMetrics() {
+		//TODO implement
+	}
 }

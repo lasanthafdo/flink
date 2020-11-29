@@ -18,21 +18,25 @@
 
 package org.apache.flink.runtime.scheduler.strategy;
 
+import org.apache.flink.runtime.execution.ExecutionPlacement;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 import org.apache.flink.runtime.scheduler.DeploymentOption;
 import org.apache.flink.runtime.scheduler.ExecutionVertexDeploymentOption;
 import org.apache.flink.runtime.scheduler.SchedulerOperations;
+import org.apache.flink.runtime.scheduler.adapter.DefaultExecutionEdge;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /**
  * {@link SchedulingStrategy} instance for streaming job which will schedule all tasks at the same time.
  */
-public class PinnedSchedulingStrategy implements SchedulingStrategy {
+public class TrafficBasedSchedulingStrategy implements SchedulingStrategy {
 
 	private final SchedulerOperations schedulerOperations;
 
@@ -40,16 +44,21 @@ public class PinnedSchedulingStrategy implements SchedulingStrategy {
 
 	private final DeploymentOption deploymentOption = new DeploymentOption(false);
 
-	public PinnedSchedulingStrategy(
+	private final List<SchedulingExecutionEdge> adjacentTasksList;
+
+	public TrafficBasedSchedulingStrategy(
 		SchedulerOperations schedulerOperations,
 		SchedulingTopology schedulingTopology) {
+
 		this.schedulerOperations = checkNotNull(schedulerOperations);
 		this.schedulingTopology = checkNotNull(schedulingTopology);
+		this.adjacentTasksList = new ArrayList<>();
 	}
 
 	@Override
 	public void startScheduling() {
-		allocateSlotsAndDeploy(SchedulingStrategyUtils.getAllVertexIdsFromTopology(schedulingTopology));
+		allocateSlotsAndDeploy(SchedulingStrategyUtils.getAllVertexIdsFromTopology(
+			schedulingTopology));
 	}
 
 	@Override
@@ -58,7 +67,9 @@ public class PinnedSchedulingStrategy implements SchedulingStrategy {
 	}
 
 	@Override
-	public void onExecutionStateChange(ExecutionVertexID executionVertexId, ExecutionState executionState) {
+	public void onExecutionStateChange(
+		ExecutionVertexID executionVertexId,
+		ExecutionState executionState) {
 		// Will not react to these notifications.
 	}
 
@@ -68,16 +79,41 @@ public class PinnedSchedulingStrategy implements SchedulingStrategy {
 	}
 
 	private void allocateSlotsAndDeploy(final Set<ExecutionVertexID> verticesToDeploy) {
+		AtomicInteger sourceCpuId = new AtomicInteger(2);
+		AtomicInteger operatorCpuId = new AtomicInteger(8);
+		schedulingTopology.getVertices().forEach(schedulingExecutionVertex -> {
+			List<SchedulingExecutionEdge> upstreamEdges = new ArrayList<>();
+			schedulingExecutionVertex.getConsumedResults().forEach(schedulingResultPartition -> {
+				schedulingResultPartition
+					.getConsumers()
+					.forEach(consumer -> upstreamEdges.add(new DefaultExecutionEdge(
+						schedulingResultPartition.getProducer(),
+						consumer,
+						schedulingResultPartition)));
+			});
+
+			if (upstreamEdges.isEmpty()) { // Source vertex
+				schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
+					"localhost:0",
+					sourceCpuId.getAndAdd(2)));
+			} else {
+				schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
+					"localhost:0",
+					operatorCpuId.getAndIncrement()));
+				adjacentTasksList.addAll(upstreamEdges);
+			}
+		});
 		final List<ExecutionVertexDeploymentOption> executionVertexDeploymentOptions =
 			SchedulingStrategyUtils.createExecutionVertexDeploymentOptionsInTopologicalOrder(
 				schedulingTopology,
 				verticesToDeploy,
-				id -> deploymentOption);
+				id -> deploymentOption,
+				id -> schedulingTopology.getVertex(id).getExecutionPlacement());
 		schedulerOperations.allocateSlotsAndDeploy(executionVertexDeploymentOptions);
 	}
 
 	/**
-	 * The factory for creating {@link PinnedSchedulingStrategy}.
+	 * The factory for creating {@link TrafficBasedSchedulingStrategy}.
 	 */
 	public static class Factory implements SchedulingStrategyFactory {
 
@@ -85,7 +121,7 @@ public class PinnedSchedulingStrategy implements SchedulingStrategy {
 		public SchedulingStrategy createInstance(
 			SchedulerOperations schedulerOperations,
 			SchedulingTopology schedulingTopology) {
-			return new PinnedSchedulingStrategy(schedulerOperations, schedulingTopology);
+			return new TrafficBasedSchedulingStrategy(schedulerOperations, schedulingTopology);
 		}
 	}
 }

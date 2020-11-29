@@ -20,11 +20,13 @@ package org.apache.flink.runtime.scheduler.adapter;
 
 import org.apache.flink.api.common.InputDependencyConstraint;
 import org.apache.flink.runtime.execution.ExecutionState;
+import org.apache.flink.runtime.execution.ExecutionPlacement;
 import org.apache.flink.runtime.scheduler.strategy.ExecutionVertexID;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
@@ -42,16 +44,41 @@ class DefaultExecutionVertex implements SchedulingExecutionVertex {
 
 	private final Supplier<ExecutionState> stateSupplier;
 
+	private final Supplier<ExecutionPlacement> placementSupplier;
+
+	private final Consumer<ExecutionPlacement> placementConsumer;
+
 	private final InputDependencyConstraint inputDependencyConstraint;
 
 	DefaultExecutionVertex(
-			ExecutionVertexID executionVertexId,
-			List<DefaultResultPartition> producedPartitions,
-			Supplier<ExecutionState> stateSupplier,
-			InputDependencyConstraint constraint) {
+		ExecutionVertexID executionVertexId,
+		List<DefaultResultPartition> producedPartitions,
+		Supplier<ExecutionState> stateSupplier,
+		InputDependencyConstraint constraint) {
+
+		this(
+			executionVertexId,
+			producedPartitions,
+			stateSupplier,
+			() -> null,
+			executionPlacement -> {
+			},
+			constraint);
+	}
+
+	DefaultExecutionVertex(
+		ExecutionVertexID executionVertexId,
+		List<DefaultResultPartition> producedPartitions,
+		Supplier<ExecutionState> stateSupplier,
+		Supplier<ExecutionPlacement> placementSupplier,
+		Consumer<ExecutionPlacement> placementConsumer,
+		InputDependencyConstraint constraint) {
+
 		this.executionVertexId = checkNotNull(executionVertexId);
 		this.consumedResults = new ArrayList<>();
 		this.stateSupplier = checkNotNull(stateSupplier);
+		this.placementSupplier = checkNotNull(placementSupplier);
+		this.placementConsumer = checkNotNull(placementConsumer);
 		this.producedResults = checkNotNull(producedPartitions);
 		this.inputDependencyConstraint = checkNotNull(constraint);
 	}
@@ -64,6 +91,16 @@ class DefaultExecutionVertex implements SchedulingExecutionVertex {
 	@Override
 	public ExecutionState getState() {
 		return stateSupplier.get();
+	}
+
+	@Override
+	public ExecutionPlacement getExecutionPlacement() {
+		return placementSupplier.get();
+	}
+
+	@Override
+	public void setExecutionPlacement(ExecutionPlacement executionPlacement) {
+		placementConsumer.accept(executionPlacement);
 	}
 
 	@Override
@@ -82,6 +119,6 @@ class DefaultExecutionVertex implements SchedulingExecutionVertex {
 	}
 
 	void addConsumedResult(DefaultResultPartition result) {
-			consumedResults.add(result);
+		consumedResults.add(result);
 	}
 }

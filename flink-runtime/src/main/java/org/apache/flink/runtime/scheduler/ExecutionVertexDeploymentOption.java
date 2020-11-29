@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.scheduler;
 
+import org.apache.flink.runtime.execution.ExecutionPlacement;
 import org.apache.flink.runtime.scheduler.strategy.ExecutionVertexID;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
@@ -31,22 +32,22 @@ public class ExecutionVertexDeploymentOption {
 
 	private final DeploymentOption deploymentOption;
 
-	/**
-	 * This should have been introduced as a separate deployment option. Using this approach since otherwise
-	 * a lot of API changes would be required (due to current API design limitations)
-	 */
-	private final Boolean pinToCpu;
+	private final ExecutionPlacement executionPlacement;
 
-	public ExecutionVertexDeploymentOption(ExecutionVertexID executionVertexId, DeploymentOption deploymentOption) {
-		this.executionVertexId = checkNotNull(executionVertexId);
-		this.deploymentOption = checkNotNull(deploymentOption);
-		this.pinToCpu = false;
+	public ExecutionVertexDeploymentOption(
+		ExecutionVertexID executionVertexID,
+		DeploymentOption deploymentOption) {
+		this(executionVertexID, deploymentOption, null);
 	}
 
-	public ExecutionVertexDeploymentOption(ExecutionVertexID executionVertexId, DeploymentOption deploymentOption, boolean pinToCpu) {
+	public ExecutionVertexDeploymentOption(
+		ExecutionVertexID executionVertexId,
+		DeploymentOption deploymentOption,
+		ExecutionPlacement executionPlacement) {
+
 		this.executionVertexId = checkNotNull(executionVertexId);
 		this.deploymentOption = checkNotNull(deploymentOption);
-		this.pinToCpu = pinToCpu;
+		this.executionPlacement = executionPlacement;
 	}
 
 	public ExecutionVertexID getExecutionVertexId() {
@@ -57,7 +58,7 @@ public class ExecutionVertexDeploymentOption {
 		return deploymentOption;
 	}
 
-	public Boolean getPinToCpu() {
-		return pinToCpu;
+	public ExecutionPlacement getExecutionPlacement() {
+		return executionPlacement;
 	}
 }

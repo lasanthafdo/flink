@@ -19,45 +19,22 @@
 package org.apache.flink.runtime.scheduler.strategy;
 
 import org.apache.flink.api.common.InputDependencyConstraint;
+import org.apache.flink.runtime.execution.ExecutionPlacement;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.executiongraph.ExecutionVertex;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
-import org.apache.flink.runtime.execution.ExecutionPlacement;
+import org.apache.flink.runtime.topology.ResultID;
 import org.apache.flink.runtime.topology.Vertex;
+import org.apache.flink.runtime.topology.VertexID;
 
 /**
  * Scheduling representation of {@link ExecutionVertex}.
  */
-public interface SchedulingExecutionVertex
-	extends Vertex<ExecutionVertexID, IntermediateResultPartitionID, SchedulingExecutionVertex, SchedulingResultPartition> {
+public interface SchedulingExecutionEdge<SEV extends SchedulingExecutionVertex, SRP extends SchedulingResultPartition> {
 
-	ExecutionPlacement DEFAULT_EXECUTION_PLACEMENT = new ExecutionPlacement("localhost:0", -1);
+	SEV getSourceSchedulingExecutionVertex();
 
-	/**
-	 * Gets the state of the execution vertex.
-	 *
-	 * @return state of the execution vertex
-	 */
-	ExecutionState getState();
+	SEV getTargetSchedulingExecutionVertex();
 
-	/**
-	 * Get the placement of the execution vertex
-	 *
-	 * @return the placement of the execution vertex
-	 */
-	ExecutionPlacement getExecutionPlacement();
-
-	/**
-	 * Sets the exeuction placement
-	 *
-	 * @param executionPlacement the placement for the execution
-	 */
-	void setExecutionPlacement(ExecutionPlacement executionPlacement);
-
-	/**
-	 * Get {@link InputDependencyConstraint}.
-	 *
-	 * @return input dependency constraint
-	 */
-	InputDependencyConstraint getInputDependencyConstraint();
+	SRP getSchedulingResultPartition();
 }

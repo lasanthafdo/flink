@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.scheduler.strategy;
 
+import org.apache.flink.runtime.execution.ExecutionPlacement;
 import org.apache.flink.runtime.scheduler.DeploymentOption;
 import org.apache.flink.runtime.scheduler.ExecutionVertexDeploymentOption;
 import org.apache.flink.util.IterableUtils;
@@ -56,14 +57,14 @@ class SchedulingStrategyUtils {
 			topology,
 			verticesToDeploy,
 			deploymentOptionRetriever,
-			false);
+			executionVertexID -> SchedulingExecutionVertex.DEFAULT_EXECUTION_PLACEMENT);
 	}
 
 	static List<ExecutionVertexDeploymentOption> createExecutionVertexDeploymentOptionsInTopologicalOrder(
 		final SchedulingTopology topology,
 		final Set<ExecutionVertexID> verticesToDeploy,
 		final Function<ExecutionVertexID, DeploymentOption> deploymentOptionRetriever,
-		final boolean pinToCpu) {
+		final Function<ExecutionVertexID, ExecutionPlacement> executionPlacementRetriever) {
 
 		return IterableUtils.toStream(topology.getVertices())
 			.map(SchedulingExecutionVertex::getId)
@@ -71,7 +72,8 @@ class SchedulingStrategyUtils {
 			.map(executionVertexID -> new ExecutionVertexDeploymentOption(
 				executionVertexID,
 				deploymentOptionRetriever.apply(executionVertexID),
-				pinToCpu))
+				executionPlacementRetriever.apply(executionVertexID)
+			))
 			.collect(Collectors.toList());
 	}
 

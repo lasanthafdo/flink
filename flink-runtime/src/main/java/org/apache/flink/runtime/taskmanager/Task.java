@@ -365,6 +365,8 @@ public class Task implements Runnable, TaskSlotPayload, TaskActions, PartitionPr
 	 */
 	private boolean pinnedToCpu;
 
+	private int cpuId;
+
 	/**
 	 * This class loader should be set as the context class loader for threads that may dynamically load user code.
 	 */
@@ -385,6 +387,7 @@ public class Task implements Runnable, TaskSlotPayload, TaskActions, PartitionPr
 		List<InputGateDeploymentDescriptor> inputGateDeploymentDescriptors,
 		int targetSlotNumber,
 		boolean pinToCpu,
+		int cpuId,
 		MemoryManager memManager,
 		IOManager ioManager,
 		ShuffleEnvironment<?, ?> shuffleEnvironment,
@@ -501,6 +504,7 @@ public class Task implements Runnable, TaskSlotPayload, TaskActions, PartitionPr
 
 		invokableHasBeenCanceled = new AtomicBoolean(false);
 		this.pinnedToCpu = pinToCpu;
+		this.cpuId = cpuId;
 		// finally, create the executing thread, but do not start it
 
 		executingThread = new Thread(TASK_THREADS_GROUP, this, taskNameWithSubtask);
@@ -638,8 +642,7 @@ public class Task implements Runnable, TaskSlotPayload, TaskActions, PartitionPr
 	@Override
 	public void run() {
 		if(pinnedToCpu) {
-			try (AffinityLock a1 = AffinityLock.acquireLock()) {
-				int cpuId = Affinity.getCpu();
+			try (AffinityLock a1 = AffinityLock.acquireLock(cpuId)) {
 				LOG.info("Task {} is running on CPU {} ", taskInfo.getTaskName(), cpuId);
 				doRun();
 			} finally {

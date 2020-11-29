@@ -29,6 +29,7 @@ import org.apache.flink.core.io.InputSplitAssigner;
 import org.apache.flink.runtime.JobException;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
+import org.apache.flink.runtime.execution.ExecutionPlacement;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.jobgraph.DistributionPattern;
@@ -283,6 +284,11 @@ public class ExecutionVertex implements AccessExecutionVertex, Archiveable<Archi
 	@Override
 	public ExecutionState getExecutionState() {
 		return currentExecution.getState();
+	}
+
+	@Override
+	public ExecutionPlacement getExecutionPlacement() {
+		return currentExecution.getPlacement();
 	}
 
 	@Override

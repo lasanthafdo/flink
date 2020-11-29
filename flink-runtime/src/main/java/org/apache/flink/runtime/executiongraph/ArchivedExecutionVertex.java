@@ -17,6 +17,7 @@
  */
 package org.apache.flink.runtime.executiongraph;
 
+import org.apache.flink.runtime.execution.ExecutionPlacement;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 import org.apache.flink.runtime.util.EvictingBoundedList;
@@ -78,6 +79,11 @@ public class ArchivedExecutionVertex implements AccessExecutionVertex, Serializa
 	@Override
 	public ExecutionState getExecutionState() {
 		return currentExecution.getState();
+	}
+
+	@Override
+	public ExecutionPlacement getExecutionPlacement() {
+		return currentExecution.getPlacement();
 	}
 
 	@Override

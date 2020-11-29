@@ -24,6 +24,7 @@ import org.apache.flink.runtime.blob.PermanentBlobKey;
 import org.apache.flink.runtime.checkpoint.JobManagerTaskRestore;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.deployment.TaskDeploymentDescriptor.MaybeOffloaded;
+import org.apache.flink.runtime.execution.ExecutionPlacement;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.executiongraph.Execution;
 import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
@@ -61,19 +62,21 @@ public class TaskDeploymentDescriptorFactory {
 	private final JobID jobID;
 	private final boolean allowUnknownPartitions;
 	private final boolean pinToCpu;
+	private final ExecutionPlacement executionPlacement;
 	private final int subtaskIndex;
 	private final ExecutionEdge[][] inputEdges;
 
 	private TaskDeploymentDescriptorFactory(
-			ExecutionAttemptID executionId,
-			int attemptNumber,
-			MaybeOffloaded<JobInformation> serializedJobInformation,
-			MaybeOffloaded<TaskInformation> taskInfo,
-			JobID jobID,
-			boolean allowUnknownPartitions,
-			boolean pinToCpu,
-			int subtaskIndex,
-			ExecutionEdge[][] inputEdges) {
+		ExecutionAttemptID executionId,
+		int attemptNumber,
+		MaybeOffloaded<JobInformation> serializedJobInformation,
+		MaybeOffloaded<TaskInformation> taskInfo,
+		JobID jobID,
+		boolean allowUnknownPartitions,
+		boolean pinToCpu,
+		ExecutionPlacement executionPlacement,
+		int subtaskIndex,
+		ExecutionEdge[][] inputEdges) {
 		this.executionId = executionId;
 		this.attemptNumber = attemptNumber;
 		this.serializedJobInformation = serializedJobInformation;
@@ -81,15 +84,16 @@ public class TaskDeploymentDescriptorFactory {
 		this.jobID = jobID;
 		this.allowUnknownPartitions = allowUnknownPartitions;
 		this.pinToCpu = pinToCpu;
+		this.executionPlacement = executionPlacement;
 		this.subtaskIndex = subtaskIndex;
 		this.inputEdges = inputEdges;
 	}
 
 	public TaskDeploymentDescriptor createDeploymentDescriptor(
-			AllocationID allocationID,
-			int targetSlotNumber,
-			@Nullable JobManagerTaskRestore taskRestore,
-			Collection<ResultPartitionDeploymentDescriptor> producedPartitions) {
+		AllocationID allocationID,
+		int targetSlotNumber,
+		@Nullable JobManagerTaskRestore taskRestore,
+		Collection<ResultPartitionDeploymentDescriptor> producedPartitions) {
 		return new TaskDeploymentDescriptor(
 			jobID,
 			serializedJobInformation,
@@ -100,6 +104,7 @@ public class TaskDeploymentDescriptorFactory {
 			attemptNumber,
 			targetSlotNumber,
 			pinToCpu,
+			executionPlacement.getCpuId(),
 			taskRestore,
 			new ArrayList<>(producedPartitions),
 			createInputGateDeploymentDescriptors());
@@ -116,7 +121,9 @@ public class TaskDeploymentDescriptorFactory {
 
 			int queueToRequest = subtaskIndex % numConsumerEdges;
 
-			IntermediateResult consumedIntermediateResult = edges[0].getSource().getIntermediateResult();
+			IntermediateResult consumedIntermediateResult = edges[0]
+				.getSource()
+				.getIntermediateResult();
 			IntermediateDataSetID resultId = consumedIntermediateResult.getId();
 			ResultPartitionType partitionType = consumedIntermediateResult.getResultType();
 
@@ -141,17 +148,20 @@ public class TaskDeploymentDescriptorFactory {
 	}
 
 	public static TaskDeploymentDescriptorFactory fromExecutionVertex(
-			ExecutionVertex executionVertex,
-			int attemptNumber) throws IOException {
+		ExecutionVertex executionVertex,
+		int attemptNumber) throws IOException {
 		ExecutionGraph executionGraph = executionVertex.getExecutionGraph();
 		return new TaskDeploymentDescriptorFactory(
 			executionVertex.getCurrentExecutionAttempt().getAttemptId(),
 			attemptNumber,
 			getSerializedJobInformation(executionGraph),
-			getSerializedTaskInformation(executionVertex.getJobVertex().getTaskInformationOrBlobKey()),
+			getSerializedTaskInformation(executionVertex
+				.getJobVertex()
+				.getTaskInformationOrBlobKey()),
 			executionGraph.getJobID(),
 			executionGraph.getScheduleMode().allowLazyDeployment(),
 			executionVertex.getDeploymentConstraint().getPinToCpu(),
+			executionVertex.getExecutionPlacement(),
 			executionVertex.getParallelSubtaskIndex(),
 			executionVertex.getAllInputEdges());
 	}
@@ -175,8 +185,8 @@ public class TaskDeploymentDescriptorFactory {
 	}
 
 	public static ShuffleDescriptor getConsumedPartitionShuffleDescriptor(
-			ExecutionEdge edge,
-			boolean allowUnknownPartitions) {
+		ExecutionEdge edge,
+		boolean allowUnknownPartitions) {
 		IntermediateResultPartition consumedPartition = edge.getSource();
 		Execution producer = consumedPartition.getProducer().getCurrentExecutionAttempt();
 
@@ -199,24 +209,22 @@ public class TaskDeploymentDescriptorFactory {
 
 	@VisibleForTesting
 	static ShuffleDescriptor getConsumedPartitionShuffleDescriptor(
-			ResultPartitionID consumedPartitionId,
-			ResultPartitionType resultPartitionType,
-			boolean isConsumable,
-			ExecutionState producerState,
-			boolean allowUnknownPartitions,
-			@Nullable ResultPartitionDeploymentDescriptor consumedPartitionDescriptor) {
+		ResultPartitionID consumedPartitionId,
+		ResultPartitionType resultPartitionType,
+		boolean isConsumable,
+		ExecutionState producerState,
+		boolean allowUnknownPartitions,
+		@Nullable ResultPartitionDeploymentDescriptor consumedPartitionDescriptor) {
 		// The producing task needs to be RUNNING or already FINISHED
 		if ((resultPartitionType.isPipelined() || isConsumable) &&
 			consumedPartitionDescriptor != null &&
 			isProducerAvailable(producerState)) {
 			// partition is already registered
 			return consumedPartitionDescriptor.getShuffleDescriptor();
-		}
-		else if (allowUnknownPartitions) {
+		} else if (allowUnknownPartitions) {
 			// The producing task might not have registered the partition yet
 			return new UnknownShuffleDescriptor(consumedPartitionId);
-		}
-		else {
+		} else {
 			// throw respective exceptions
 			handleConsumedPartitionShuffleDescriptorErrors(
 				consumedPartitionId,
@@ -228,17 +236,19 @@ public class TaskDeploymentDescriptorFactory {
 	}
 
 	private static void handleConsumedPartitionShuffleDescriptorErrors(
-			ResultPartitionID consumedPartitionId,
-			ResultPartitionType resultPartitionType,
-			boolean isConsumable,
-			ExecutionState producerState) {
+		ResultPartitionID consumedPartitionId,
+		ResultPartitionType resultPartitionType,
+		boolean isConsumable,
+		ExecutionState producerState) {
 		if (isProducerFailedOrCanceled(producerState)) {
-			String msg = "Trying to consume an input partition whose producer has been canceled or failed. " +
-				"The producer is in state " + producerState + ".";
+			String msg =
+				"Trying to consume an input partition whose producer has been canceled or failed. "
+					+
+					"The producer is in state " + producerState + ".";
 			throw new IllegalStateException(msg);
-		}
-		else {
-			String msg = String.format("Trying to consume an input partition whose producer " +
+		} else {
+			String msg = String.format(
+				"Trying to consume an input partition whose producer " +
 					"is not ready (result type: %s, partition consumable: %s, producer state: %s, partition id: %s).",
 				resultPartitionType,
 				isConsumable,

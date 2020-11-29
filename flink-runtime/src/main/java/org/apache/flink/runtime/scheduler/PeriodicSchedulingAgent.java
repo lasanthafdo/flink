@@ -33,8 +33,10 @@ public class PeriodicSchedulingAgent implements Runnable {
 
 	private CompletableFuture<Collection<Acknowledge>> previousRescheduleFuture;
 
-	public PeriodicSchedulingAgent(Logger log, ExecutionGraph executionGraph, SchedulingStrategy schedulingStrategy,
-									long triggerPeriod, long waitTimeout, int numRetries) {
+	public PeriodicSchedulingAgent(
+		Logger log, ExecutionGraph executionGraph, SchedulingStrategy schedulingStrategy,
+		long triggerPeriod, long waitTimeout, int numRetries) {
+
 		this.log = log;
 		this.executionGraph = checkNotNull(executionGraph);
 		this.schedulingStrategy = checkNotNull(schedulingStrategy);
@@ -63,30 +65,39 @@ public class PeriodicSchedulingAgent implements Runnable {
 
 		for (ExecutionVertex ev : vertices) {
 			Execution attempt = ev.getCurrentExecutionAttempt();
-			CompletableFuture<Acknowledge> haltFuture = attempt.haltExecution().whenCompleteAsync((ack, fail) -> {
-				String taskNameWithSubtaskIndex = attempt.getVertex().getTaskNameWithSubtaskIndex();
-				for (int i = 0; i < numRetries; i++) {
-					if (attempt.getState() != ExecutionState.CREATED) {
-						try {
-							Thread.sleep(waitTimeout);
-						} catch (InterruptedException exception) {
-							log.warn("Thread waiting on halting of task {} was interrupted due to cause : {}",
-								taskNameWithSubtaskIndex, exception);
+			CompletableFuture<Acknowledge> haltFuture = attempt
+				.haltExecution()
+				.whenCompleteAsync((ack, fail) -> {
+					String taskNameWithSubtaskIndex = attempt
+						.getVertex()
+						.getTaskNameWithSubtaskIndex();
+					for (int i = 0; i < numRetries; i++) {
+						if (attempt.getState() != ExecutionState.CREATED) {
+							try {
+								Thread.sleep(waitTimeout);
+							} catch (InterruptedException exception) {
+								log.warn(
+									"Thread waiting on halting of task {} was interrupted due to cause : {}",
+									taskNameWithSubtaskIndex,
+									exception);
+							}
+						} else {
+							if (log.isDebugEnabled()) {
+								log.debug("Task '" + taskNameWithSubtaskIndex
+									+ "' changed to expected state (" +
+									ExecutionState.CREATED + ") while waiting " + i + " times");
+							}
+							return;
 						}
-					} else {
-						if (log.isDebugEnabled()) {
-							log.debug("Task '" + taskNameWithSubtaskIndex + "' changed to expected state (" +
-								ExecutionState.CREATED + ") while waiting " + i + " times");
-						}
-						return;
 					}
-				}
-				log.error("Couldn't halt execution for task {}.", taskNameWithSubtaskIndex);
-				FutureUtils.completedExceptionally(new Exception("Couldn't halt execution for task " + taskNameWithSubtaskIndex));
-			});
+					log.error("Couldn't halt execution for task {}.", taskNameWithSubtaskIndex);
+					FutureUtils.completedExceptionally(new Exception(
+						"Couldn't halt execution for task " + taskNameWithSubtaskIndex));
+				});
 			allHaltFutures.add(haltFuture);
 		}
-		final FutureUtils.ConjunctFuture<Collection<Acknowledge>> allHaltsFuture = FutureUtils.combineAll(allHaltFutures);
+		final FutureUtils.ConjunctFuture<Collection<Acknowledge>> allHaltsFuture = FutureUtils.combineAll(
+			allHaltFutures);
 		return allHaltsFuture.whenComplete((ack, fail) -> {
 			if (fail != null) {
 				log.error("Encountered exception when halting process.", fail);

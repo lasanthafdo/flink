@@ -19,6 +19,7 @@ package org.apache.flink.runtime.executiongraph;
 
 import org.apache.flink.runtime.accumulators.StringifiedAccumulatorResult;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
+import org.apache.flink.runtime.execution.ExecutionPlacement;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 import org.apache.flink.util.ExceptionUtils;
@@ -36,6 +37,8 @@ public class ArchivedExecution implements AccessExecution, Serializable {
 	private final int attemptNumber;
 
 	private final ExecutionState state;
+
+	private final ExecutionPlacement placement;
 
 	private final String failureCause;          // once assigned, never changes
 
@@ -57,6 +60,7 @@ public class ArchivedExecution implements AccessExecution, Serializable {
 			execution.getAttemptId(),
 			execution.getAttemptNumber(),
 			execution.getState(),
+			execution.getPlacement(),
 			ExceptionUtils.stringifyException(execution.getFailureCause()),
 			execution.getAssignedResourceLocation(),
 			execution.getAssignedAllocationID(),
@@ -65,10 +69,18 @@ public class ArchivedExecution implements AccessExecution, Serializable {
 	}
 
 	public ArchivedExecution(
-			StringifiedAccumulatorResult[] userAccumulators, IOMetrics ioMetrics,
-			ExecutionAttemptID attemptId, int attemptNumber, ExecutionState state, String failureCause,
-			TaskManagerLocation assignedResourceLocation, AllocationID assignedAllocationID,  int parallelSubtaskIndex,
-			long[] stateTimestamps) {
+		StringifiedAccumulatorResult[] userAccumulators,
+		IOMetrics ioMetrics,
+		ExecutionAttemptID attemptId,
+		int attemptNumber,
+		ExecutionState state,
+		ExecutionPlacement placement,
+		String failureCause,
+		TaskManagerLocation assignedResourceLocation,
+		AllocationID assignedAllocationID,
+		int parallelSubtaskIndex,
+		long[] stateTimestamps) {
+
 		this.userAccumulators = userAccumulators;
 		this.ioMetrics = ioMetrics;
 		this.failureCause = failureCause;
@@ -76,6 +88,7 @@ public class ArchivedExecution implements AccessExecution, Serializable {
 		this.attemptNumber = attemptNumber;
 		this.attemptId = attemptId;
 		this.state = state;
+		this.placement = placement;
 		this.stateTimestamps = stateTimestamps;
 		this.parallelSubtaskIndex = parallelSubtaskIndex;
 		this.assignedAllocationID = assignedAllocationID;
@@ -103,6 +116,11 @@ public class ArchivedExecution implements AccessExecution, Serializable {
 	@Override
 	public ExecutionState getState() {
 		return state;
+	}
+
+	@Override
+	public ExecutionPlacement getPlacement() {
+		return placement;
 	}
 
 	@Override

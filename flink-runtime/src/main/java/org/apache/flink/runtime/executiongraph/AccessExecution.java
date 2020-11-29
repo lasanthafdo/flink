@@ -18,6 +18,7 @@
 package org.apache.flink.runtime.executiongraph;
 
 import org.apache.flink.runtime.accumulators.StringifiedAccumulatorResult;
+import org.apache.flink.runtime.execution.ExecutionPlacement;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 
@@ -52,6 +53,13 @@ public interface AccessExecution {
 	 * @return execution state for this execution
 	 */
 	ExecutionState getState();
+
+	/**
+	 * Returns the current {@link ExecutionPlacement} for this execution.
+	 *
+	 * @return placement for this execution
+	 */
+	ExecutionPlacement getPlacement();
 
 	/**
 	 * Returns the {@link TaskManagerLocation} for this execution.

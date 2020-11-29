@@ -17,6 +17,7 @@
  */
 package org.apache.flink.runtime.executiongraph;
 
+import org.apache.flink.runtime.execution.ExecutionPlacement;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 
@@ -53,6 +54,13 @@ public interface AccessExecutionVertex {
 	 * @return execution state for this execution vertex
 	 */
 	ExecutionState getExecutionState();
+
+	/**
+	 * Returns the current {@link ExecutionPlacement} for this execution vertex.
+	 *
+	 * @return placement of the execution for this execution vertex
+	 */
+	ExecutionPlacement getExecutionPlacement();
 
 	/**
 	 * Returns the timestamp for the given {@link ExecutionState}.

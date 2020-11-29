@@ -48,12 +48,15 @@ public final class TaskDeploymentDescriptor implements Serializable {
 		return pinnedToCpu;
 	}
 
+	public int getCpuId() {
+		return cpuId;
+	}
+
 	/**
 	 * Wrapper class for serialized values which may be offloaded to the {@link
 	 * org.apache.flink.runtime.blob.BlobServer} or not.
 	 *
-	 * @param <T>
-	 * 		type of the serialized value
+	 * @param <T> type of the serialized value
 	 */
 	@SuppressWarnings("unused")
 	public static class MaybeOffloaded<T> implements Serializable {
@@ -63,8 +66,7 @@ public final class TaskDeploymentDescriptor implements Serializable {
 	/**
 	 * A serialized value that is not offloaded to the {@link org.apache.flink.runtime.blob.BlobServer}.
 	 *
-	 * @param <T>
-	 * 		type of the serialized value
+	 * @param <T> type of the serialized value
 	 */
 	public static class NonOffloaded<T> extends MaybeOffloaded<T> {
 		private static final long serialVersionUID = 4246628617754862463L;
@@ -87,8 +89,7 @@ public final class TaskDeploymentDescriptor implements Serializable {
 	 * Reference to a serialized value that was offloaded to the {@link
 	 * org.apache.flink.runtime.blob.BlobServer}.
 	 *
-	 * @param <T>
-	 * 		type of the serialized value
+	 * @param <T> type of the serialized value
 	 */
 	public static class Offloaded<T> extends MaybeOffloaded<T> {
 		private static final long serialVersionUID = 4544135485379071679L;
@@ -152,6 +153,8 @@ public final class TaskDeploymentDescriptor implements Serializable {
 
 	private final boolean pinnedToCpu;
 
+	private final int cpuId;
+
 	public TaskDeploymentDescriptor(
 		JobID jobId,
 		MaybeOffloaded<JobInformation> serializedJobInformation,
@@ -179,9 +182,12 @@ public final class TaskDeploymentDescriptor implements Serializable {
 		Preconditions.checkArgument(0 <= attemptNumber, "The attempt number must be positive.");
 		this.attemptNumber = attemptNumber;
 
-		Preconditions.checkArgument(0 <= targetSlotNumber, "The target slot number must be positive.");
+		Preconditions.checkArgument(
+			0 <= targetSlotNumber,
+			"The target slot number must be positive.");
 		this.targetSlotNumber = targetSlotNumber;
 		this.pinnedToCpu = false;
+		this.cpuId = -1;
 		this.taskRestore = taskRestore;
 
 		this.producedPartitions = Preconditions.checkNotNull(resultPartitionDeploymentDescriptors);
@@ -198,6 +204,7 @@ public final class TaskDeploymentDescriptor implements Serializable {
 		int attemptNumber,
 		int targetSlotNumber,
 		boolean pinToCpu,
+		int cpuId,
 		@Nullable JobManagerTaskRestore taskRestore,
 		List<ResultPartitionDeploymentDescriptor> resultPartitionDeploymentDescriptors,
 		List<InputGateDeploymentDescriptor> inputGateDeploymentDescriptors) {
@@ -216,9 +223,12 @@ public final class TaskDeploymentDescriptor implements Serializable {
 		Preconditions.checkArgument(0 <= attemptNumber, "The attempt number must be positive.");
 		this.attemptNumber = attemptNumber;
 
-		Preconditions.checkArgument(0 <= targetSlotNumber, "The target slot number must be positive.");
+		Preconditions.checkArgument(
+			0 <= targetSlotNumber,
+			"The target slot number must be positive.");
 		this.targetSlotNumber = targetSlotNumber;
 		this.pinnedToCpu = pinToCpu;
+		this.cpuId = cpuId;
 		this.taskRestore = taskRestore;
 
 		this.producedPartitions = Preconditions.checkNotNull(resultPartitionDeploymentDescriptors);
@@ -229,7 +239,8 @@ public final class TaskDeploymentDescriptor implements Serializable {
 	 * Return the sub task's serialized job information.
 	 *
 	 * @return serialized job information (may throw {@link IllegalStateException} if {@link
-	 * #loadBigData(PermanentBlobService)} is not called beforehand).
+	 *    #loadBigData(PermanentBlobService)} is not called beforehand).
+	 *
 	 * @throws IllegalStateException If job information is offloaded to BLOB store.
 	 */
 	public SerializedValue<JobInformation> getSerializedJobInformation() {
@@ -247,7 +258,8 @@ public final class TaskDeploymentDescriptor implements Serializable {
 	 * Return the sub task's serialized task information.
 	 *
 	 * @return serialized task information (may throw {@link IllegalStateException} if {@link
-	 * #loadBigData(PermanentBlobService)} is not called beforehand)).
+	 *    #loadBigData(PermanentBlobService)} is not called beforehand)).
+	 *
 	 * @throws IllegalStateException If job information is offloaded to BLOB store.
 	 */
 	public SerializedValue<TaskInformation> getSerializedTaskInformation() {
@@ -319,17 +331,14 @@ public final class TaskDeploymentDescriptor implements Serializable {
 	/**
 	 * Loads externalized data from the BLOB store back to the object.
 	 *
-	 * @param blobService
-	 * 		the blob store to use (may be <tt>null</tt> if {@link #serializedJobInformation} and {@link
-	 * 		#serializedTaskInformation} are non-<tt>null</tt>)
+	 * @param blobService the blob store to use (may be <tt>null</tt> if {@link #serializedJobInformation} and {@link
+	 *    #serializedTaskInformation} are non-<tt>null</tt>)
 	 *
-	 * @throws IOException
-	 * 		during errors retrieving or reading the BLOBs
-	 * @throws ClassNotFoundException
-	 * 		Class of a serialized object cannot be found.
+	 * @throws IOException during errors retrieving or reading the BLOBs
+	 * @throws ClassNotFoundException Class of a serialized object cannot be found.
 	 */
 	public void loadBigData(@Nullable PermanentBlobService blobService)
-			throws IOException, ClassNotFoundException {
+		throws IOException, ClassNotFoundException {
 
 		// re-integrate offloaded job info from blob
 		// here, if this fails, we need to throw the exception as there is no backup path anymore
@@ -369,7 +378,8 @@ public final class TaskDeploymentDescriptor implements Serializable {
 
 	@Override
 	public String toString() {
-		return String.format("TaskDeploymentDescriptor [execution id: %s, attempt: %d, " +
+		return String.format(
+			"TaskDeploymentDescriptor [execution id: %s, attempt: %d, " +
 				"produced partitions: %s, input gates: %s]",
 			executionId,
 			attemptNumber,
