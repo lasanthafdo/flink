@@ -58,7 +58,8 @@ public class SubtaskExecutionAttemptAccumulatorsHandlerTest extends TestLogger {
 	public void testHandleRequest() throws Exception {
 
 		// Instance the handler.
-		final RestHandlerConfiguration restHandlerConfiguration = RestHandlerConfiguration.fromConfiguration(new Configuration());
+		final RestHandlerConfiguration restHandlerConfiguration = RestHandlerConfiguration.fromConfiguration(
+			new Configuration());
 
 		final SubtaskExecutionAttemptAccumulatorsHandler handler = new SubtaskExecutionAttemptAccumulatorsHandler(
 			() -> null,
@@ -79,7 +80,9 @@ public class SubtaskExecutionAttemptAccumulatorsHandlerTest extends TestLogger {
 		final Map<String, OptionalFailure<Accumulator<?, ?>>> userAccumulators = new HashMap<>(3);
 		userAccumulators.put("IntCounter", OptionalFailure.of(new IntCounter(10)));
 		userAccumulators.put("LongCounter", OptionalFailure.of(new LongCounter(100L)));
-		userAccumulators.put("Failure", OptionalFailure.ofFailure(new FlinkRuntimeException("Test")));
+		userAccumulators.put(
+			"Failure",
+			OptionalFailure.ofFailure(new FlinkRuntimeException("Test")));
 
 		// Instance the expected result.
 		final StringifiedAccumulatorResult[] accumulatorResults =
@@ -98,11 +101,14 @@ public class SubtaskExecutionAttemptAccumulatorsHandlerTest extends TestLogger {
 			null,
 			null,
 			null,
+			null,
 			subtaskIndex,
 			new long[ExecutionState.values().length]);
 
 		// Invoke tested method.
-		final SubtaskExecutionAttemptAccumulatorsInfo accumulatorsInfo = handler.handleRequest(request, execution);
+		final SubtaskExecutionAttemptAccumulatorsInfo accumulatorsInfo = handler.handleRequest(
+			request,
+			execution);
 
 		final ArrayList<UserAccumulator> userAccumulatorList = new ArrayList<>(userAccumulators.size());
 		for (StringifiedAccumulatorResult accumulatorResult : accumulatorResults) {

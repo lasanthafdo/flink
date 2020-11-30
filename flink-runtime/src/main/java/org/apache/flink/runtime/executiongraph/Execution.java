@@ -57,6 +57,7 @@ import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.messages.TaskBackPressureResponse;
 import org.apache.flink.runtime.operators.coordination.OperatorEvent;
 import org.apache.flink.runtime.operators.coordination.TaskNotRunningException;
+import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
 import org.apache.flink.runtime.shuffle.NettyShuffleMaster;
 import org.apache.flink.runtime.shuffle.PartitionDescriptor;
 import org.apache.flink.runtime.shuffle.ProducerDescriptor;
@@ -246,6 +247,7 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 		this.terminalStateFuture = new CompletableFuture<>();
 		this.releaseFuture = new CompletableFuture<>();
 		this.taskManagerLocationFuture = new CompletableFuture<>();
+		this.placement = SchedulingExecutionVertex.DEFAULT_EXECUTION_PLACEMENT;
 
 		this.assignedResource = null;
 	}
@@ -276,6 +278,10 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 	@Override
 	public ExecutionPlacement getPlacement() {
 		return placement;
+	}
+
+	public void setPlacement(ExecutionPlacement placement) {
+		this.placement = placement;
 	}
 
 	@Nullable
@@ -780,7 +786,8 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 			}
 
 			if (LOG.isInfoEnabled()) {
-				LOG.info(String.format("Deploying %s (attempt #%d) to %s",
+				LOG.info(String.format(
+					"Deploying %s (attempt #%d) to %s",
 					vertex.getTaskNameWithSubtaskIndex(),
 					attemptNumber,
 					getAssignedResourceLocation()));
@@ -1501,7 +1508,8 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 				}
 				sendCancelRpcCall(NUM_CANCEL_CALL_TRIES);
 			} else {
-				String message = String.format("Concurrent unexpected state transition of task %s to %s while deployment was in progress.",
+				String message = String.format(
+					"Concurrent unexpected state transition of task %s to %s while deployment was in progress.",
 					getVertexWithAttempt(),
 					currentState);
 
@@ -1947,7 +1955,8 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 	public String toString() {
 		final LogicalSlot slot = assignedResource;
 
-		return String.format("Attempt #%d (%s) @ %s - [%s]",
+		return String.format(
+			"Attempt #%d (%s) @ %s - [%s]",
 			attemptNumber,
 			vertex.getTaskNameWithSubtaskIndex(),
 			(slot == null ? "(unassigned)" : slot),

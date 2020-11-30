@@ -204,6 +204,7 @@ public class JvmExitOnFatalErrorTest {
 						Collections.<InputGateDeploymentDescriptor>emptyList(),
 						0,       // targetSlotNumber
 						false,
+						-1,
 						memoryManager,
 						ioManager,
 						shuffleEnvironment,

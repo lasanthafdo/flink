@@ -18,14 +18,7 @@
 
 package org.apache.flink.runtime.scheduler.strategy;
 
-import org.apache.flink.api.common.InputDependencyConstraint;
-import org.apache.flink.runtime.execution.ExecutionPlacement;
-import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.executiongraph.ExecutionVertex;
-import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
-import org.apache.flink.runtime.topology.ResultID;
-import org.apache.flink.runtime.topology.Vertex;
-import org.apache.flink.runtime.topology.VertexID;
 
 /**
  * Scheduling representation of {@link ExecutionVertex}.

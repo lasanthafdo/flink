@@ -19,8 +19,8 @@
 package org.apache.flink.runtime.scheduler.adapter;
 
 import org.apache.flink.api.common.InputDependencyConstraint;
-import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.execution.ExecutionPlacement;
+import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.scheduler.strategy.ExecutionVertexID;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
 
@@ -60,7 +60,7 @@ class DefaultExecutionVertex implements SchedulingExecutionVertex {
 			executionVertexId,
 			producedPartitions,
 			stateSupplier,
-			() -> null,
+			() -> SchedulingExecutionVertex.DEFAULT_EXECUTION_PLACEMENT,
 			executionPlacement -> {
 			},
 			constraint);

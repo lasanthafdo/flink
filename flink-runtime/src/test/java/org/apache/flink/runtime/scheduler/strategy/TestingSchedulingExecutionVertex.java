@@ -19,9 +19,9 @@
 package org.apache.flink.runtime.scheduler.strategy;
 
 import org.apache.flink.api.common.InputDependencyConstraint;
+import org.apache.flink.runtime.execution.ExecutionPlacement;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
-import org.apache.flink.runtime.execution.ExecutionPlacement;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -77,6 +77,11 @@ public class TestingSchedulingExecutionVertex implements SchedulingExecutionVert
 	@Override
 	public ExecutionPlacement getExecutionPlacement() {
 		return new ExecutionPlacement("localhost:8081", 0);
+	}
+
+	@Override
+	public void setExecutionPlacement(ExecutionPlacement executionPlacement) {
+
 	}
 
 	@Override

@@ -194,6 +194,7 @@ public class TaskAsyncCallTest extends TestLogger {
 			Collections.<InputGateDeploymentDescriptor>emptyList(),
 			0,
 			false,
+			-1,
 			mock(MemoryManager.class),
 			mock(IOManager.class),
 			shuffleEnvironment,

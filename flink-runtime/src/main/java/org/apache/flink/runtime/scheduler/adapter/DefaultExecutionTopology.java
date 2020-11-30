@@ -75,11 +75,16 @@ public class DefaultExecutionTopology implements SchedulingTopology {
 		Map<ExecutionVertex, DefaultExecutionVertex> executionVertexMap = new HashMap<>();
 
 		for (ExecutionVertex vertex : graph.getAllExecutionVertices()) {
-			List<DefaultResultPartition> producedPartitions = generateProducedSchedulingResultPartition(vertex.getProducedPartitions());
+			List<DefaultResultPartition> producedPartitions = generateProducedSchedulingResultPartition(
+				vertex.getProducedPartitions());
 
-			producedPartitions.forEach(partition -> tmpResultPartitionsById.put(partition.getId(), partition));
+			producedPartitions.forEach(partition -> tmpResultPartitionsById.put(
+				partition.getId(),
+				partition));
 
-			DefaultExecutionVertex schedulingVertex = generateSchedulingExecutionVertex(vertex, producedPartitions);
+			DefaultExecutionVertex schedulingVertex = generateSchedulingExecutionVertex(
+				vertex,
+				producedPartitions);
 			this.executionVerticesById.put(schedulingVertex.getId(), schedulingVertex);
 			this.executionVerticesList.add(schedulingVertex);
 			executionVertexMap.put(vertex, schedulingVertex);
@@ -96,10 +101,12 @@ public class DefaultExecutionTopology implements SchedulingTopology {
 	private void initializePipelinedRegions() {
 		final long buildRegionsStartTime = System.nanoTime();
 
-		final Set<Set<SchedulingExecutionVertex>> rawPipelinedRegions = PipelinedRegionComputeUtil.computePipelinedRegions(this);
+		final Set<Set<SchedulingExecutionVertex>> rawPipelinedRegions = PipelinedRegionComputeUtil.computePipelinedRegions(
+			this);
 		for (Set<? extends SchedulingExecutionVertex> rawPipelinedRegion : rawPipelinedRegions) {
 			//noinspection unchecked
-			final DefaultSchedulingPipelinedRegion pipelinedRegion = new DefaultSchedulingPipelinedRegion((Set<DefaultExecutionVertex>) rawPipelinedRegion);
+			final DefaultSchedulingPipelinedRegion pipelinedRegion = new DefaultSchedulingPipelinedRegion(
+				(Set<DefaultExecutionVertex>) rawPipelinedRegion);
 			pipelinedRegions.add(pipelinedRegion);
 
 			for (SchedulingExecutionVertex executionVertex : rawPipelinedRegion) {
@@ -108,7 +115,10 @@ public class DefaultExecutionTopology implements SchedulingTopology {
 		}
 
 		final long buildRegionsDuration = (System.nanoTime() - buildRegionsStartTime) / 1_000_000;
-		LOG.info("Built {} pipelined regions in {} ms", pipelinedRegions.size(), buildRegionsDuration);
+		LOG.info(
+			"Built {} pipelined regions in {} ms",
+			pipelinedRegions.size(),
+			buildRegionsDuration);
 	}
 
 	@Override
@@ -132,9 +142,11 @@ public class DefaultExecutionTopology implements SchedulingTopology {
 
 	@Override
 	public DefaultResultPartition getResultPartition(final IntermediateResultPartitionID intermediateResultPartitionId) {
-		final DefaultResultPartition resultPartition = resultPartitionsById.get(intermediateResultPartitionId);
+		final DefaultResultPartition resultPartition = resultPartitionsById.get(
+			intermediateResultPartitionId);
 		if (resultPartition == null) {
-			throw new IllegalArgumentException("can not find partition: " + intermediateResultPartitionId);
+			throw new IllegalArgumentException(
+				"can not find partition: " + intermediateResultPartitionId);
 		}
 		return resultPartition;
 	}
@@ -146,7 +158,8 @@ public class DefaultExecutionTopology implements SchedulingTopology {
 
 	@Override
 	public DefaultSchedulingPipelinedRegion getPipelinedRegionOfVertex(final ExecutionVertexID vertexId) {
-		final DefaultSchedulingPipelinedRegion pipelinedRegion = pipelinedRegionsByVertex.get(vertexId);
+		final DefaultSchedulingPipelinedRegion pipelinedRegion = pipelinedRegionsByVertex.get(
+			vertexId);
 		if (pipelinedRegion == null) {
 			throw new IllegalArgumentException("Unknown execution vertex " + vertexId);
 		}
@@ -156,7 +169,8 @@ public class DefaultExecutionTopology implements SchedulingTopology {
 	private static List<DefaultResultPartition> generateProducedSchedulingResultPartition(
 		Map<IntermediateResultPartitionID, IntermediateResultPartition> producedIntermediatePartitions) {
 
-		List<DefaultResultPartition> producedSchedulingPartitions = new ArrayList<>(producedIntermediatePartitions.size());
+		List<DefaultResultPartition> producedSchedulingPartitions = new ArrayList<>(
+			producedIntermediatePartitions.size());
 
 		producedIntermediatePartitions.values().forEach(
 			irp -> producedSchedulingPartitions.add(
@@ -176,7 +190,9 @@ public class DefaultExecutionTopology implements SchedulingTopology {
 		DefaultExecutionVertex schedulingVertex = new DefaultExecutionVertex(
 			vertex.getID(),
 			producedPartitions,
-			() -> vertex.getExecutionState(),
+			vertex::getExecutionState,
+			vertex::getExecutionPlacement,
+			vertex::setExecutionPlacement,
 			vertex.getInputDependencyConstraint());
 
 		producedPartitions.forEach(partition -> partition.setProducer(schedulingVertex));
@@ -194,7 +210,9 @@ public class DefaultExecutionTopology implements SchedulingTopology {
 
 			for (int index = 0; index < executionVertex.getNumberOfInputs(); index++) {
 				for (ExecutionEdge edge : executionVertex.getInputEdges(index)) {
-					DefaultResultPartition partition = resultPartitions.get(edge.getSource().getPartitionId());
+					DefaultResultPartition partition = resultPartitions.get(edge
+						.getSource()
+						.getPartitionId());
 					schedulingVertex.addConsumedResult(partition);
 					partition.addConsumer(schedulingVertex);
 				}

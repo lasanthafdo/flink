@@ -99,6 +99,7 @@ public class SubtaskCurrentAttemptDetailsHandlerTest extends TestLogger {
 			attempt,
 			expectedState,
 			null,
+			null,
 			assignedResourceLocation,
 			allocationID,
 			subtaskIndex,

@@ -113,6 +113,7 @@ public class JobExceptionsHandlerTest extends TestLogger {
 						new ExecutionAttemptID(),
 						attempt,
 						expectedState,
+						null,
 						"error",
 						assignedResourceLocation,
 						allocationID,
