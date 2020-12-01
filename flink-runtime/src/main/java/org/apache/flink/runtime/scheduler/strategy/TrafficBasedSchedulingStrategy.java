@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.scheduler.strategy;
 
+import org.apache.flink.runtime.JobException;
 import org.apache.flink.runtime.execution.ExecutionPlacement;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
@@ -25,13 +26,18 @@ import org.apache.flink.runtime.scheduler.DeploymentOption;
 import org.apache.flink.runtime.scheduler.ExecutionVertexDeploymentOption;
 import org.apache.flink.runtime.scheduler.SchedulerOperations;
 import org.apache.flink.runtime.scheduler.adapter.DefaultExecutionEdge;
+import org.apache.flink.runtime.scheduler.adapter.SchedulingCpuCore;
+import org.apache.flink.runtime.scheduler.adapter.SchedulingCpuSocket;
+import org.apache.flink.util.FlinkRuntimeException;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
@@ -40,17 +46,31 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  */
 public class TrafficBasedSchedulingStrategy implements SchedulingStrategy {
 
+	private static final SchedulingCpuSocket schedulingCpuSocket = new SchedulingCpuSocket(new ArrayList<>(
+		Arrays.asList(
+			new SchedulingCpuCore(new ArrayList<>(Arrays.asList(0, 1))),
+			new SchedulingCpuCore(new ArrayList<>(Arrays.asList(2, 3))),
+			new SchedulingCpuCore(new ArrayList<>(Arrays.asList(4, 5))),
+			new SchedulingCpuCore(new ArrayList<>(Arrays.asList(6, 7))),
+			new SchedulingCpuCore(new ArrayList<>(Arrays.asList(8, 9))),
+			new SchedulingCpuCore(new ArrayList<>(Arrays.asList(10, 11)))
+		)));
+
 	private final SchedulerOperations schedulerOperations;
 
 	private final SchedulingTopology schedulingTopology;
 
-	private InfluxDBMetricsClient influxDBMetricsClient = new InfluxDBMetricsClient();
+	private InfluxDBMetricsClient influxDBMetricsClient;
 
 	private final DeploymentOption deploymentOption = new DeploymentOption(false);
 
-	private final Map<SchedulingExecutionEdge<? extends SchedulingExecutionVertex, ? extends SchedulingResultPartition>, Double> edgeFlowRates;
+	private final Map<String, Double> edgeFlowRates;
+
+	private final Map<String, SchedulingExecutionEdge<? extends SchedulingExecutionVertex, ? extends SchedulingResultPartition>> edgeMap;
 
 	private final List<SchedulingExecutionVertex> sourceVertices = new ArrayList<>();
+
+	private List<SchedulingExecutionEdge> orderedEdgeList;
 
 	public TrafficBasedSchedulingStrategy(
 		SchedulerOperations schedulerOperations,
@@ -59,8 +79,9 @@ public class TrafficBasedSchedulingStrategy implements SchedulingStrategy {
 		this.schedulerOperations = checkNotNull(schedulerOperations);
 		this.schedulingTopology = checkNotNull(schedulingTopology);
 		this.edgeFlowRates = new HashMap<>();
+		this.edgeMap = new HashMap<>();
 		initializeEdgeFlowRates(schedulingTopology);
-		updateResourceUsage();
+		setupInfluxDBConnection();
 	}
 
 	private void initializeEdgeFlowRates(SchedulingTopology schedulingTopology) {
@@ -69,10 +90,13 @@ public class TrafficBasedSchedulingStrategy implements SchedulingStrategy {
 			schedulingExecutionVertex.getConsumedResults().forEach(schedulingResultPartition -> {
 				schedulingResultPartition
 					.getConsumers()
-					.forEach(consumer -> edgeFlowRates.put(new DefaultExecutionEdge(
-						schedulingResultPartition.getProducer(),
-						consumer,
-						schedulingResultPartition), 0.0));
+					.forEach(consumer -> {
+						DefaultExecutionEdge dee = new DefaultExecutionEdge(
+							schedulingResultPartition.getProducer(),
+							consumer,
+							schedulingResultPartition);
+						edgeMap.put(dee.getExecutionEdgeId(), dee);
+					});
 				consumerCount.getAndIncrement();
 			});
 			if (consumerCount.get() == 0) {
@@ -81,12 +105,24 @@ public class TrafficBasedSchedulingStrategy implements SchedulingStrategy {
 		});
 	}
 
-	private void updateResourceUsage() {
+	private void setupInfluxDBConnection() {
+		influxDBMetricsClient = new InfluxDBMetricsClient("http://127.0.0.1:8086", "flink");
 		influxDBMetricsClient.setup();
 	}
 
 	@Override
 	public void startScheduling() {
+		Map<String, Double> currentFlowRates = influxDBMetricsClient.getRateMetricsFor(
+			"taskmanager_job_task_edge_numRecordsProcessedPerSecond",
+			"edge_id",
+			"rate");
+		edgeFlowRates.putAll(currentFlowRates);
+		orderedEdgeList = edgeFlowRates
+			.entrySet()
+			.stream()
+			.sorted(Map.Entry.comparingByValue())
+			.map(mapEntry -> edgeMap.get(mapEntry.getKey()))
+			.collect(Collectors.toList());
 		allocateSlotsAndDeploy(SchedulingStrategyUtils.getAllVertexIdsFromTopology(
 			schedulingTopology));
 	}
@@ -120,6 +156,45 @@ public class TrafficBasedSchedulingStrategy implements SchedulingStrategy {
 				schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
 					"localhost:0",
 					operatorCpuId.getAndIncrement()));
+			}
+		});
+		List<SchedulingExecutionVertex> strandedVertices = new ArrayList<>();
+		orderedEdgeList.forEach(schedulingExecutionEdge -> {
+			SchedulingExecutionVertex sourceVertex = schedulingExecutionEdge.getSourceSchedulingExecutionVertex();
+			SchedulingExecutionVertex targetVertex = schedulingExecutionEdge.getTargetSchedulingExecutionVertex();
+
+			List<Integer> cpuIds = schedulingCpuSocket.tryScheduleInSameContainer(
+				sourceVertex,
+				targetVertex);
+			if (cpuIds != null) {
+				if (cpuIds.size() >= 1) {
+					sourceVertex.setExecutionPlacement(new ExecutionPlacement(
+						"localhost:0",
+						cpuIds.get(0)));
+					if (cpuIds.size() >= 2) {
+						targetVertex.setExecutionPlacement(new ExecutionPlacement(
+							"localhost:0",
+							cpuIds.get(1)));
+					} else {
+						strandedVertices.add(targetVertex);
+					}
+				} else {
+					strandedVertices.add(sourceVertex);
+					strandedVertices.add(targetVertex);
+				}
+			}
+		});
+		strandedVertices.forEach(schedulingExecutionVertex -> {
+			int cpuId = schedulingCpuSocket.scheduleExecutionVertex(schedulingExecutionVertex);
+			if (cpuId == -1) {
+				throw new FlinkRuntimeException(
+					"Cannot allocate a CPU for executing operator with ID "
+						+ schedulingExecutionVertex.getId());
+			} else {
+				schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
+					"localhost:0",
+					cpuId
+				));
 			}
 		});
 		final List<ExecutionVertexDeploymentOption> executionVertexDeploymentOptions =

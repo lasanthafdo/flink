@@ -209,9 +209,11 @@ public abstract class RecordWriter<T extends IOReadableWritable> implements Avai
 		numBytesOut = metricGroup.getIOMetricGroup().getNumBytesOutCounter();
 		numBuffersOut = metricGroup.getIOMetricGroup().getNumBuffersOutCounter();
 		for (int i = 0; i < numberOfChannels; i++) {
-			String edgeId = targetPartition.getPartitionId().toString() + "@" + i;
+			String partitionId = targetPartition.getPartitionId().toString();
+			String edgeId = partitionId + "#" + i;
+			String producerSubTaskId = partitionId.split("@")[0].split("#")[1];
 			numRecordsProcessed.add(metricGroup
-				.getOrAddEdge(edgeId, edgeName + "_" + i)
+				.getOrAddEdge(edgeId, edgeName + "_" + producerSubTaskId + "_" + i)
 				.getIOMetricGroup()
 				.getNumRecordsProcessedCounter());
 		}
