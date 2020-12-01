@@ -38,6 +38,8 @@ class DefaultExecutionVertex implements SchedulingExecutionVertex {
 
 	private final ExecutionVertexID executionVertexId;
 
+	private final int subTaskIndex;
+
 	private final List<DefaultResultPartition> consumedResults;
 
 	private final List<DefaultResultPartition> producedResults;
@@ -58,6 +60,7 @@ class DefaultExecutionVertex implements SchedulingExecutionVertex {
 
 		this(
 			executionVertexId,
+			0,
 			producedPartitions,
 			stateSupplier,
 			() -> SchedulingExecutionVertex.DEFAULT_EXECUTION_PLACEMENT,
@@ -68,6 +71,7 @@ class DefaultExecutionVertex implements SchedulingExecutionVertex {
 
 	DefaultExecutionVertex(
 		ExecutionVertexID executionVertexId,
+		int subTaskIndex,
 		List<DefaultResultPartition> producedPartitions,
 		Supplier<ExecutionState> stateSupplier,
 		Supplier<ExecutionPlacement> placementSupplier,
@@ -75,6 +79,7 @@ class DefaultExecutionVertex implements SchedulingExecutionVertex {
 		InputDependencyConstraint constraint) {
 
 		this.executionVertexId = checkNotNull(executionVertexId);
+		this.subTaskIndex = subTaskIndex;
 		this.consumedResults = new ArrayList<>();
 		this.stateSupplier = checkNotNull(stateSupplier);
 		this.placementSupplier = checkNotNull(placementSupplier);
@@ -86,6 +91,11 @@ class DefaultExecutionVertex implements SchedulingExecutionVertex {
 	@Override
 	public ExecutionVertexID getId() {
 		return executionVertexId;
+	}
+
+	@Override
+	public int getSubTaskIndex() {
+		return subTaskIndex;
 	}
 
 	@Override

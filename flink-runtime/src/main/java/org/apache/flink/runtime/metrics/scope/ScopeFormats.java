@@ -32,6 +32,7 @@ public final class ScopeFormats {
 	private final TaskManagerJobScopeFormat taskManagerJobFormat;
 	private final TaskScopeFormat taskFormat;
 	private final OperatorScopeFormat operatorFormat;
+	private final EdgeScopeFormat edgeFormat;
 
 	// ------------------------------------------------------------------------
 
@@ -39,18 +40,25 @@ public final class ScopeFormats {
 	 * Creates all scope formats, based on the given scope format strings.
 	 */
 	private ScopeFormats(
-			String jobManagerFormat,
-			String jobManagerJobFormat,
-			String taskManagerFormat,
-			String taskManagerJobFormat,
-			String taskFormat,
-			String operatorFormat) {
+		String jobManagerFormat,
+		String jobManagerJobFormat,
+		String taskManagerFormat,
+		String taskManagerJobFormat,
+		String taskFormat,
+		String operatorFormat,
+		String edgeFormat) {
+
 		this.jobManagerFormat = new JobManagerScopeFormat(jobManagerFormat);
-		this.jobManagerJobFormat = new JobManagerJobScopeFormat(jobManagerJobFormat, this.jobManagerFormat);
+		this.jobManagerJobFormat = new JobManagerJobScopeFormat(
+			jobManagerJobFormat,
+			this.jobManagerFormat);
 		this.taskManagerFormat = new TaskManagerScopeFormat(taskManagerFormat);
-		this.taskManagerJobFormat = new TaskManagerJobScopeFormat(taskManagerJobFormat, this.taskManagerFormat);
+		this.taskManagerJobFormat = new TaskManagerJobScopeFormat(
+			taskManagerJobFormat,
+			this.taskManagerFormat);
 		this.taskFormat = new TaskScopeFormat(taskFormat, this.taskManagerJobFormat);
 		this.operatorFormat = new OperatorScopeFormat(operatorFormat, this.taskFormat);
+		this.edgeFormat = new EdgeScopeFormat(edgeFormat, this.taskFormat);
 	}
 
 	// ------------------------------------------------------------------------
@@ -81,6 +89,10 @@ public final class ScopeFormats {
 		return this.operatorFormat;
 	}
 
+	public EdgeScopeFormat getEdgeFormat() {
+		return this.edgeFormat;
+	}
+
 	// ------------------------------------------------------------------------
 	//  Parsing from Config
 	// ------------------------------------------------------------------------
@@ -89,6 +101,7 @@ public final class ScopeFormats {
 	 * Creates the scope formats as defined in the given configuration.
 	 *
 	 * @param config The configuration that defines the formats
+	 *
 	 * @return The ScopeFormats parsed from the configuration
 	 */
 	public static ScopeFormats fromConfig(Configuration config) {
@@ -98,7 +111,15 @@ public final class ScopeFormats {
 		String tmJobFormat = config.getString(MetricOptions.SCOPE_NAMING_TM_JOB);
 		String taskFormat = config.getString(MetricOptions.SCOPE_NAMING_TASK);
 		String operatorFormat = config.getString(MetricOptions.SCOPE_NAMING_OPERATOR);
+		String edgeFormat = config.getString(MetricOptions.SCOPE_NAMING_EDGE);
 
-		return new ScopeFormats(jmFormat, jmJobFormat, tmFormat, tmJobFormat, taskFormat, operatorFormat);
+		return new ScopeFormats(
+			jmFormat,
+			jmJobFormat,
+			tmFormat,
+			tmJobFormat,
+			taskFormat,
+			operatorFormat,
+			edgeFormat);
 	}
 }

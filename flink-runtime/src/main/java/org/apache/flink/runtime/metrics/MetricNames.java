@@ -31,6 +31,8 @@ public class MetricNames {
 	public static final String IO_NUM_RECORDS_OUT = "numRecordsOut";
 	public static final String IO_NUM_RECORDS_IN_RATE = IO_NUM_RECORDS_IN + SUFFIX_RATE;
 	public static final String IO_NUM_RECORDS_OUT_RATE = IO_NUM_RECORDS_OUT + SUFFIX_RATE;
+	public static final String IO_NUM_RECORDS_PROCESSED = "numRecordsProcessed";
+	public static final String IO_NUM_RECORDS_PROCESSED_RATE = IO_NUM_RECORDS_PROCESSED + SUFFIX_RATE;
 
 	public static final String IO_NUM_BYTES_IN = "numBytesIn";
 	public static final String IO_NUM_BYTES_OUT = "numBytesOut";

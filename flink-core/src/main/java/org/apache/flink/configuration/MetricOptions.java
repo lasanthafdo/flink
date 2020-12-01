@@ -114,6 +114,12 @@ public class MetricOptions {
 			.defaultValue("<host>.taskmanager.<tm_id>.<job_name>.<operator_name>.<subtask_index>")
 			.withDescription("Defines the scope format string that is applied to all metrics scoped to an operator.");
 
+	/** The scope format string that is applied to all metrics scoped to an operator. */
+	public static final ConfigOption<String> SCOPE_NAMING_EDGE =
+		key("metrics.scope.edge")
+			.defaultValue("<host>.taskmanager.<tm_id>.<job_name>.<edge_name>.<target_channel>")
+			.withDescription("Defines the scope format string that is applied to all metrics scoped to an edge.");
+
 	public static final ConfigOption<Long> LATENCY_INTERVAL =
 		key("metrics.latency.interval")
 			.defaultValue(0L)

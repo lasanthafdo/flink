@@ -92,6 +92,10 @@ public abstract class ScopeFormat {
 	public static final String SCOPE_OPERATOR_ID = asVariable("operator_id");
 	public static final String SCOPE_OPERATOR_NAME = asVariable("operator_name");
 
+	// ----- Edge ----
+
+	public static final String SCOPE_EDGE_ID = asVariable("edge_id");
+	public static final String SCOPE_EDGE_NAME = asVariable("edge_name");
 
 	// ------------------------------------------------------------------------
 	//  Scope Format Base

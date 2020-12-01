@@ -184,6 +184,10 @@ public class StreamEdge implements Serializable {
 		return bufferTimeout;
 	}
 
+	public String getEdgeId() {
+		return edgeId;
+	}
+
 	@Override
 	public int hashCode() {
 		return Objects.hash(edgeId, outputTag);

@@ -32,6 +32,7 @@ import org.apache.flink.runtime.io.network.api.serialization.SpanningRecordSeria
 import org.apache.flink.runtime.io.network.buffer.BufferBuilder;
 import org.apache.flink.runtime.io.network.buffer.BufferConsumer;
 import org.apache.flink.runtime.metrics.groups.TaskIOMetricGroup;
+import org.apache.flink.runtime.metrics.groups.TaskMetricGroup;
 import org.apache.flink.util.XORShiftRandom;
 
 import org.slf4j.Logger;
@@ -40,6 +41,8 @@ import org.slf4j.LoggerFactory;
 import javax.annotation.Nullable;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 
@@ -80,6 +83,8 @@ public abstract class RecordWriter<T extends IOReadableWritable> implements Avai
 
 	private Counter numBuffersOut = new SimpleCounter();
 
+	private List<Counter> numRecordsProcessed = new ArrayList<>();
+
 	protected Meter idleTimeMsPerSecond = new MeterView(new SimpleCounter());
 
 	private final boolean flushAlways;
@@ -88,7 +93,7 @@ public abstract class RecordWriter<T extends IOReadableWritable> implements Avai
 	@Nullable
 	private final OutputFlusher outputFlusher;
 
-	/** To avoid synchronization overhead on the critical path, best-effort error tracking is enough here.*/
+	/** To avoid synchronization overhead on the critical path, best-effort error tracking is enough here. */
 	private Throwable flusherException;
 
 	RecordWriter(ResultPartitionWriter writer, long timeout, String taskName) {
@@ -113,17 +118,18 @@ public abstract class RecordWriter<T extends IOReadableWritable> implements Avai
 
 	protected void emit(T record, int targetChannel) throws IOException, InterruptedException {
 		checkErroneous();
-
 		serializer.serializeRecord(record);
 
 		// Make sure we don't hold onto the large intermediate serialization buffer for too long
 		if (copyFromSerializerToTargetChannel(targetChannel)) {
 			serializer.prune();
 		}
+		numRecordsProcessed.get(targetChannel).inc();
 	}
 
 	/**
 	 * @param targetChannel
+	 *
 	 * @return <tt>true</tt> if the intermediate serialization buffer should be pruned
 	 */
 	protected boolean copyFromSerializerToTargetChannel(int targetChannel) throws IOException, InterruptedException {
@@ -167,7 +173,10 @@ public abstract class RecordWriter<T extends IOReadableWritable> implements Avai
 				tryFinishCurrentBufferBuilder(targetChannel);
 
 				// Retain the buffer so that it can be recycled by each channel of targetPartition
-				targetPartition.addBufferConsumer(eventBufferConsumer.copy(), targetChannel, isPriorityEvent);
+				targetPartition.addBufferConsumer(
+					eventBufferConsumer.copy(),
+					targetChannel,
+					isPriorityEvent);
 			}
 
 			if (flushAlways) {
@@ -186,11 +195,27 @@ public abstract class RecordWriter<T extends IOReadableWritable> implements Avai
 
 	/**
 	 * Sets the metric group for this RecordWriter.
-     */
+	 */
 	public void setMetricGroup(TaskIOMetricGroup metrics) {
 		numBytesOut = metrics.getNumBytesOutCounter();
 		numBuffersOut = metrics.getNumBuffersOutCounter();
 		idleTimeMsPerSecond = metrics.getIdleTimeMsPerSecond();
+	}
+
+	/**
+	 * Sets the metric group for this RecordWriter.
+	 */
+	public void setMetricGroup(TaskMetricGroup metricGroup, String edgeName) {
+		numBytesOut = metricGroup.getIOMetricGroup().getNumBytesOutCounter();
+		numBuffersOut = metricGroup.getIOMetricGroup().getNumBuffersOutCounter();
+		for (int i = 0; i < numberOfChannels; i++) {
+			String edgeId = targetPartition.getPartitionId().toString() + "@" + i;
+			numRecordsProcessed.add(metricGroup
+				.getOrAddEdge(edgeId, edgeName + "_" + i)
+				.getIOMetricGroup()
+				.getNumRecordsProcessedCounter());
+		}
+		idleTimeMsPerSecond = metricGroup.getIOMetricGroup().getIdleTimeMsPerSecond();
 	}
 
 	protected void finishBufferBuilder(BufferBuilder bufferBuilder) {
@@ -276,11 +301,15 @@ public abstract class RecordWriter<T extends IOReadableWritable> implements Avai
 
 	protected void checkErroneous() throws IOException {
 		if (flusherException != null) {
-			throw new IOException("An exception happened while flushing the outputs", flusherException);
+			throw new IOException(
+				"An exception happened while flushing the outputs",
+				flusherException);
 		}
 	}
 
-	protected void addBufferConsumer(BufferConsumer consumer, int targetChannel) throws IOException {
+	protected void addBufferConsumer(
+		BufferConsumer consumer,
+		int targetChannel) throws IOException {
 		targetPartition.addBufferConsumer(consumer, targetChannel);
 	}
 
@@ -295,6 +324,15 @@ public abstract class RecordWriter<T extends IOReadableWritable> implements Avai
 			idleTimeMsPerSecond.markEvent(System.currentTimeMillis() - start);
 		}
 		return builder;
+	}
+
+	/**
+	 * Returns the number of channels.
+	 *
+	 * @return The number of channels
+	 */
+	public int getNumberOfChannels() {
+		return numberOfChannels;
 	}
 
 	@VisibleForTesting

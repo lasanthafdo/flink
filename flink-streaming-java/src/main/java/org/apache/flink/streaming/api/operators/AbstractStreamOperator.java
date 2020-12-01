@@ -80,7 +80,7 @@ import java.util.Optional;
  */
 @PublicEvolving
 public abstract class AbstractStreamOperator<OUT>
-		implements StreamOperator<OUT>, SetupableStreamOperator<OUT>, CheckpointedStreamOperator, Serializable {
+	implements StreamOperator<OUT>, SetupableStreamOperator<OUT>, CheckpointedStreamOperator, Serializable {
 
 	private static final long serialVersionUID = 1L;
 
@@ -150,13 +150,30 @@ public abstract class AbstractStreamOperator<OUT>
 	// ------------------------------------------------------------------------
 
 	@Override
-	public void setup(StreamTask<?, ?> containingTask, StreamConfig config, Output<StreamRecord<OUT>> output) {
+	public void setup(
+		StreamTask<?, ?> containingTask,
+		StreamConfig config,
+		Output<StreamRecord<OUT>> output) {
 		final Environment environment = containingTask.getEnvironment();
 		this.container = containingTask;
 		this.config = config;
 		try {
-			OperatorMetricGroup operatorMetricGroup = environment.getMetricGroup().getOrAddOperator(config.getOperatorID(), config.getOperatorName());
-			this.output = new CountingOutput<>(output, operatorMetricGroup.getIOMetricGroup().getNumRecordsOutCounter());
+			OperatorMetricGroup operatorMetricGroup = environment
+				.getMetricGroup()
+				.getOrAddOperator(config.getOperatorID(), config.getOperatorName());
+			this.output = new CountingOutput<>(
+				output,
+				operatorMetricGroup.getIOMetricGroup().getNumRecordsOutCounter());
+/*
+			if (output instanceof RecordWriterOutput) {
+				for (int i = 0; i < ((RecordWriterOutput) output).getNumberOfChannels(); i++) {
+					EdgeMetricGroup edgeMetricGroup = environment
+						.getMetricGroup()
+						.getOrAddEdge(config.getOperatorID(), i, config.getOperatorName());
+					edgeMetricGroup.getIOMetricGroup().reuseFlowMetricsForTask();
+				}
+			}
+*/
 			if (config.isChainStart()) {
 				operatorMetricGroup.getIOMetricGroup().reuseInputMetricsForTask();
 			}
@@ -174,14 +191,18 @@ public abstract class AbstractStreamOperator<OUT>
 			Configuration taskManagerConfig = environment.getTaskManagerInfo().getConfiguration();
 			int historySize = taskManagerConfig.getInteger(MetricOptions.LATENCY_HISTORY_SIZE);
 			if (historySize <= 0) {
-				LOG.warn("{} has been set to a value equal or below 0: {}. Using default.", MetricOptions.LATENCY_HISTORY_SIZE, historySize);
+				LOG.warn(
+					"{} has been set to a value equal or below 0: {}. Using default.",
+					MetricOptions.LATENCY_HISTORY_SIZE,
+					historySize);
 				historySize = MetricOptions.LATENCY_HISTORY_SIZE.defaultValue();
 			}
 
 			final String configuredGranularity = taskManagerConfig.getString(MetricOptions.LATENCY_SOURCE_GRANULARITY);
 			LatencyStats.Granularity granularity;
 			try {
-				granularity = LatencyStats.Granularity.valueOf(configuredGranularity.toUpperCase(Locale.ROOT));
+				granularity = LatencyStats.Granularity.valueOf(configuredGranularity.toUpperCase(
+					Locale.ROOT));
 			} catch (IllegalArgumentException iae) {
 				granularity = LatencyStats.Granularity.OPERATOR;
 				LOG.warn(
@@ -191,7 +212,8 @@ public abstract class AbstractStreamOperator<OUT>
 					granularity);
 			}
 			TaskManagerJobMetricGroup jobMetricGroup = this.metrics.parent().parent();
-			this.latencyStats = new LatencyStats(jobMetricGroup.addGroup("latency"),
+			this.latencyStats = new LatencyStats(
+				jobMetricGroup.addGroup("latency"),
 				historySize,
 				container.getIndexInSubtaskGroup(),
 				getOperatorID(),
@@ -199,7 +221,9 @@ public abstract class AbstractStreamOperator<OUT>
 		} catch (Exception e) {
 			LOG.warn("An error occurred while instantiating latency metrics.", e);
 			this.latencyStats = new LatencyStats(
-				UnregisteredMetricGroups.createUnregisteredTaskManagerJobMetricGroup().addGroup("latency"),
+				UnregisteredMetricGroups
+					.createUnregisteredTaskManagerJobMetricGroup()
+					.addGroup("latency"),
 				1,
 				0,
 				new OperatorID(),
@@ -221,7 +245,7 @@ public abstract class AbstractStreamOperator<OUT>
 
 	/**
 	 * @deprecated The {@link ProcessingTimeService} instance should be passed by the operator
-	 * constructor and this method will be removed along with {@link SetupableStreamOperator}.
+	 * 	constructor and this method will be removed along with {@link SetupableStreamOperator}.
 	 */
 	@Deprecated
 	public void setProcessingTimeService(ProcessingTimeService processingTimeService) {
@@ -253,7 +277,10 @@ public abstract class AbstractStreamOperator<OUT>
 				streamTaskCloseableRegistry,
 				metrics);
 
-		stateHandler = new StreamOperatorStateHandler(context, getExecutionConfig(), streamTaskCloseableRegistry);
+		stateHandler = new StreamOperatorStateHandler(
+			context,
+			getExecutionConfig(),
+			streamTaskCloseableRegistry);
 		timeServiceManager = context.internalTimerServiceManager();
 		stateHandler.initializeOperatorState(this);
 		runtimeContext.setKeyedStateStore(stateHandler.getKeyedStateStore().orElse(null));
@@ -268,7 +295,8 @@ public abstract class AbstractStreamOperator<OUT>
 	 * @throws Exception An exception in this method causes the operator to fail.
 	 */
 	@Override
-	public void open() throws Exception {}
+	public void open() throws Exception {
+	}
 
 	/**
 	 * This method is called after all records have been added to the operators via the methods
@@ -283,7 +311,8 @@ public abstract class AbstractStreamOperator<OUT>
 	 * @throws Exception An exception in this method causes the operator to fail.
 	 */
 	@Override
-	public void close() throws Exception {}
+	public void close() throws Exception {
+	}
 
 	/**
 	 * This method is called at the very end of the operator's life, both in the case of a successful
@@ -307,10 +336,10 @@ public abstract class AbstractStreamOperator<OUT>
 
 	@Override
 	public final OperatorSnapshotFutures snapshotState(
-			long checkpointId,
-			long timestamp,
-			CheckpointOptions checkpointOptions,
-			CheckpointStreamFactory factory) throws Exception {
+		long checkpointId,
+		long timestamp,
+		CheckpointOptions checkpointOptions,
+		CheckpointStreamFactory factory) throws Exception {
 		return stateHandler.snapshotState(
 			this,
 			Optional.ofNullable(timeServiceManager),
@@ -380,7 +409,7 @@ public abstract class AbstractStreamOperator<OUT>
 	 * subtask index is returned. Otherwise, the simple class name is returned.
 	 *
 	 * @return If runtime context is set, then return task name with subtask index. Otherwise return
-	 * 			simple class name.
+	 * 	simple class name.
 	 */
 	protected String getOperatorName() {
 		if (runtimeContext != null) {
@@ -426,12 +455,15 @@ public abstract class AbstractStreamOperator<OUT>
 	 * @throws Exception Thrown, if the state backend cannot create the key/value state.
 	 */
 	protected <S extends State> S getPartitionedState(StateDescriptor<S, ?> stateDescriptor) throws Exception {
-		return getPartitionedState(VoidNamespace.INSTANCE, VoidNamespaceSerializer.INSTANCE, stateDescriptor);
+		return getPartitionedState(
+			VoidNamespace.INSTANCE,
+			VoidNamespaceSerializer.INSTANCE,
+			stateDescriptor);
 	}
 
 	protected <N, S extends State, T> S getOrCreateKeyedState(
-			TypeSerializer<N> namespaceSerializer,
-			StateDescriptor<S, T> stateDescriptor) throws Exception {
+		TypeSerializer<N> namespaceSerializer,
+		StateDescriptor<S, T> stateDescriptor) throws Exception {
 		return stateHandler.getOrCreateKeyedState(namespaceSerializer, stateDescriptor);
 	}
 
@@ -442,9 +474,9 @@ public abstract class AbstractStreamOperator<OUT>
 	 * @throws Exception Thrown, if the state backend cannot create the key/value state.
 	 */
 	protected <S extends State, N> S getPartitionedState(
-			N namespace,
-			TypeSerializer<N> namespaceSerializer,
-			StateDescriptor<S, ?> stateDescriptor) throws Exception {
+		N namespace,
+		TypeSerializer<N> namespaceSerializer,
+		StateDescriptor<S, ?> stateDescriptor) throws Exception {
 		return stateHandler.getPartitionedState(namespace, namespaceSerializer, stateDescriptor);
 	}
 
@@ -460,7 +492,9 @@ public abstract class AbstractStreamOperator<OUT>
 		setKeyContextElement(record, stateKeySelector2);
 	}
 
-	private <T> void setKeyContextElement(StreamRecord<T> record, KeySelector<T, ?> selector) throws Exception {
+	private <T> void setKeyContextElement(
+		StreamRecord<T> record,
+		KeySelector<T, ?> selector) throws Exception {
 		if (selector != null) {
 			Object key = selector.getKey(record.getValue());
 			setCurrentKey(key);
@@ -541,16 +575,15 @@ public abstract class AbstractStreamOperator<OUT>
 	 * can use {@link VoidNamespaceSerializer} as the namespace serializer.
 	 *
 	 * @param name The name of the requested timer service. If no service exists under the given
-	 *             name a new one will be created and returned.
+	 * 	name a new one will be created and returned.
 	 * @param namespaceSerializer {@code TypeSerializer} for the timer namespace.
 	 * @param triggerable The {@link Triggerable} that should be invoked when timers fire
-	 *
 	 * @param <N> The type of the timer namespace.
 	 */
 	public <K, N> InternalTimerService<N> getInternalTimerService(
-			String name,
-			TypeSerializer<N> namespaceSerializer,
-			Triggerable<K, N> triggerable) {
+		String name,
+		TypeSerializer<N> namespaceSerializer,
+		Triggerable<K, N> triggerable) {
 		if (timeServiceManager == null) {
 			throw new RuntimeException("The timer service has not been initialized.");
 		}

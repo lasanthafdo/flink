@@ -1196,7 +1196,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 			.setTimeout(bufferTimeout)
 			.setTaskName(taskName)
 			.build(bufferWriter);
-		output.setMetricGroup(environment.getMetricGroup().getIOMetricGroup());
+		output.setMetricGroup(environment.getMetricGroup(), edge.getEdgeId());
 		return output;
 	}
 

@@ -156,6 +156,10 @@ public class RecordWriterOutput<OUT> implements OperatorChain.WatermarkGaugeExpo
 		recordWriter.flushAll();
 	}
 
+	public int getNumberOfChannels() {
+		return recordWriter.getNumberOfChannels();
+	}
+
 	@Override
 	public void close() {
 		recordWriter.close();

@@ -40,6 +40,7 @@ public abstract class QueryScopeInfo {
 	 * Create a copy of this QueryScopeInfo and append the given scope.
 	 *
 	 * @param userScope scope to append
+	 *
 	 * @return modified copy of this QueryScopeInfo
 	 */
 	public abstract QueryScopeInfo copy(String userScope);
@@ -48,7 +49,7 @@ public abstract class QueryScopeInfo {
 	 * Returns the category for this QueryScopeInfo.
 	 *
 	 * @return category
-     */
+	 */
 	public abstract byte getCategory();
 
 	@Override
@@ -67,7 +68,7 @@ public abstract class QueryScopeInfo {
 
 	/**
 	 * Container for the job manager scope. Stores no additional information.
-     */
+	 */
 	public static class JobManagerQueryScopeInfo extends QueryScopeInfo {
 		public JobManagerQueryScopeInfo() {
 			super("");
@@ -90,7 +91,7 @@ public abstract class QueryScopeInfo {
 
 	/**
 	 * Container for the task manager scope. Stores the ID of the task manager.
-     */
+	 */
 	public static class TaskManagerQueryScopeInfo extends QueryScopeInfo {
 		public final String taskManagerID;
 
@@ -116,7 +117,7 @@ public abstract class QueryScopeInfo {
 
 	/**
 	 * Container for the job scope. Stores the ID of the job.
-     */
+	 */
 	public static class JobQueryScopeInfo extends QueryScopeInfo {
 		public final String jobID;
 
@@ -142,7 +143,7 @@ public abstract class QueryScopeInfo {
 
 	/**
 	 * Container for the task scope. Stores the ID of the job/vertex and subtask index.
-     */
+	 */
 	public static class TaskQueryScopeInfo extends QueryScopeInfo {
 		public final String jobID;
 		public final String vertexID;
@@ -161,7 +162,11 @@ public abstract class QueryScopeInfo {
 
 		@Override
 		public TaskQueryScopeInfo copy(String additionalScope) {
-			return new TaskQueryScopeInfo(this.jobID, this.vertexID, this.subtaskIndex, concatScopes(additionalScope));
+			return new TaskQueryScopeInfo(
+				this.jobID,
+				this.vertexID,
+				this.subtaskIndex,
+				concatScopes(additionalScope));
 		}
 
 		@Override
@@ -172,18 +177,27 @@ public abstract class QueryScopeInfo {
 
 	/**
 	 * Container for the operator scope. Stores the ID of the job/vertex, the subtask index and the name of the operator.
-     */
+	 */
 	public static class OperatorQueryScopeInfo extends QueryScopeInfo {
 		public final String jobID;
 		public final String vertexID;
 		public final int subtaskIndex;
 		public final String operatorName;
 
-		public OperatorQueryScopeInfo(String jobID, String vertexid, int subtaskIndex, String operatorName) {
+		public OperatorQueryScopeInfo(
+			String jobID,
+			String vertexid,
+			int subtaskIndex,
+			String operatorName) {
 			this(jobID, vertexid, subtaskIndex, operatorName, "");
 		}
 
-		public OperatorQueryScopeInfo(String jobID, String vertexid, int subtaskIndex, String operatorName, String scope) {
+		public OperatorQueryScopeInfo(
+			String jobID,
+			String vertexid,
+			int subtaskIndex,
+			String operatorName,
+			String scope) {
 			super(scope);
 			this.jobID = jobID;
 			this.vertexID = vertexid;
@@ -193,7 +207,12 @@ public abstract class QueryScopeInfo {
 
 		@Override
 		public OperatorQueryScopeInfo copy(String additionalScope) {
-			return new OperatorQueryScopeInfo(this.jobID, this.vertexID, this.subtaskIndex, this.operatorName, concatScopes(additionalScope));
+			return new OperatorQueryScopeInfo(
+				this.jobID,
+				this.vertexID,
+				this.subtaskIndex,
+				this.operatorName,
+				concatScopes(additionalScope));
 		}
 
 		@Override
@@ -201,4 +220,56 @@ public abstract class QueryScopeInfo {
 			return INFO_CATEGORY_OPERATOR;
 		}
 	}
+
+	/**
+	 * Container for the operator scope. Stores the ID of the job/vertex, the subtask index and the name of the operator.
+	 */
+	public static class EdgeQueryScopeInfo extends QueryScopeInfo {
+		public final String jobID;
+		public final String vertexID;
+		public final int subtaskIndex;
+		public final String edgeId;
+		public final String edgeName;
+
+		public EdgeQueryScopeInfo(
+			String jobID,
+			String vertexid,
+			int subtaskIndex,
+			String edgeId,
+			String edgeName) {
+			this(jobID, vertexid, subtaskIndex, edgeId, "", edgeName);
+		}
+
+		public EdgeQueryScopeInfo(
+			String jobID,
+			String vertexid,
+			int subtaskIndex,
+			String edgeId,
+			String scope,
+			String edgeName) {
+
+			super(scope);
+			this.jobID = jobID;
+			this.vertexID = vertexid;
+			this.subtaskIndex = subtaskIndex;
+			this.edgeId = edgeId;
+			this.edgeName = edgeName;
+		}
+
+		@Override
+		public OperatorQueryScopeInfo copy(String additionalScope) {
+			return new OperatorQueryScopeInfo(
+				this.jobID,
+				this.vertexID,
+				this.subtaskIndex,
+				this.edgeId,
+				concatScopes(additionalScope));
+		}
+
+		@Override
+		public byte getCategory() {
+			return INFO_CATEGORY_OPERATOR;
+		}
+	}
+
 }

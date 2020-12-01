@@ -27,7 +27,9 @@ import org.apache.flink.runtime.scheduler.SchedulerOperations;
 import org.apache.flink.runtime.scheduler.adapter.DefaultExecutionEdge;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -44,7 +46,9 @@ public class TrafficBasedSchedulingStrategy implements SchedulingStrategy {
 
 	private final DeploymentOption deploymentOption = new DeploymentOption(false);
 
-	private final List<SchedulingExecutionEdge> adjacentTasksList;
+	private final Map<SchedulingExecutionEdge<? extends SchedulingExecutionVertex, ? extends SchedulingResultPartition>, Double> edgeFlowRates;
+
+	private final List<SchedulingExecutionVertex> sourceVertices = new ArrayList<>();
 
 	public TrafficBasedSchedulingStrategy(
 		SchedulerOperations schedulerOperations,
@@ -52,7 +56,31 @@ public class TrafficBasedSchedulingStrategy implements SchedulingStrategy {
 
 		this.schedulerOperations = checkNotNull(schedulerOperations);
 		this.schedulingTopology = checkNotNull(schedulingTopology);
-		this.adjacentTasksList = new ArrayList<>();
+		this.edgeFlowRates = new HashMap<>();
+		initializeEdgeFlowRates(schedulingTopology);
+
+	}
+
+	private void initializeEdgeFlowRates(SchedulingTopology schedulingTopology) {
+		schedulingTopology.getVertices().forEach(schedulingExecutionVertex -> {
+			AtomicInteger consumerCount = new AtomicInteger(0);
+			schedulingExecutionVertex.getConsumedResults().forEach(schedulingResultPartition -> {
+				schedulingResultPartition
+					.getConsumers()
+					.forEach(consumer -> edgeFlowRates.put(new DefaultExecutionEdge(
+						schedulingResultPartition.getProducer(),
+						consumer,
+						schedulingResultPartition), 0.0));
+				consumerCount.getAndIncrement();
+			});
+			if (consumerCount.get() == 0) {
+				sourceVertices.add(schedulingExecutionVertex);
+			}
+		});
+	}
+
+	private void updateResourceUsage() {
+		//TODO implement
 	}
 
 	@Override
@@ -82,17 +110,7 @@ public class TrafficBasedSchedulingStrategy implements SchedulingStrategy {
 		AtomicInteger sourceCpuId = new AtomicInteger(2);
 		AtomicInteger operatorCpuId = new AtomicInteger(8);
 		schedulingTopology.getVertices().forEach(schedulingExecutionVertex -> {
-			List<SchedulingExecutionEdge> upstreamEdges = new ArrayList<>();
-			schedulingExecutionVertex.getConsumedResults().forEach(schedulingResultPartition -> {
-				schedulingResultPartition
-					.getConsumers()
-					.forEach(consumer -> upstreamEdges.add(new DefaultExecutionEdge(
-						schedulingResultPartition.getProducer(),
-						consumer,
-						schedulingResultPartition)));
-			});
-
-			if (upstreamEdges.isEmpty()) { // Source vertex
+			if (sourceVertices.contains(schedulingExecutionVertex)) { // Source vertex
 				schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
 					"localhost:0",
 					sourceCpuId.getAndAdd(2)));
@@ -100,7 +118,6 @@ public class TrafficBasedSchedulingStrategy implements SchedulingStrategy {
 				schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
 					"localhost:0",
 					operatorCpuId.getAndIncrement()));
-				adjacentTasksList.addAll(upstreamEdges);
 			}
 		});
 		final List<ExecutionVertexDeploymentOption> executionVertexDeploymentOptions =
