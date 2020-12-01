@@ -44,6 +44,8 @@ public class TrafficBasedSchedulingStrategy implements SchedulingStrategy {
 
 	private final SchedulingTopology schedulingTopology;
 
+	private InfluxDBMetricsClient influxDBMetricsClient = new InfluxDBMetricsClient();
+
 	private final DeploymentOption deploymentOption = new DeploymentOption(false);
 
 	private final Map<SchedulingExecutionEdge<? extends SchedulingExecutionVertex, ? extends SchedulingResultPartition>, Double> edgeFlowRates;
@@ -58,7 +60,7 @@ public class TrafficBasedSchedulingStrategy implements SchedulingStrategy {
 		this.schedulingTopology = checkNotNull(schedulingTopology);
 		this.edgeFlowRates = new HashMap<>();
 		initializeEdgeFlowRates(schedulingTopology);
-
+		updateResourceUsage();
 	}
 
 	private void initializeEdgeFlowRates(SchedulingTopology schedulingTopology) {
@@ -80,7 +82,7 @@ public class TrafficBasedSchedulingStrategy implements SchedulingStrategy {
 	}
 
 	private void updateResourceUsage() {
-		//TODO implement
+		influxDBMetricsClient.setup();
 	}
 
 	@Override

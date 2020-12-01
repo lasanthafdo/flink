@@ -64,7 +64,7 @@ under the License.
 		<module>flink-streaming-scala</module>
 		<module>flink-connectors</module>
 		<module>flink-formats</module>
-		<module>flink-examples</module>
+		<!--module>flink-examples</module>
 		<module>flink-clients</module>
 		<module>flink-container</module>
 		<module>flink-queryable-state</module>
@@ -75,9 +75,9 @@ under the License.
 		<module>flink-libraries</module>
 		<module>flink-table</module>
 		<module>flink-quickstart</module>
-		<module>flink-contrib</module>
+		<module>flink-contrib</module-->
 		<module>flink-dist</module>
-		<module>flink-mesos</module>
+		<!--module>flink-mesos</module>
 		<module>flink-metrics</module>
 		<module>flink-yarn</module>
 		<module>flink-yarn-tests</module>
@@ -87,7 +87,7 @@ under the License.
 		<module>flink-ml-parent</module>
 		<module>flink-walkthroughs</module>
 		<module>flink-kubernetes</module>
-		<module>flink-external-resources</module>
+		<module>flink-external-resources</module-->
 	</modules>
 
 	<properties>
@@ -117,8 +117,8 @@ under the License.
 		<scala.macros.version>2.1.0</scala.macros.version>
 		<!-- Default scala versions, must be overwritten by build profiles, so we set something
 		invalid here -->
-		<scala.version>2.12.12</scala.version>
-		<scala.binary.version>2.12</scala.binary.version>
+		<scala.version>2.11.12</scala.version>
+		<scala.binary.version>2.11</scala.binary.version>
 		<chill.version>0.7.6</chill.version>
 		<zookeeper.version>3.4.14</zookeeper.version>
 		<!-- Only the curator2 TestingServer works with ZK 3.4 -->
