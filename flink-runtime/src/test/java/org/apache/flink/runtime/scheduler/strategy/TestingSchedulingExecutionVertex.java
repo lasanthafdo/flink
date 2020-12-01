@@ -70,6 +70,11 @@ public class TestingSchedulingExecutionVertex implements SchedulingExecutionVert
 	}
 
 	@Override
+	public int getSubTaskIndex() {
+		return 0;
+	}
+
+	@Override
 	public ExecutionState getState() {
 		return ExecutionState.CREATED;
 	}
