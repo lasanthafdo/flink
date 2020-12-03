@@ -38,7 +38,12 @@ public enum ScheduleMode {
 	/**
 	 * Schedules all tasks immediately and pins a task to a CPU
 	 */
-	PINNED(false);
+	PINNED(false),
+
+	/**
+	 * Schedules all tasks immediately and places according to a model
+	 */
+	DRL(false);
 
 	private final boolean allowLazyDeployment;
 

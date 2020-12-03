@@ -38,6 +38,13 @@ public interface SchedulingStrategy {
 	void startScheduling();
 
 	/**
+	 * Called when scheduling with the current state.
+	 *
+	 * @param runtimeState the current state of the job
+	 */
+	void startScheduling(SchedulingRuntimeState runtimeState);
+
+	/**
 	 * Called whenever vertices need to be restarted (due to task failure).
 	 *
 	 * @param verticesToRestart The tasks need to be restarted

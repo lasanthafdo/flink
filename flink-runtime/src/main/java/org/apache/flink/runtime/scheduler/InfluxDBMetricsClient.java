@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.runtime.scheduler.strategy;
+package org.apache.flink.runtime.scheduler;
 
 import org.influxdb.InfluxDB;
 import org.influxdb.InfluxDBFactory;
@@ -35,7 +35,7 @@ public class InfluxDBMetricsClient {
 	private final String databaseName;
 	private InfluxDB influxDB;
 
-	InfluxDBMetricsClient(String serverURL, String databaseName) {
+	public InfluxDBMetricsClient(String serverURL, String databaseName) {
 		this.serverURL = serverURL;
 		this.databaseName = databaseName;
 	}

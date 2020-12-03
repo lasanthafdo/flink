@@ -95,7 +95,7 @@ public class DefaultScheduler extends SchedulerBase implements SchedulerOperatio
 
 	private final Set<ExecutionVertexID> verticesWaitingForRestart;
 
-	private final PeriodicSchedulingAgent periodicSchedulingAgent;
+	private final SchedulingAgent schedulingAgent;
 
 	DefaultScheduler(
 		final Logger log,
@@ -165,9 +165,10 @@ public class DefaultScheduler extends SchedulerBase implements SchedulerOperatio
 			getInputsLocationsRetriever());
 
 		this.verticesWaitingForRestart = new HashSet<>();
-		this.periodicSchedulingAgent = SchedulingAgentUtils.buildSchedulingAgent(
+		this.schedulingAgent = SchedulingAgentUtils.buildSchedulingAgent(
 			log,
 			getExecutionGraph(),
+			jobGraph.getScheduleMode(),
 			this.schedulingStrategy,
 			jobMasterConfiguration);
 	}
@@ -188,10 +189,10 @@ public class DefaultScheduler extends SchedulerBase implements SchedulerOperatio
 			schedulingStrategy.getClass().getName());
 		prepareExecutionGraphForNgScheduling();
 		schedulingStrategy.startScheduling();
-		if (periodicSchedulingAgent != null) {
-			long triggerPeriod = periodicSchedulingAgent.getTriggerPeriod();
+		if (schedulingAgent != null) {
+			long triggerPeriod = schedulingAgent.getTriggerPeriod();
 			ScheduledFuture<?> agentFuture = getFutureExecutor().scheduleAtFixedRate(
-				periodicSchedulingAgent,
+				schedulingAgent,
 				triggerPeriod,
 				triggerPeriod,
 				TimeUnit.SECONDS);

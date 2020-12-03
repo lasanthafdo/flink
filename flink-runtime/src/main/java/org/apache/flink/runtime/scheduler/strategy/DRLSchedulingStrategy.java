@@ -21,11 +21,15 @@ package org.apache.flink.runtime.scheduler.strategy;
 import org.apache.flink.runtime.execution.ExecutionPlacement;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
+import org.apache.flink.runtime.scheduler.DRLSchedulingAgent;
 import org.apache.flink.runtime.scheduler.DeploymentOption;
 import org.apache.flink.runtime.scheduler.ExecutionVertexDeploymentOption;
-import org.apache.flink.runtime.scheduler.PeriodicSchedulingAgent;
 import org.apache.flink.runtime.scheduler.SchedulerOperations;
 import org.apache.flink.util.FlinkRuntimeException;
+
+import org.jetbrains.annotations.NotNull;
+
+import javax.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -37,13 +41,16 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
 /**
  * {@link SchedulingStrategy} instance for streaming job which will schedule all tasks at the same time.
  */
-public class TrafficBasedSchedulingStrategy implements SchedulingStrategy {
+public class DRLSchedulingStrategy implements SchedulingStrategy {
 
 	private final SchedulerOperations schedulerOperations;
+
 	private final SchedulingTopology schedulingTopology;
+
 	private final DeploymentOption deploymentOption = new DeploymentOption(false);
 
-	public TrafficBasedSchedulingStrategy(
+
+	public DRLSchedulingStrategy(
 		SchedulerOperations schedulerOperations,
 		SchedulingTopology schedulingTopology) {
 
@@ -82,13 +89,12 @@ public class TrafficBasedSchedulingStrategy implements SchedulingStrategy {
 
 	private void allocateSlotsAndDeploy(
 		final Set<ExecutionVertexID> verticesToDeploy,
-		SchedulingRuntimeState runtimeState) {
+		@Nullable SchedulingRuntimeState runtimeState) {
 		if (runtimeState == null) {
 			setupDefaultPlacement();
 		} else {
-			setupTrafficBasedPlacement(runtimeState);
+			setupDRLPlacement(runtimeState);
 		}
-
 		final List<ExecutionVertexDeploymentOption> executionVertexDeploymentOptions =
 			SchedulingStrategyUtils.createExecutionVertexDeploymentOptionsInTopologicalOrder(
 				schedulingTopology,
@@ -118,14 +124,14 @@ public class TrafficBasedSchedulingStrategy implements SchedulingStrategy {
 		});
 	}
 
-	private void setupTrafficBasedPlacement(SchedulingRuntimeState runtimeState) {
+	private void setupDRLPlacement(@NotNull SchedulingRuntimeState runtimeState) {
 		List<SchedulingExecutionEdge> orderedEdgeList = runtimeState.getOrderedEdgeList();
 		List<SchedulingExecutionVertex> strandedVertices = new ArrayList<>();
 		orderedEdgeList.forEach(schedulingExecutionEdge -> {
 			SchedulingExecutionVertex sourceVertex = schedulingExecutionEdge.getSourceSchedulingExecutionVertex();
 			SchedulingExecutionVertex targetVertex = schedulingExecutionEdge.getTargetSchedulingExecutionVertex();
 
-			List<Integer> cpuIds = PeriodicSchedulingAgent.schedulingCpuSocket.tryScheduleInSameContainer(
+			List<Integer> cpuIds = DRLSchedulingAgent.schedulingCpuSocket.tryScheduleInSameContainer(
 				sourceVertex,
 				targetVertex);
 			if (cpuIds != null) {
@@ -147,7 +153,7 @@ public class TrafficBasedSchedulingStrategy implements SchedulingStrategy {
 			}
 		});
 		strandedVertices.forEach(schedulingExecutionVertex -> {
-			int cpuId = PeriodicSchedulingAgent.schedulingCpuSocket.scheduleExecutionVertex(
+			int cpuId = DRLSchedulingAgent.schedulingCpuSocket.scheduleExecutionVertex(
 				schedulingExecutionVertex);
 			if (cpuId == -1) {
 				throw new FlinkRuntimeException(
@@ -163,7 +169,7 @@ public class TrafficBasedSchedulingStrategy implements SchedulingStrategy {
 	}
 
 	/**
-	 * The factory for creating {@link TrafficBasedSchedulingStrategy}.
+	 * The factory for creating {@link DRLSchedulingStrategy}.
 	 */
 	public static class Factory implements SchedulingStrategyFactory {
 
@@ -171,7 +177,7 @@ public class TrafficBasedSchedulingStrategy implements SchedulingStrategy {
 		public SchedulingStrategy createInstance(
 			SchedulerOperations schedulerOperations,
 			SchedulingTopology schedulingTopology) {
-			return new TrafficBasedSchedulingStrategy(schedulerOperations, schedulingTopology);
+			return new DRLSchedulingStrategy(schedulerOperations, schedulingTopology);
 		}
 	}
 }

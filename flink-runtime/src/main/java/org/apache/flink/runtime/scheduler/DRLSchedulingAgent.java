@@ -33,7 +33,6 @@ import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingResultPartition;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingRuntimeState;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategy;
-
 import org.apache.flink.runtime.scheduler.strategy.SchedulingTopology;
 
 import org.slf4j.Logger;
@@ -55,7 +54,7 @@ import static org.apache.flink.util.Preconditions.checkState;
 /**
  * A scheduling agent that will run periodically to reschedule.
  */
-public class PeriodicSchedulingAgent implements SchedulingAgent, SchedulingRuntimeState {
+public class DRLSchedulingAgent implements SchedulingAgent, SchedulingRuntimeState {
 
 	public static final SchedulingCpuSocket schedulingCpuSocket = new SchedulingCpuSocket(new ArrayList<>(
 		Arrays.asList(
@@ -68,29 +67,34 @@ public class PeriodicSchedulingAgent implements SchedulingAgent, SchedulingRunti
 		)));
 
 	private final ExecutionGraph executionGraph;
-	private final SchedulingTopology schedulingTopology;
 	private final SchedulingStrategy schedulingStrategy;
 	private final Logger log;
 	private final long triggerPeriod;
 	private final long waitTimeout;
 	private final int numRetries;
+	private final ActorCriticWrapper actorCriticWrapper = new ActorCriticWrapper(20, 10);
 
 	private CompletableFuture<Collection<Acknowledge>> previousRescheduleFuture;
 
-	private InfluxDBMetricsClient influxDBMetricsClient;
+	private final SchedulingTopology schedulingTopology;
 	private final Map<String, Double> edgeFlowRates;
 	private final Map<String, SchedulingExecutionEdge<? extends SchedulingExecutionVertex, ? extends SchedulingResultPartition>> edgeMap;
 	private final List<SchedulingExecutionVertex> sourceVertices = new ArrayList<>();
 	private List<SchedulingExecutionEdge> orderedEdgeList;
+	private InfluxDBMetricsClient influxDBMetricsClient;
 
-	public PeriodicSchedulingAgent(
-		Logger log, ExecutionGraph executionGraph,
+	private int lastAction;
+
+	public DRLSchedulingAgent(
+		Logger log,
+		ExecutionGraph executionGraph,
 		SchedulingStrategy schedulingStrategy,
-		long triggerPeriod, long waitTimeout, int numRetries) {
+		long triggerPeriod,
+		long waitTimeout,
+		int numRetries) {
 
 		this.log = log;
 		this.executionGraph = checkNotNull(executionGraph);
-		this.schedulingTopology = executionGraph.getSchedulingTopology();
 		this.schedulingStrategy = checkNotNull(schedulingStrategy);
 		this.triggerPeriod = triggerPeriod;
 		this.waitTimeout = waitTimeout;
@@ -98,8 +102,15 @@ public class PeriodicSchedulingAgent implements SchedulingAgent, SchedulingRunti
 
 		this.edgeFlowRates = new HashMap<>();
 		this.edgeMap = new HashMap<>();
+		this.schedulingTopology = checkNotNull(executionGraph.getSchedulingTopology());
+
 		initializeEdgeFlowRates();
 		setupInfluxDBConnection();
+	}
+
+	@Override
+	public long getTriggerPeriod() {
+		return triggerPeriod;
 	}
 
 	private void initializeEdgeFlowRates() {
@@ -123,6 +134,11 @@ public class PeriodicSchedulingAgent implements SchedulingAgent, SchedulingRunti
 		});
 	}
 
+	private void setupInfluxDBConnection() {
+		influxDBMetricsClient = new InfluxDBMetricsClient("http://127.0.0.1:8086", "flink");
+		influxDBMetricsClient.setup();
+	}
+
 	private void updateState() {
 		Map<String, Double> currentFlowRates = influxDBMetricsClient.getRateMetricsFor(
 			"taskmanager_job_task_edge_numRecordsProcessedPerSecond",
@@ -135,16 +151,6 @@ public class PeriodicSchedulingAgent implements SchedulingAgent, SchedulingRunti
 			.sorted(Map.Entry.comparingByValue())
 			.map(mapEntry -> edgeMap.get(mapEntry.getKey()))
 			.collect(Collectors.toList());
-	}
-
-	private void setupInfluxDBConnection() {
-		influxDBMetricsClient = new InfluxDBMetricsClient("http://127.0.0.1:8086", "flink");
-		influxDBMetricsClient.setup();
-	}
-
-	@Override
-	public long getTriggerPeriod() {
-		return triggerPeriod;
 	}
 
 	@Override
@@ -226,4 +232,5 @@ public class PeriodicSchedulingAgent implements SchedulingAgent, SchedulingRunti
 	public double getOverallThroughput() {
 		return 0;
 	}
+
 }
