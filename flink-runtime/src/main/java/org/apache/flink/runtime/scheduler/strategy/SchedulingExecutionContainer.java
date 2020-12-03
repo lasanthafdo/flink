@@ -21,11 +21,14 @@ package org.apache.flink.runtime.scheduler.strategy;
 import org.apache.flink.runtime.executiongraph.ExecutionVertex;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Scheduling representation of {@link ExecutionVertex}.
  */
 public interface SchedulingExecutionContainer {
+
+	String CPU = "CPU";
 
 	List<SchedulingExecutionContainer> getSubContainers();
 
@@ -36,5 +39,9 @@ public interface SchedulingExecutionContainer {
 	int releaseExecutionVertex(SchedulingExecutionVertex schedulingExecutionVertex);
 
 	int getAvailableCapacity();
+
+	double getResourceUsage(String type);
+
+	void updateResourceUsageMetrics(String type, Map<Integer, Double> resourceUsageMetrics);
 
 }

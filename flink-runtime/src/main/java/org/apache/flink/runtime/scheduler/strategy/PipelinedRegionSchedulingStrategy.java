@@ -84,6 +84,11 @@ public class PipelinedRegionSchedulingStrategy implements SchedulingStrategy {
 	}
 
 	@Override
+	public void startScheduling(SchedulingRuntimeState ignored) {
+		startScheduling();
+	}
+
+	@Override
 	public void restartTasks(final Set<ExecutionVertexID> verticesToRestart) {
 		final Set<SchedulingPipelinedRegion> regionsToRestart = verticesToRestart.stream()
 			.map(schedulingTopology::getPipelinedRegionOfVertex)

@@ -28,12 +28,12 @@ import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.scheduler.adapter.DefaultExecutionEdge;
 import org.apache.flink.runtime.scheduler.adapter.SchedulingCpuCore;
 import org.apache.flink.runtime.scheduler.adapter.SchedulingCpuSocket;
+import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionContainer;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionEdge;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingResultPartition;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingRuntimeState;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategy;
-
 import org.apache.flink.runtime.scheduler.strategy.SchedulingTopology;
 
 import org.slf4j.Logger;
@@ -65,7 +65,7 @@ public class PeriodicSchedulingAgent implements SchedulingAgent, SchedulingRunti
 			new SchedulingCpuCore(new ArrayList<>(Arrays.asList(6, 7))),
 			new SchedulingCpuCore(new ArrayList<>(Arrays.asList(8, 9))),
 			new SchedulingCpuCore(new ArrayList<>(Arrays.asList(10, 11)))
-		)));
+		)), 12);
 
 	private final ExecutionGraph executionGraph;
 	private final SchedulingTopology schedulingTopology;
@@ -128,6 +128,10 @@ public class PeriodicSchedulingAgent implements SchedulingAgent, SchedulingRunti
 			"taskmanager_job_task_edge_numRecordsProcessedPerSecond",
 			"edge_id",
 			"rate");
+		Map<Integer, Double> cpuMetrics = influxDBMetricsClient.getCpuMetrics(12);
+		schedulingCpuSocket.updateResourceUsageMetrics(
+			SchedulingExecutionContainer.CPU,
+			cpuMetrics);
 		edgeFlowRates.putAll(currentFlowRates);
 		orderedEdgeList = edgeFlowRates
 			.entrySet()
@@ -135,6 +139,8 @@ public class PeriodicSchedulingAgent implements SchedulingAgent, SchedulingRunti
 			.sorted(Map.Entry.comparingByValue())
 			.map(mapEntry -> edgeMap.get(mapEntry.getKey()))
 			.collect(Collectors.toList());
+		log.info("CPU usage:\n {}", cpuMetrics);
+		log.info("Edge flow rates:\n {}", edgeFlowRates);
 	}
 
 	private void setupInfluxDBConnection() {

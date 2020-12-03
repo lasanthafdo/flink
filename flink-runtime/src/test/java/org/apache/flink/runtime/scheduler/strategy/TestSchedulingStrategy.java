@@ -56,6 +56,10 @@ public class TestSchedulingStrategy implements SchedulingStrategy {
 	}
 
 	@Override
+	public void startScheduling(SchedulingRuntimeState runtimeState) {
+	}
+
+	@Override
 	public void restartTasks(final Set<ExecutionVertexID> verticesToRestart) {
 		this.receivedVerticesToRestart = verticesToRestart;
 	}

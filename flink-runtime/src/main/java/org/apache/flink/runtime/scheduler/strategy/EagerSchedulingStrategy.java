@@ -53,6 +53,11 @@ public class EagerSchedulingStrategy implements SchedulingStrategy {
 	}
 
 	@Override
+	public void startScheduling(SchedulingRuntimeState ignored) {
+		startScheduling();
+	}
+
+	@Override
 	public void restartTasks(Set<ExecutionVertexID> verticesToRestart) {
 		allocateSlotsAndDeploy(verticesToRestart);
 	}

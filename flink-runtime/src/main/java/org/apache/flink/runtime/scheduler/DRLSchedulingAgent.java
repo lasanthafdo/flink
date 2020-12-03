@@ -64,7 +64,7 @@ public class DRLSchedulingAgent implements SchedulingAgent, SchedulingRuntimeSta
 			new SchedulingCpuCore(new ArrayList<>(Arrays.asList(6, 7))),
 			new SchedulingCpuCore(new ArrayList<>(Arrays.asList(8, 9))),
 			new SchedulingCpuCore(new ArrayList<>(Arrays.asList(10, 11)))
-		)));
+		)), 12);
 
 	private final ExecutionGraph executionGraph;
 	private final SchedulingStrategy schedulingStrategy;

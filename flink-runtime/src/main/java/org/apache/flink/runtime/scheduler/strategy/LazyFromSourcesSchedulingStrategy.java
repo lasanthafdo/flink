@@ -82,6 +82,11 @@ public class LazyFromSourcesSchedulingStrategy implements SchedulingStrategy {
 	}
 
 	@Override
+	public void startScheduling(SchedulingRuntimeState ignored) {
+		startScheduling();
+	}
+
+	@Override
 	public void restartTasks(Set<ExecutionVertexID> verticesToRestart) {
 		// increase counter of the dataset first
 		verticesToRestart

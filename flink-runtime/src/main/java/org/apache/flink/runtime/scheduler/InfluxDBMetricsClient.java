@@ -58,14 +58,37 @@ public class InfluxDBMetricsClient {
 		List<QueryResult.Result> results = queryResult.getResults();
 		results.forEach(result -> {
 			List<QueryResult.Series> series = result.getSeries();
-			if(series != null && !series.isEmpty()) {
+			if (series != null && !series.isEmpty()) {
 				series.get(0).getValues().forEach(record -> {
-					if(record.size() == 3) {
-						resultMap.put(record.get(1).toString(), Double.valueOf(record.get(2).toString()));
+					if (record.size() == 3) {
+						resultMap.put(
+							record.get(1).toString(),
+							Double.valueOf(record.get(2).toString()));
 					}
 				});
 			}
 		});
+		return resultMap;
+	}
+
+	public Map<Integer, Double> getCpuMetrics(int nCpus) {
+		Map<Integer, Double> resultMap = new HashMap<>();
+		for (int i = 0; i < nCpus; i++) {
+			QueryResult queryResult = influxDB.query(new Query(
+				"SELECT value FROM taskmanager_System_CPU_UsageCPU" + i
+					+ " WHERE time > now() - " + 3 + "m ORDER BY time DESC LIMIT 1"));
+			List<QueryResult.Result> results = queryResult.getResults();
+			int cpuId = i;
+			results.forEach(result -> {
+				List<QueryResult.Series> series = result.getSeries();
+				if (series != null && !series.isEmpty()) {
+					List<Object> record = series.get(0).getValues().get(0);
+					resultMap.put(
+						cpuId,
+						Double.parseDouble(record.get(0).toString()) / 100.0);
+				}
+			});
+		}
 		return resultMap;
 	}
 

@@ -16,10 +16,12 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  */
 public class SchedulingCpuCore implements SchedulingExecutionContainer {
 	private final Map<Integer, SchedulingExecutionVertex> cpuAssignmentMap;
+	private final Map<Integer, Double> cpuUsageMetrics;
 
 	public SchedulingCpuCore(List<Integer> cpuIds) {
 		checkNotNull(cpuIds);
 		this.cpuAssignmentMap = new HashMap<>(cpuIds.size());
+		this.cpuUsageMetrics = new HashMap<>(cpuIds.size());
 	}
 
 	@Override
@@ -90,5 +92,28 @@ public class SchedulingCpuCore implements SchedulingExecutionContainer {
 			.filter(entry -> entry.getValue() == null)
 			.forEach(mapEntry -> integerCount.getAndIncrement());
 		return integerCount.get();
+	}
+
+	@Override
+	public double getResourceUsage(String type) {
+		if (SchedulingExecutionContainer.CPU.equals(type)) {
+			return cpuUsageMetrics
+				.values()
+				.stream()
+				.mapToDouble(Double::doubleValue)
+				.average()
+				.orElse(0d);
+		} else {
+			return 0d;
+		}
+	}
+
+	@Override
+	public void updateResourceUsageMetrics(String type, Map<Integer, Double> resourceUsageMetrics) {
+		if (CPU.equals(type)) {
+			cpuAssignmentMap
+				.keySet()
+				.forEach(cpuId -> cpuUsageMetrics.put(cpuId, resourceUsageMetrics.get(cpuId)));
+		}
 	}
 }

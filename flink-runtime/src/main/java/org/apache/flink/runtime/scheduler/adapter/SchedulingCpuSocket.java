@@ -5,7 +5,9 @@ import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -16,9 +18,11 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  */
 public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 	private final List<SchedulingExecutionContainer> cpuCores;
+	private final Map<Integer, Double> cpuUsageMetrics;
 
-	public SchedulingCpuSocket(List<SchedulingExecutionContainer> cpuCores) {
+	public SchedulingCpuSocket(List<SchedulingExecutionContainer> cpuCores, int nCpus) {
 		this.cpuCores = checkNotNull(cpuCores);
+		this.cpuUsageMetrics = new HashMap<>(nCpus);
 	}
 
 	@Override
@@ -44,7 +48,7 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 
 		Optional<SchedulingExecutionContainer> targetCore = cpuCores
 			.stream()
-			.max(Comparator.comparing(SchedulingExecutionContainer::getAvailableCapacity));
+			.min(Comparator.comparing(sec -> sec.getResourceUsage(CPU)));
 		List<Integer> cpuIds = new ArrayList<>();
 		if (targetCore.isPresent()) {
 			SchedulingExecutionContainer cpuCore = targetCore.get();
@@ -69,5 +73,24 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 			integerCount.addAndGet(schedulingExecutionContainer.getAvailableCapacity());
 		});
 		return integerCount.get();
+	}
+
+	@Override
+	public double getResourceUsage(String type) {
+		return cpuCores
+			.stream()
+			.mapToDouble(cpuCore -> cpuCore.getResourceUsage(SchedulingExecutionContainer.CPU))
+			.average()
+			.orElse(0d);
+	}
+
+	@Override
+	public void updateResourceUsageMetrics(String type, Map<Integer, Double> resourceUsageMetrics) {
+		if (CPU.equals(type)) {
+			cpuCores.forEach(cpuCore -> {
+				cpuCore.updateResourceUsageMetrics(type, resourceUsageMetrics);
+			});
+			cpuUsageMetrics.putAll(resourceUsageMetrics);
+		}
 	}
 }
