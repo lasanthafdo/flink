@@ -56,8 +56,9 @@ import static org.apache.flink.util.Preconditions.checkState;
 /**
  * A scheduling agent that will run periodically to reschedule.
  */
-public class PeriodicSchedulingAgent implements SchedulingAgent {
+public class TrafficBasedSchedulingAgent implements SchedulingAgent, SchedulingRuntimeState {
 
+	private final SchedulingCpuSocket schedulingCpuSocket;
 	private final ExecutionGraph executionGraph;
 	private final SchedulingTopology schedulingTopology;
 	private final SchedulingStrategy schedulingStrategy;
@@ -68,7 +69,13 @@ public class PeriodicSchedulingAgent implements SchedulingAgent {
 
 	private CompletableFuture<Collection<Acknowledge>> previousRescheduleFuture;
 
-	public PeriodicSchedulingAgent(
+	private InfluxDBMetricsClient influxDBMetricsClient;
+	private final Map<String, Double> edgeFlowRates;
+	private final Map<String, SchedulingExecutionEdge<? extends SchedulingExecutionVertex, ? extends SchedulingResultPartition>> edgeMap;
+	private final List<SchedulingExecutionVertex> sourceVertices = new ArrayList<>();
+	private List<SchedulingExecutionEdge> orderedEdgeList;
+
+	public TrafficBasedSchedulingAgent(
 		Logger log, ExecutionGraph executionGraph,
 		SchedulingStrategy schedulingStrategy,
 		long triggerPeriod, long waitTimeout, int numRetries) {
@@ -80,6 +87,70 @@ public class PeriodicSchedulingAgent implements SchedulingAgent {
 		this.triggerPeriod = triggerPeriod;
 		this.waitTimeout = waitTimeout;
 		this.numRetries = numRetries;
+
+		this.schedulingCpuSocket = new SchedulingCpuSocket(new ArrayList<>(Arrays.asList(
+			new SchedulingCpuCore(new ArrayList<>(Arrays.asList(0, 1))),
+			new SchedulingCpuCore(new ArrayList<>(Arrays.asList(2, 3))),
+			new SchedulingCpuCore(new ArrayList<>(Arrays.asList(4, 5))),
+			new SchedulingCpuCore(new ArrayList<>(Arrays.asList(6, 7))),
+			new SchedulingCpuCore(new ArrayList<>(Arrays.asList(8, 9))),
+			new SchedulingCpuCore(new ArrayList<>(Arrays.asList(10, 11)))
+		)), 12, log);
+		this.edgeFlowRates = new HashMap<>();
+		this.edgeMap = new HashMap<>();
+		initializeEdgeFlowRates();
+		setupInfluxDBConnection();
+	}
+
+	private void initializeEdgeFlowRates() {
+		schedulingTopology.getVertices().forEach(schedulingExecutionVertex -> {
+			AtomicInteger consumerCount = new AtomicInteger(0);
+			schedulingExecutionVertex.getConsumedResults().forEach(schedulingResultPartition -> {
+				schedulingResultPartition
+					.getConsumers()
+					.forEach(consumer -> {
+						DefaultExecutionEdge dee = new DefaultExecutionEdge(
+							schedulingResultPartition.getProducer(),
+							consumer,
+							schedulingResultPartition);
+						log.info("Execution ID: " + dee.getExecutionEdgeId());
+						edgeMap.put(dee.getExecutionEdgeId(), dee);
+					});
+				consumerCount.getAndIncrement();
+			});
+			if (consumerCount.get() == 0) {
+				sourceVertices.add(schedulingExecutionVertex);
+			}
+		});
+	}
+
+	private void updateState() {
+		Map<String, Double> currentFlowRates = influxDBMetricsClient.getRateMetricsFor(
+			"taskmanager_job_task_edge_numRecordsProcessedPerSecond",
+			"edge_id",
+			"rate");
+		Map<Integer, Double> cpuMetrics = influxDBMetricsClient.getCpuMetrics(12);
+		schedulingCpuSocket.updateResourceUsageMetrics(
+			SchedulingExecutionContainer.CPU,
+			cpuMetrics);
+		Map<String, Double> filteredFlowRates = currentFlowRates
+			.entrySet()
+			.stream()
+			.filter(mapEntry -> edgeMap.containsKey(mapEntry.getKey()))
+			.collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+		edgeFlowRates.putAll(filteredFlowRates);
+		orderedEdgeList = edgeFlowRates
+			.entrySet()
+			.stream()
+			.sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
+			.map(mapEntry -> edgeMap.get(mapEntry.getKey()))
+			.collect(Collectors.toList());
+		log.info("CPU usage:\n {}", cpuMetrics);
+	}
+
+	private void setupInfluxDBConnection() {
+		influxDBMetricsClient = new InfluxDBMetricsClient("http://127.0.0.1:8086", "flink", log);
+		influxDBMetricsClient.setup();
 	}
 
 	@Override
@@ -89,6 +160,7 @@ public class PeriodicSchedulingAgent implements SchedulingAgent {
 
 	@Override
 	public void run() {
+		updateState();
 		if (previousRescheduleFuture == null || previousRescheduleFuture.isDone()) {
 			log.info("Rescheduling job '" + executionGraph.getJobName() + "'");
 			previousRescheduleFuture = rescheduleEager();
@@ -141,12 +213,37 @@ public class PeriodicSchedulingAgent implements SchedulingAgent {
 				log.error("Encountered exception when halting process.", fail);
 				throw new CompletionException("Halt process unsuccessful", fail);
 			} else {
-				schedulingStrategy.startScheduling();
+				schedulingStrategy.startScheduling(this);
 			}
 		}).whenComplete((ack, fail) -> {
 			if (fail != null) {
 				log.error("Periodic scheduling failed.", fail);
 			}
 		});
+	}
+
+	@Override
+	public List<SchedulingExecutionVertex> getSourceVertices() {
+		return sourceVertices;
+	}
+
+	@Override
+	public Map<String, Double> getEdgeThroughput() {
+		return edgeFlowRates;
+	}
+
+	@Override
+	public List<SchedulingExecutionEdge> getOrderedEdgeList() {
+		return orderedEdgeList;
+	}
+
+	@Override
+	public SchedulingExecutionContainer getTopLevelContainer() {
+		return schedulingCpuSocket;
+	}
+
+	@Override
+	public double getOverallThroughput() {
+		return edgeFlowRates.values().stream().mapToDouble(Double::doubleValue).sum();
 	}
 }

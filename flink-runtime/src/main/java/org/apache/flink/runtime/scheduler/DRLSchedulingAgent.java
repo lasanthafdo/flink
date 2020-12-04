@@ -41,6 +41,7 @@ import org.slf4j.Logger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -108,7 +109,12 @@ public class DRLSchedulingAgent implements SchedulingAgent, SchedulingRuntimeSta
 
 		initializeEdgeFlowRates();
 		setupInfluxDBConnection();
+		generateActionSpace(6, 7, 2);
 		this.actorCriticWrapper = new ActorCriticWrapper(20, 10, log);
+	}
+
+	private void generateActionSpace(int nCores, int nVertices, int max) {
+		//TODO implement
 	}
 
 	@Override
@@ -147,13 +153,24 @@ public class DRLSchedulingAgent implements SchedulingAgent, SchedulingRuntimeSta
 			"taskmanager_job_task_edge_numRecordsProcessedPerSecond",
 			"edge_id",
 			"rate");
-		edgeFlowRates.putAll(currentFlowRates);
+		Map<Integer, Double> cpuMetrics = influxDBMetricsClient.getCpuMetrics(12);
+		schedulingCpuSocket.updateResourceUsageMetrics(
+			SchedulingExecutionContainer.CPU,
+			cpuMetrics);
+		Map<String, Double> filteredFlowRates = currentFlowRates
+			.entrySet()
+			.stream()
+			.filter(mapEntry -> edgeMap.containsKey(mapEntry.getKey()))
+			.collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+		edgeFlowRates.putAll(filteredFlowRates);
 		orderedEdgeList = edgeFlowRates
 			.entrySet()
 			.stream()
-			.sorted(Map.Entry.comparingByValue())
+			.sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
 			.map(mapEntry -> edgeMap.get(mapEntry.getKey()))
 			.collect(Collectors.toList());
+		log.info("CPU usage:\n {}", cpuMetrics);
+		log.info("Edge flow rates:\n {}", edgeFlowRates);
 	}
 
 	@Override
@@ -238,7 +255,6 @@ public class DRLSchedulingAgent implements SchedulingAgent, SchedulingRuntimeSta
 
 	@Override
 	public double getOverallThroughput() {
-		return 0;
+		return edgeFlowRates.values().stream().mapToDouble(Double::doubleValue).sum();
 	}
-
 }

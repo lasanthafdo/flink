@@ -69,4 +69,10 @@ public class DeploymentOptions {
 			.noDefaultValue()
 			.withDescription("Specifies the configuration string for the scheduling agent.");
 
+	public static final ConfigOption<String> RUNTIME_SCHEDULING_MODE =
+		key("execution.runtime-scheduling-mode")
+			.stringType()
+			.defaultValue("pinned")
+			.withDescription("Specifies the runtime scheduling mode.");
+
 }

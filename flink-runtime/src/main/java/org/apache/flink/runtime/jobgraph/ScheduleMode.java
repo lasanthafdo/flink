@@ -41,6 +41,11 @@ public enum ScheduleMode {
 	PINNED(false),
 
 	/**
+	 * Use the traffic based algorithm
+	 */
+	TRAFFIC_BASED(false),
+
+	/**
 	 * Schedules all tasks immediately and places according to a model
 	 */
 	DRL(false);

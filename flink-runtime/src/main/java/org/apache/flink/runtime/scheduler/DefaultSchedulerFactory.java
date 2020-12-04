@@ -34,8 +34,10 @@ import org.apache.flink.runtime.jobgraph.ScheduleMode;
 import org.apache.flink.runtime.jobmaster.slotpool.SlotProvider;
 import org.apache.flink.runtime.metrics.groups.JobManagerJobMetricGroup;
 import org.apache.flink.runtime.rest.handler.legacy.backpressure.BackPressureStatsTracker;
+import org.apache.flink.runtime.scheduler.strategy.DRLSchedulingStrategy;
 import org.apache.flink.runtime.scheduler.strategy.EagerSchedulingStrategy;
 import org.apache.flink.runtime.scheduler.strategy.LazyFromSourcesSchedulingStrategy;
+import org.apache.flink.runtime.scheduler.strategy.PinnedSchedulingStrategy;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategyFactory;
 import org.apache.flink.runtime.scheduler.strategy.TrafficBasedSchedulingStrategy;
 import org.apache.flink.runtime.shuffle.ShuffleMaster;
@@ -118,7 +120,11 @@ public class DefaultSchedulerFactory implements SchedulerNGFactory {
 			case EAGER:
 				return new EagerSchedulingStrategy.Factory();
 			case PINNED:
+				return new PinnedSchedulingStrategy.Factory();
+			case TRAFFIC_BASED:
 				return new TrafficBasedSchedulingStrategy.Factory();
+			case DRL:
+				return new DRLSchedulingStrategy.Factory();
 			case LAZY_FROM_SOURCES_WITH_BATCH_SLOT_REQUEST:
 			case LAZY_FROM_SOURCES:
 				return new LazyFromSourcesSchedulingStrategy.Factory();

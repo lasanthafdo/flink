@@ -1336,6 +1336,8 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 
 				// else fall through the loop
 			} else if (current == HALTED) {
+				updateAccumulatorsAndMetrics(userAccumulators, metrics);
+
 				transitionState(CREATED);
 				return;
 			} else {
