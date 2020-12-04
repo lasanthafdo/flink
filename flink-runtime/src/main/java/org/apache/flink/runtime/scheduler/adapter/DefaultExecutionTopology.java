@@ -189,6 +189,7 @@ public class DefaultExecutionTopology implements SchedulingTopology {
 
 		DefaultExecutionVertex schedulingVertex = new DefaultExecutionVertex(
 			vertex.getID(),
+			vertex.getTaskName(),
 			vertex.getParallelSubtaskIndex(),
 			producedPartitions,
 			vertex::getExecutionState,

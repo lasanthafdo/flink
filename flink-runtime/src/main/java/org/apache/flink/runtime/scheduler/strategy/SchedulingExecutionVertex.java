@@ -33,6 +33,8 @@ public interface SchedulingExecutionVertex
 
 	ExecutionPlacement DEFAULT_EXECUTION_PLACEMENT = new ExecutionPlacement("localhost:0", -1);
 
+	String getTaskName();
+
 	/**
 	 * Returns the sub task index of the execution vertex.
 	 *

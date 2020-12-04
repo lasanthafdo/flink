@@ -3,6 +3,8 @@ package org.apache.flink.runtime.scheduler.adapter;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionContainer;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
 
+import org.slf4j.Logger;
+
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -19,10 +21,12 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
 public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 	private final List<SchedulingExecutionContainer> cpuCores;
 	private final Map<Integer, Double> cpuUsageMetrics;
+	private final Logger log;
 
-	public SchedulingCpuSocket(List<SchedulingExecutionContainer> cpuCores, int nCpus) {
+	public SchedulingCpuSocket(List<SchedulingExecutionContainer> cpuCores, int nCpus, Logger log) {
 		this.cpuCores = checkNotNull(cpuCores);
 		this.cpuUsageMetrics = new HashMap<>(nCpus);
+		this.log = log;
 	}
 
 	@Override
@@ -67,6 +71,23 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 	}
 
 	@Override
+	public void releaseAllExecutionVertices() {
+		log.info("Socket status:\n {}", getStatus());
+		cpuCores.forEach(SchedulingExecutionContainer::releaseAllExecutionVertices);
+	}
+
+	@Override
+	public boolean isAssignedToContainer(SchedulingExecutionVertex schedulingExecutionVertex) {
+		for (SchedulingExecutionContainer cpuCore : cpuCores) {
+			if (cpuCore.isAssignedToContainer(schedulingExecutionVertex)) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	@Override
 	public int getAvailableCapacity() {
 		AtomicInteger integerCount = new AtomicInteger(0);
 		cpuCores.forEach(schedulingExecutionContainer -> {
@@ -92,5 +113,20 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 			});
 			cpuUsageMetrics.putAll(resourceUsageMetrics);
 		}
+	}
+
+	@Override
+	public String getStatus() {
+		StringBuilder currentSchedulingStateMsg = new StringBuilder("Current scheduling state:\n");
+		cpuCores.forEach(cpuCore -> {
+			currentSchedulingStateMsg.append(cpuCore.getStatus()).append("\n");
+		});
+		currentSchedulingStateMsg
+			.append("Overall (Available CPUs: ")
+			.append(getAvailableCapacity())
+			.append(", Resource Usage: ")
+			.append(getResourceUsage(CPU))
+			.append(").");
+		return currentSchedulingStateMsg.toString();
 	}
 }

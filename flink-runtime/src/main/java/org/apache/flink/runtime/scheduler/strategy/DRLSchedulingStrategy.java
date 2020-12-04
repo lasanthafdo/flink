@@ -125,13 +125,15 @@ public class DRLSchedulingStrategy implements SchedulingStrategy {
 	}
 
 	private void setupDRLPlacement(@NotNull SchedulingRuntimeState runtimeState) {
+		SchedulingExecutionContainer topLevelContainer = runtimeState.getTopLevelContainer();
+		topLevelContainer.releaseAllExecutionVertices();
 		List<SchedulingExecutionEdge> orderedEdgeList = runtimeState.getOrderedEdgeList();
 		List<SchedulingExecutionVertex> strandedVertices = new ArrayList<>();
 		orderedEdgeList.forEach(schedulingExecutionEdge -> {
 			SchedulingExecutionVertex sourceVertex = schedulingExecutionEdge.getSourceSchedulingExecutionVertex();
 			SchedulingExecutionVertex targetVertex = schedulingExecutionEdge.getTargetSchedulingExecutionVertex();
 
-			List<Integer> cpuIds = DRLSchedulingAgent.schedulingCpuSocket.tryScheduleInSameContainer(
+			List<Integer> cpuIds = topLevelContainer.tryScheduleInSameContainer(
 				sourceVertex,
 				targetVertex);
 			if (cpuIds != null) {
@@ -153,7 +155,7 @@ public class DRLSchedulingStrategy implements SchedulingStrategy {
 			}
 		});
 		strandedVertices.forEach(schedulingExecutionVertex -> {
-			int cpuId = DRLSchedulingAgent.schedulingCpuSocket.scheduleExecutionVertex(
+			int cpuId = topLevelContainer.scheduleExecutionVertex(
 				schedulingExecutionVertex);
 			if (cpuId == -1) {
 				throw new FlinkRuntimeException(

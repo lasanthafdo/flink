@@ -70,6 +70,11 @@ public class TestingSchedulingExecutionVertex implements SchedulingExecutionVert
 	}
 
 	@Override
+	public String getTaskName() {
+		return null;
+	}
+
+	@Override
 	public int getSubTaskIndex() {
 		return 0;
 	}

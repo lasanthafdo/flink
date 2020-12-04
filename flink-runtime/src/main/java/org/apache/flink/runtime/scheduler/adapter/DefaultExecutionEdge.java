@@ -57,6 +57,7 @@ public class DefaultExecutionEdge implements SchedulingExecutionEdge {
 	}
 
 	public String getExecutionEdgeId() {
-		return sourceVertex.getId() + "@" + resultPartition.getId() + "#" + targetVertex.getSubTaskIndex();
+		return sourceVertex.getTaskName() + "_" + sourceVertex.getSubTaskIndex() + "@"
+			+ resultPartition.getResultId() + "#" + targetVertex.getSubTaskIndex();
 	}
 }

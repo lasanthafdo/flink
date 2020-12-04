@@ -28,6 +28,7 @@ import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.scheduler.adapter.DefaultExecutionEdge;
 import org.apache.flink.runtime.scheduler.adapter.SchedulingCpuCore;
 import org.apache.flink.runtime.scheduler.adapter.SchedulingCpuSocket;
+import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionContainer;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionEdge;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingResultPartition;
@@ -56,15 +57,7 @@ import static org.apache.flink.util.Preconditions.checkState;
  */
 public class DRLSchedulingAgent implements SchedulingAgent, SchedulingRuntimeState {
 
-	public static final SchedulingCpuSocket schedulingCpuSocket = new SchedulingCpuSocket(new ArrayList<>(
-		Arrays.asList(
-			new SchedulingCpuCore(new ArrayList<>(Arrays.asList(0, 1))),
-			new SchedulingCpuCore(new ArrayList<>(Arrays.asList(2, 3))),
-			new SchedulingCpuCore(new ArrayList<>(Arrays.asList(4, 5))),
-			new SchedulingCpuCore(new ArrayList<>(Arrays.asList(6, 7))),
-			new SchedulingCpuCore(new ArrayList<>(Arrays.asList(8, 9))),
-			new SchedulingCpuCore(new ArrayList<>(Arrays.asList(10, 11)))
-		)), 12);
+	private final SchedulingCpuSocket schedulingCpuSocket;
 
 	private final ExecutionGraph executionGraph;
 	private final SchedulingStrategy schedulingStrategy;
@@ -72,7 +65,7 @@ public class DRLSchedulingAgent implements SchedulingAgent, SchedulingRuntimeSta
 	private final long triggerPeriod;
 	private final long waitTimeout;
 	private final int numRetries;
-	private final ActorCriticWrapper actorCriticWrapper = new ActorCriticWrapper(20, 10);
+	private final ActorCriticWrapper actorCriticWrapper;
 
 	private CompletableFuture<Collection<Acknowledge>> previousRescheduleFuture;
 
@@ -100,12 +93,22 @@ public class DRLSchedulingAgent implements SchedulingAgent, SchedulingRuntimeSta
 		this.waitTimeout = waitTimeout;
 		this.numRetries = numRetries;
 
+		this.schedulingCpuSocket = new SchedulingCpuSocket(new ArrayList<>(
+			Arrays.asList(
+				new SchedulingCpuCore(new ArrayList<>(Arrays.asList(0, 1))),
+				new SchedulingCpuCore(new ArrayList<>(Arrays.asList(2, 3))),
+				new SchedulingCpuCore(new ArrayList<>(Arrays.asList(4, 5))),
+				new SchedulingCpuCore(new ArrayList<>(Arrays.asList(6, 7))),
+				new SchedulingCpuCore(new ArrayList<>(Arrays.asList(8, 9))),
+				new SchedulingCpuCore(new ArrayList<>(Arrays.asList(10, 11)))
+			)), 12, log);
 		this.edgeFlowRates = new HashMap<>();
 		this.edgeMap = new HashMap<>();
 		this.schedulingTopology = checkNotNull(executionGraph.getSchedulingTopology());
 
 		initializeEdgeFlowRates();
 		setupInfluxDBConnection();
+		this.actorCriticWrapper = new ActorCriticWrapper(20, 10, log);
 	}
 
 	@Override
@@ -135,7 +138,7 @@ public class DRLSchedulingAgent implements SchedulingAgent, SchedulingRuntimeSta
 	}
 
 	private void setupInfluxDBConnection() {
-		influxDBMetricsClient = new InfluxDBMetricsClient("http://127.0.0.1:8086", "flink");
+		influxDBMetricsClient = new InfluxDBMetricsClient("http://127.0.0.1:8086", "flink", log);
 		influxDBMetricsClient.setup();
 	}
 
@@ -208,7 +211,7 @@ public class DRLSchedulingAgent implements SchedulingAgent, SchedulingRuntimeSta
 				log.error("Encountered exception when halting process.", fail);
 				throw new CompletionException("Halt process unsuccessful", fail);
 			} else {
-				schedulingStrategy.startScheduling();
+				schedulingStrategy.startScheduling(this);
 			}
 		});
 	}
@@ -226,6 +229,11 @@ public class DRLSchedulingAgent implements SchedulingAgent, SchedulingRuntimeSta
 	@Override
 	public List<SchedulingExecutionEdge> getOrderedEdgeList() {
 		return orderedEdgeList;
+	}
+
+	@Override
+	public SchedulingExecutionContainer getTopLevelContainer() {
+		return schedulingCpuSocket;
 	}
 
 	@Override

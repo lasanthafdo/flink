@@ -34,5 +34,7 @@ public interface SchedulingRuntimeState {
 
 	List<SchedulingExecutionEdge> getOrderedEdgeList();
 
+	SchedulingExecutionContainer getTopLevelContainer();
+
 	double getOverallThroughput();
 }

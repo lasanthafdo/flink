@@ -22,6 +22,7 @@ import org.influxdb.InfluxDB;
 import org.influxdb.InfluxDBFactory;
 import org.influxdb.dto.Query;
 import org.influxdb.dto.QueryResult;
+import org.slf4j.Logger;
 
 import java.util.HashMap;
 import java.util.List;
@@ -34,10 +35,12 @@ public class InfluxDBMetricsClient {
 	private final String serverURL;
 	private final String databaseName;
 	private InfluxDB influxDB;
+	private Logger log;
 
-	public InfluxDBMetricsClient(String serverURL, String databaseName) {
+	public InfluxDBMetricsClient(String serverURL, String databaseName, Logger log) {
 		this.serverURL = serverURL;
 		this.databaseName = databaseName;
+		this.log = log;
 	}
 
 	public void setup() {
@@ -53,41 +56,61 @@ public class InfluxDBMetricsClient {
 		String valueField) {
 
 		Map<String, Double> resultMap = new HashMap<>();
-		QueryResult queryResult = influxDB.query(new Query(
-			"SELECT " + keyField + "," + valueField + " FROM " + metricName));
-		List<QueryResult.Result> results = queryResult.getResults();
-		results.forEach(result -> {
-			List<QueryResult.Series> series = result.getSeries();
-			if (series != null && !series.isEmpty()) {
-				series.get(0).getValues().forEach(record -> {
-					if (record.size() == 3) {
-						resultMap.put(
-							record.get(1).toString(),
-							Double.valueOf(record.get(2).toString()));
-					}
-				});
-			}
-		});
+		try {
+			QueryResult queryResult = influxDB.query(new Query(
+				"SELECT MEAN(" + valueField + ") FROM " + metricName + " WHERE time > now() - " + 3
+					+ "m GROUP BY " + keyField));
+			List<QueryResult.Result> results = queryResult.getResults();
+			results.forEach(result -> {
+				List<QueryResult.Series> series = result.getSeries();
+				if (series != null && !series.isEmpty()) {
+					series.forEach(seriesElement -> {
+						List<Object> record = seriesElement.getValues().get(0);
+						if (record.size() == 2) {
+							resultMap.put(
+								seriesElement.getTags().get(keyField),
+								(Double) record.get(1));
+						} else {
+							log.warn("Size mismatch when reading metric record.");
+						}
+					});
+				}
+			});
+		} catch (Exception e) {
+			log.warn(
+				"Exception occured when retrieving metric {} with key '{}' and value '{}': {}",
+				metricName,
+				keyField,
+				valueField,
+				e.getMessage());
+		}
 		return resultMap;
 	}
 
 	public Map<Integer, Double> getCpuMetrics(int nCpus) {
 		Map<Integer, Double> resultMap = new HashMap<>();
 		for (int i = 0; i < nCpus; i++) {
-			QueryResult queryResult = influxDB.query(new Query(
-				"SELECT value FROM taskmanager_System_CPU_UsageCPU" + i
-					+ " WHERE time > now() - " + 3 + "m ORDER BY time DESC LIMIT 1"));
-			List<QueryResult.Result> results = queryResult.getResults();
 			int cpuId = i;
-			results.forEach(result -> {
-				List<QueryResult.Series> series = result.getSeries();
-				if (series != null && !series.isEmpty()) {
-					List<Object> record = series.get(0).getValues().get(0);
-					resultMap.put(
-						cpuId,
-						Double.parseDouble(record.get(0).toString()) / 100.0);
-				}
-			});
+			try {
+				QueryResult queryResult = influxDB.query(new Query(
+					"SELECT value FROM taskmanager_System_CPU_UsageCPU" + i
+						+ " WHERE time > now() - " + 3 + "m ORDER BY time DESC LIMIT 1"));
+				List<QueryResult.Result> results = queryResult.getResults();
+				results.forEach(result -> {
+					List<QueryResult.Series> series = result.getSeries();
+					if (series != null && !series.isEmpty()) {
+						List<Object> record = series.get(0).getValues().get(0);
+						resultMap.put(
+							cpuId,
+							(Double) record.get(1) / 100.0);
+					}
+				});
+			} catch (Exception e) {
+				log.warn(
+					"Exception occurred when retrieving metrics for CPU {} : {}",
+					cpuId,
+					e.getMessage());
+			}
 		}
 		return resultMap;
 	}

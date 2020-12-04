@@ -31,10 +31,12 @@ import org.apache.flink.runtime.io.network.api.serialization.RecordSerializer;
 import org.apache.flink.runtime.io.network.api.serialization.SpanningRecordSerializer;
 import org.apache.flink.runtime.io.network.buffer.BufferBuilder;
 import org.apache.flink.runtime.io.network.buffer.BufferConsumer;
+import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.metrics.groups.TaskIOMetricGroup;
 import org.apache.flink.runtime.metrics.groups.TaskMetricGroup;
 import org.apache.flink.util.XORShiftRandom;
 
+import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -209,15 +211,40 @@ public abstract class RecordWriter<T extends IOReadableWritable> implements Avai
 		numBytesOut = metricGroup.getIOMetricGroup().getNumBytesOutCounter();
 		numBuffersOut = metricGroup.getIOMetricGroup().getNumBuffersOutCounter();
 		for (int i = 0; i < numberOfChannels; i++) {
-			String partitionId = targetPartition.getPartitionId().toString();
-			String edgeId = partitionId + "#" + i;
-			String producerSubTaskId = partitionId.split("@")[0].split("#")[1];
+			ResultPartitionID resultPartitionID = targetPartition.getPartitionId();
+			String producerSubTaskIndex = resultPartitionID
+				.getPartitionId()
+				.toString()
+				.split("#")[1];
+			String edgeIdUpper = getEdgeIdUpper(edgeName, resultPartitionID, producerSubTaskIndex);
+			String edgeId = edgeIdUpper + "#" + i;
 			numRecordsProcessed.add(metricGroup
-				.getOrAddEdge(edgeId, edgeName + "_" + producerSubTaskId + "_" + i)
+				.getOrAddEdge(edgeId, edgeName + "_" + producerSubTaskIndex + "_" + i)
 				.getIOMetricGroup()
 				.getNumRecordsProcessedCounter());
 		}
 		idleTimeMsPerSecond = metricGroup.getIOMetricGroup().getIdleTimeMsPerSecond();
+	}
+
+	@NotNull
+	private String getEdgeIdUpper(
+		String edgeName,
+		ResultPartitionID resultPartitionID,
+		String producerSubTaskIndex) {
+		String[] producerSubTaskNameParts = edgeName.split("_")[0].split("-");
+		StringBuilder producerSubTaskName = new StringBuilder();
+		for (int j = 0; j < producerSubTaskNameParts.length - 1; j++) {
+			producerSubTaskName.append(producerSubTaskNameParts[j]);
+			if (j < producerSubTaskNameParts.length - 2) {
+				producerSubTaskName.append("-");
+			}
+		}
+		String partitionIdWithoutProducerSubtaskIndex = resultPartitionID
+			.getPartitionId()
+			.toString()
+			.split("#")[0];
+		return producerSubTaskName + "_" + producerSubTaskIndex + "@"
+			+ partitionIdWithoutProducerSubtaskIndex;
 	}
 
 	protected void finishBufferBuilder(BufferBuilder bufferBuilder) {

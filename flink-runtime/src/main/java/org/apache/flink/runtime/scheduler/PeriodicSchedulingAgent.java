@@ -57,16 +57,7 @@ import static org.apache.flink.util.Preconditions.checkState;
  */
 public class PeriodicSchedulingAgent implements SchedulingAgent, SchedulingRuntimeState {
 
-	public static final SchedulingCpuSocket schedulingCpuSocket = new SchedulingCpuSocket(new ArrayList<>(
-		Arrays.asList(
-			new SchedulingCpuCore(new ArrayList<>(Arrays.asList(0, 1))),
-			new SchedulingCpuCore(new ArrayList<>(Arrays.asList(2, 3))),
-			new SchedulingCpuCore(new ArrayList<>(Arrays.asList(4, 5))),
-			new SchedulingCpuCore(new ArrayList<>(Arrays.asList(6, 7))),
-			new SchedulingCpuCore(new ArrayList<>(Arrays.asList(8, 9))),
-			new SchedulingCpuCore(new ArrayList<>(Arrays.asList(10, 11)))
-		)), 12);
-
+	private final SchedulingCpuSocket schedulingCpuSocket;
 	private final ExecutionGraph executionGraph;
 	private final SchedulingTopology schedulingTopology;
 	private final SchedulingStrategy schedulingStrategy;
@@ -96,6 +87,14 @@ public class PeriodicSchedulingAgent implements SchedulingAgent, SchedulingRunti
 		this.waitTimeout = waitTimeout;
 		this.numRetries = numRetries;
 
+		this.schedulingCpuSocket = new SchedulingCpuSocket(new ArrayList<>(Arrays.asList(
+			new SchedulingCpuCore(new ArrayList<>(Arrays.asList(0, 1))),
+			new SchedulingCpuCore(new ArrayList<>(Arrays.asList(2, 3))),
+			new SchedulingCpuCore(new ArrayList<>(Arrays.asList(4, 5))),
+			new SchedulingCpuCore(new ArrayList<>(Arrays.asList(6, 7))),
+			new SchedulingCpuCore(new ArrayList<>(Arrays.asList(8, 9))),
+			new SchedulingCpuCore(new ArrayList<>(Arrays.asList(10, 11)))
+		)), 12, log);
 		this.edgeFlowRates = new HashMap<>();
 		this.edgeMap = new HashMap<>();
 		initializeEdgeFlowRates();
@@ -113,6 +112,7 @@ public class PeriodicSchedulingAgent implements SchedulingAgent, SchedulingRunti
 							schedulingResultPartition.getProducer(),
 							consumer,
 							schedulingResultPartition);
+						log.info("Execution ID: " + dee.getExecutionEdgeId());
 						edgeMap.put(dee.getExecutionEdgeId(), dee);
 					});
 				consumerCount.getAndIncrement();
@@ -132,7 +132,12 @@ public class PeriodicSchedulingAgent implements SchedulingAgent, SchedulingRunti
 		schedulingCpuSocket.updateResourceUsageMetrics(
 			SchedulingExecutionContainer.CPU,
 			cpuMetrics);
-		edgeFlowRates.putAll(currentFlowRates);
+		Map<String, Double> filteredFlowRates = currentFlowRates
+			.entrySet()
+			.stream()
+			.filter(mapEntry -> edgeMap.containsKey(mapEntry.getKey()))
+			.collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+		edgeFlowRates.putAll(filteredFlowRates);
 		orderedEdgeList = edgeFlowRates
 			.entrySet()
 			.stream()
@@ -144,7 +149,7 @@ public class PeriodicSchedulingAgent implements SchedulingAgent, SchedulingRunti
 	}
 
 	private void setupInfluxDBConnection() {
-		influxDBMetricsClient = new InfluxDBMetricsClient("http://127.0.0.1:8086", "flink");
+		influxDBMetricsClient = new InfluxDBMetricsClient("http://127.0.0.1:8086", "flink", log);
 		influxDBMetricsClient.setup();
 	}
 
@@ -208,7 +213,11 @@ public class PeriodicSchedulingAgent implements SchedulingAgent, SchedulingRunti
 				log.error("Encountered exception when halting process.", fail);
 				throw new CompletionException("Halt process unsuccessful", fail);
 			} else {
-				schedulingStrategy.startScheduling();
+				schedulingStrategy.startScheduling(this);
+			}
+		}).whenComplete((ack, fail) -> {
+			if (fail != null) {
+				log.error("Periodic scheduling failed.", fail);
 			}
 		});
 	}
@@ -226,6 +235,11 @@ public class PeriodicSchedulingAgent implements SchedulingAgent, SchedulingRunti
 	@Override
 	public List<SchedulingExecutionEdge> getOrderedEdgeList() {
 		return orderedEdgeList;
+	}
+
+	@Override
+	public SchedulingExecutionContainer getTopLevelContainer() {
+		return schedulingCpuSocket;
 	}
 
 	@Override

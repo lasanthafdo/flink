@@ -32,6 +32,8 @@ import java.util.Set;
  */
 public interface SchedulingStrategy {
 
+	String DEFAULT_TASK_MANAGER_ADDRESS = "localhost:0";
+
 	/**
 	 * Called when the scheduling is started (initial scheduling operation).
 	 */

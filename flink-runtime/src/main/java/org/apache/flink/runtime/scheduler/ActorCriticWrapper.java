@@ -1,6 +1,7 @@
 package org.apache.flink.runtime.scheduler;
 
 import com.github.chen0040.rl.learning.actorcritic.ActorCriticLearner;
+import org.slf4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -19,6 +20,7 @@ public class ActorCriticWrapper {
 	private final ActorCriticLearner agent = new ActorCriticLearner(stateCount, actionCount);
 	private final List<Transition> transitionList = new ArrayList<>();
 	private InfluxDBMetricsClient influxDBMetricsClient;
+	private Logger log;
 
 	static class Transition {
 		int oldState;
@@ -34,17 +36,17 @@ public class ActorCriticWrapper {
 		}
 	}
 
-	public ActorCriticWrapper(int actionCount, int stateCount) {
+	public ActorCriticWrapper(int actionCount, int stateCount, Logger log) {
 		this.stateCount = stateCount;
 		this.actionCount = actionCount;
-
+		this.log = log;
 		setupInfluxDBConnection();
 	}
 
 	private void setupInfluxDBConnection() {
 		influxDBMetricsClient = new InfluxDBMetricsClient(
 			"http://127.0.0.1:8086",
-			"flink-transitions");
+			"flink-transitions", log);
 		influxDBMetricsClient.setup();
 	}
 

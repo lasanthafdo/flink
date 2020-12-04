@@ -38,10 +38,15 @@ public interface SchedulingExecutionContainer {
 
 	int releaseExecutionVertex(SchedulingExecutionVertex schedulingExecutionVertex);
 
+	void releaseAllExecutionVertices();
+
+	boolean isAssignedToContainer(SchedulingExecutionVertex schedulingExecutionVertex);
+
 	int getAvailableCapacity();
 
 	double getResourceUsage(String type);
 
 	void updateResourceUsageMetrics(String type, Map<Integer, Double> resourceUsageMetrics);
 
+	String getStatus();
 }

@@ -25,9 +25,11 @@ import org.apache.flink.runtime.scheduler.DeploymentOption;
 import org.apache.flink.runtime.scheduler.ExecutionVertexDeploymentOption;
 import org.apache.flink.runtime.scheduler.PeriodicSchedulingAgent;
 import org.apache.flink.runtime.scheduler.SchedulerOperations;
+import org.apache.flink.runtime.scheduler.adapter.SchedulingCpuSocket;
 import org.apache.flink.util.FlinkRuntimeException;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -108,46 +110,77 @@ public class TrafficBasedSchedulingStrategy implements SchedulingStrategy {
 				.hasNext();
 			if (isSourceVertex) { // Source vertex
 				schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
-					"localhost:0",
+					DEFAULT_TASK_MANAGER_ADDRESS,
 					sourceCpuId.getAndAdd(2)));
 			} else {
 				schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
-					"localhost:0",
+					DEFAULT_TASK_MANAGER_ADDRESS,
 					operatorCpuId.getAndIncrement()));
 			}
 		});
 	}
 
 	private void setupTrafficBasedPlacement(SchedulingRuntimeState runtimeState) {
+		SchedulingExecutionContainer topLevelContainer = runtimeState.getTopLevelContainer();
+		topLevelContainer.releaseAllExecutionVertices();
 		List<SchedulingExecutionEdge> orderedEdgeList = runtimeState.getOrderedEdgeList();
-		List<SchedulingExecutionVertex> strandedVertices = new ArrayList<>();
+		Set<SchedulingExecutionVertex> strandedVertices = new HashSet<>();
 		orderedEdgeList.forEach(schedulingExecutionEdge -> {
 			SchedulingExecutionVertex sourceVertex = schedulingExecutionEdge.getSourceSchedulingExecutionVertex();
 			SchedulingExecutionVertex targetVertex = schedulingExecutionEdge.getTargetSchedulingExecutionVertex();
 
-			List<Integer> cpuIds = PeriodicSchedulingAgent.schedulingCpuSocket.tryScheduleInSameContainer(
-				sourceVertex,
+			boolean sourceVertexAssigned = topLevelContainer.isAssignedToContainer(
+				sourceVertex);
+			boolean targetVertexAssigned = topLevelContainer.isAssignedToContainer(
 				targetVertex);
-			if (cpuIds != null) {
-				if (cpuIds.size() >= 1) {
-					sourceVertex.setExecutionPlacement(new ExecutionPlacement(
-						"localhost:0",
-						cpuIds.get(0)));
-					if (cpuIds.size() >= 2) {
-						targetVertex.setExecutionPlacement(new ExecutionPlacement(
-							"localhost:0",
-							cpuIds.get(1)));
+
+			if (!sourceVertexAssigned && !targetVertexAssigned) {
+				List<Integer> cpuIds = topLevelContainer.tryScheduleInSameContainer(
+					sourceVertex,
+					targetVertex);
+				if (cpuIds != null) {
+					if (cpuIds.size() >= 1) {
+						sourceVertex.setExecutionPlacement(new ExecutionPlacement(
+							DEFAULT_TASK_MANAGER_ADDRESS,
+							cpuIds.get(0)));
+						strandedVertices.remove(sourceVertex);
+						if (cpuIds.size() >= 2) {
+							targetVertex.setExecutionPlacement(new ExecutionPlacement(
+								DEFAULT_TASK_MANAGER_ADDRESS,
+								cpuIds.get(1)));
+							strandedVertices.remove(targetVertex);
+						} else {
+							strandedVertices.add(targetVertex);
+						}
 					} else {
+						strandedVertices.add(sourceVertex);
 						strandedVertices.add(targetVertex);
 					}
+				}
+			} else if (sourceVertexAssigned && !targetVertexAssigned) {
+				int cpuId = topLevelContainer.scheduleExecutionVertex(
+					targetVertex);
+				if (cpuId != -1) {
+					targetVertex.setExecutionPlacement(new ExecutionPlacement(
+						DEFAULT_TASK_MANAGER_ADDRESS, cpuId));
+					strandedVertices.remove(targetVertex);
+				} else {
+					strandedVertices.add(targetVertex);
+				}
+			} else if (!sourceVertexAssigned) {
+				int cpuId = topLevelContainer.scheduleExecutionVertex(
+					sourceVertex);
+				if (cpuId != -1) {
+					sourceVertex.setExecutionPlacement(new ExecutionPlacement(
+						DEFAULT_TASK_MANAGER_ADDRESS, cpuId));
+					strandedVertices.remove(sourceVertex);
 				} else {
 					strandedVertices.add(sourceVertex);
-					strandedVertices.add(targetVertex);
 				}
 			}
 		});
 		strandedVertices.forEach(schedulingExecutionVertex -> {
-			int cpuId = PeriodicSchedulingAgent.schedulingCpuSocket.scheduleExecutionVertex(
+			int cpuId = topLevelContainer.scheduleExecutionVertex(
 				schedulingExecutionVertex);
 			if (cpuId == -1) {
 				throw new FlinkRuntimeException(
@@ -155,7 +188,7 @@ public class TrafficBasedSchedulingStrategy implements SchedulingStrategy {
 						+ schedulingExecutionVertex.getId());
 			} else {
 				schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
-					"localhost:0",
+					DEFAULT_TASK_MANAGER_ADDRESS,
 					cpuId
 				));
 			}

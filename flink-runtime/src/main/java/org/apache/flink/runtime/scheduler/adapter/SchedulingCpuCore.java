@@ -22,6 +22,10 @@ public class SchedulingCpuCore implements SchedulingExecutionContainer {
 		checkNotNull(cpuIds);
 		this.cpuAssignmentMap = new HashMap<>(cpuIds.size());
 		this.cpuUsageMetrics = new HashMap<>(cpuIds.size());
+		cpuIds.forEach(cpuId -> {
+			this.cpuAssignmentMap.put(cpuId, null);
+			this.cpuUsageMetrics.put(cpuId, 0.0);
+		});
 	}
 
 	@Override
@@ -84,6 +88,19 @@ public class SchedulingCpuCore implements SchedulingExecutionContainer {
 	}
 
 	@Override
+	public void releaseAllExecutionVertices() {
+		// Is this safe?? Concurrent modification?
+		cpuAssignmentMap
+			.keySet()
+			.forEach(cpuAssignment -> cpuAssignmentMap.put(cpuAssignment, null));
+	}
+
+	@Override
+	public boolean isAssignedToContainer(SchedulingExecutionVertex schedulingExecutionVertex) {
+		return cpuAssignmentMap.containsValue(schedulingExecutionVertex);
+	}
+
+	@Override
 	public int getAvailableCapacity() {
 		AtomicInteger integerCount = new AtomicInteger();
 		cpuAssignmentMap
@@ -115,5 +132,25 @@ public class SchedulingCpuCore implements SchedulingExecutionContainer {
 				.keySet()
 				.forEach(cpuId -> cpuUsageMetrics.put(cpuId, resourceUsageMetrics.get(cpuId)));
 		}
+	}
+
+	@Override
+	public String getStatus() {
+		StringBuilder currentStatusMsg = new StringBuilder();
+		currentStatusMsg.append("Available CPUs :").append(getAvailableCapacity())
+			.append(", Resource Usage: ").append(getResourceUsage(CPU))
+			.append(", Assignment:\n");
+		cpuAssignmentMap.forEach((cpuId, vertex) -> {
+			currentStatusMsg
+				.append("CPU ID: ").append(cpuId).append(", Vertex ID:");
+			if (vertex != null) {
+				currentStatusMsg
+					.append(vertex.getId())
+					.append(", Task Name: ")
+					.append(vertex.getTaskName());
+			}
+		});
+
+		return currentStatusMsg.toString();
 	}
 }
