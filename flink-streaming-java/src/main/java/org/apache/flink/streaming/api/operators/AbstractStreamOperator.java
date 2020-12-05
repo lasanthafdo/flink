@@ -164,16 +164,6 @@ public abstract class AbstractStreamOperator<OUT>
 			this.output = new CountingOutput<>(
 				output,
 				operatorMetricGroup.getIOMetricGroup().getNumRecordsOutCounter());
-/*
-			if (output instanceof RecordWriterOutput) {
-				for (int i = 0; i < ((RecordWriterOutput) output).getNumberOfChannels(); i++) {
-					EdgeMetricGroup edgeMetricGroup = environment
-						.getMetricGroup()
-						.getOrAddEdge(config.getOperatorID(), i, config.getOperatorName());
-					edgeMetricGroup.getIOMetricGroup().reuseFlowMetricsForTask();
-				}
-			}
-*/
 			if (config.isChainStart()) {
 				operatorMetricGroup.getIOMetricGroup().reuseInputMetricsForTask();
 			}
