@@ -18,8 +18,12 @@
 
 package org.apache.flink.runtime.scheduler.adapter;
 
+import net.openhft.affinity.CpuLayout;
+
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionContainer;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
+
+import org.slf4j.Logger;
 
 import java.util.HashMap;
 import java.util.List;
@@ -28,6 +32,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
+import static org.apache.flink.util.Preconditions.checkState;
 
 /**
  * Container class for SchedulingCpuCores.
@@ -35,20 +40,29 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
 public class SchedulingCpuCore implements SchedulingExecutionContainer {
 	private final Map<Integer, SchedulingExecutionVertex> cpuAssignmentMap;
 	private final Map<Integer, Double> cpuUsageMetrics;
+	private final int coreId;
+	private final CpuLayout cpuLayout;
+	private final Logger log;
 
-	public SchedulingCpuCore(List<Integer> cpuIds) {
-		checkNotNull(cpuIds);
-		this.cpuAssignmentMap = new HashMap<>(cpuIds.size());
-		this.cpuUsageMetrics = new HashMap<>(cpuIds.size());
-		cpuIds.forEach(cpuId -> {
-			this.cpuAssignmentMap.put(cpuId, null);
-			this.cpuUsageMetrics.put(cpuId, 0.0);
-		});
+	public SchedulingCpuCore(int coreId, CpuLayout cpuLayout, Logger log) {
+		this.cpuAssignmentMap = new HashMap<>();
+		this.cpuUsageMetrics = new HashMap<>();
+		this.log = log;
+		this.cpuLayout = cpuLayout;
+		this.coreId = coreId;
 	}
 
 	@Override
 	public List<SchedulingExecutionContainer> getSubContainers() {
 		return null;
+	}
+
+	@Override
+	public void addCpu(int cpuId) {
+		checkState(cpuLayout.coreId(cpuId) == coreId);
+		checkState(cpuAssignmentMap.size() < cpuLayout.threadsPerCore());
+		cpuAssignmentMap.putIfAbsent(cpuId, null);
+		cpuUsageMetrics.putIfAbsent(cpuId, 0.0);
 	}
 
 	@Override
@@ -107,7 +121,6 @@ public class SchedulingCpuCore implements SchedulingExecutionContainer {
 
 	@Override
 	public void releaseAllExecutionVertices() {
-		// Is this safe?? Concurrent modification?
 		cpuAssignmentMap
 			.keySet()
 			.forEach(cpuAssignment -> cpuAssignmentMap.put(cpuAssignment, null));
@@ -150,6 +163,11 @@ public class SchedulingCpuCore implements SchedulingExecutionContainer {
 				.keySet()
 				.forEach(cpuId -> cpuUsageMetrics.put(cpuId, resourceUsageMetrics.get(cpuId)));
 		}
+	}
+
+	@Override
+	public int getId() {
+		return coreId;
 	}
 
 	@Override

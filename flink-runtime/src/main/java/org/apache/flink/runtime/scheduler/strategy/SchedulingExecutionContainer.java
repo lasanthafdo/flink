@@ -32,6 +32,8 @@ public interface SchedulingExecutionContainer {
 
 	List<SchedulingExecutionContainer> getSubContainers();
 
+	void addCpu(int cpuId);
+
 	int scheduleExecutionVertex(SchedulingExecutionVertex schedulingExecutionVertex);
 
 	List<Integer> tryScheduleInSameContainer(SchedulingExecutionVertex sourceVertex, SchedulingExecutionVertex targetVertex);
@@ -47,6 +49,8 @@ public interface SchedulingExecutionContainer {
 	double getResourceUsage(String type);
 
 	void updateResourceUsageMetrics(String type, Map<Integer, Double> resourceUsageMetrics);
+
+	int getId();
 
 	String getStatus();
 }

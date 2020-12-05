@@ -49,6 +49,7 @@ public abstract class SlotProviderStrategy {
 	 * @param slotRequestId identifying the slot request
 	 * @param scheduledUnit The task to allocate the slot for
 	 * @param slotProfile profile of the requested slot
+	 *
 	 * @return The future of the allocation
 	 */
 	public abstract CompletableFuture<LogicalSlot> allocateSlot(
@@ -81,9 +82,13 @@ public abstract class SlotProviderStrategy {
 			case LAZY_FROM_SOURCES:
 			case EAGER:
 			case PINNED:
+			case TRAFFIC_BASED:
+			case DRL:
 				return new NormalSlotProviderStrategy(slotProvider, allocationTimeout);
 			default:
-				throw new IllegalArgumentException(String.format("Unknown scheduling mode: %s", scheduleMode));
+				throw new IllegalArgumentException(String.format(
+					"Unknown scheduling mode: %s",
+					scheduleMode));
 		}
 	}
 
@@ -98,7 +103,10 @@ public abstract class SlotProviderStrategy {
 		}
 
 		@Override
-		public CompletableFuture<LogicalSlot> allocateSlot(SlotRequestId slotRequestId, ScheduledUnit scheduledUnit, SlotProfile slotProfile) {
+		public CompletableFuture<LogicalSlot> allocateSlot(
+			SlotRequestId slotRequestId,
+			ScheduledUnit scheduledUnit,
+			SlotProfile slotProfile) {
 			return slotProvider.allocateBatchSlot(slotRequestId, scheduledUnit, slotProfile);
 		}
 	}
@@ -112,8 +120,15 @@ public abstract class SlotProviderStrategy {
 		}
 
 		@Override
-		public CompletableFuture<LogicalSlot> allocateSlot(SlotRequestId slotRequestId, ScheduledUnit scheduledUnit, SlotProfile slotProfile) {
-			return slotProvider.allocateSlot(slotRequestId, scheduledUnit, slotProfile, allocationTimeout);
+		public CompletableFuture<LogicalSlot> allocateSlot(
+			SlotRequestId slotRequestId,
+			ScheduledUnit scheduledUnit,
+			SlotProfile slotProfile) {
+			return slotProvider.allocateSlot(
+				slotRequestId,
+				scheduledUnit,
+				slotProfile,
+				allocationTimeout);
 		}
 	}
 }
