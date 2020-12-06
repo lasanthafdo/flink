@@ -54,6 +54,8 @@ class DefaultExecutionVertex implements SchedulingExecutionVertex {
 
 	private final InputDependencyConstraint inputDependencyConstraint;
 
+	private double currentCpuUsage;
+
 	DefaultExecutionVertex(
 		ExecutionVertexID executionVertexId,
 		List<DefaultResultPartition> producedPartitions,
@@ -91,6 +93,7 @@ class DefaultExecutionVertex implements SchedulingExecutionVertex {
 		this.placementConsumer = checkNotNull(placementConsumer);
 		this.producedResults = checkNotNull(producedPartitions);
 		this.inputDependencyConstraint = checkNotNull(constraint);
+		this.currentCpuUsage = 0.0;
 	}
 
 	@Override
@@ -136,6 +139,16 @@ class DefaultExecutionVertex implements SchedulingExecutionVertex {
 	@Override
 	public InputDependencyConstraint getInputDependencyConstraint() {
 		return inputDependencyConstraint;
+	}
+
+	@Override
+	public double getCurrentCpuUsage() {
+		return currentCpuUsage;
+	}
+
+	@Override
+	public void setCurrentCpuUsage(double cpuUsage) {
+		currentCpuUsage = cpuUsage;
 	}
 
 	void addConsumedResult(DefaultResultPartition result) {

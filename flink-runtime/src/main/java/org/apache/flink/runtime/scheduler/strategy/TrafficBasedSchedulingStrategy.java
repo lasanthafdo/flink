@@ -23,12 +23,9 @@ import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 import org.apache.flink.runtime.scheduler.DeploymentOption;
 import org.apache.flink.runtime.scheduler.ExecutionVertexDeploymentOption;
-import org.apache.flink.runtime.scheduler.PeriodicSchedulingAgent;
 import org.apache.flink.runtime.scheduler.SchedulerOperations;
-import org.apache.flink.runtime.scheduler.adapter.SchedulingCpuSocket;
 import org.apache.flink.util.FlinkRuntimeException;
 
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -136,28 +133,21 @@ public class TrafficBasedSchedulingStrategy implements SchedulingStrategy {
 
 			if (!sourceVertexAssigned && !targetVertexAssigned) {
 				List<Integer> cpuIds = topLevelContainer.tryScheduleInSameContainer(
-					sourceVertex,
-					targetVertex);
-				if (cpuIds != null) {
-					if (cpuIds.size() >= 1) {
-						sourceVertex.setExecutionPlacement(new ExecutionPlacement(
-							DEFAULT_TASK_MANAGER_ADDRESS,
-							cpuIds.get(0)));
-						strandedVertices.remove(sourceVertex);
-						if (cpuIds.size() >= 2) {
-							targetVertex.setExecutionPlacement(new ExecutionPlacement(
-								DEFAULT_TASK_MANAGER_ADDRESS,
-								cpuIds.get(1)));
-							strandedVertices.remove(targetVertex);
-						} else {
-							strandedVertices.add(targetVertex);
-						}
-					} else {
-						strandedVertices.add(sourceVertex);
-						strandedVertices.add(targetVertex);
-					}
+					sourceVertex, targetVertex);
+				if (cpuIds.size() >= 2) {
+					sourceVertex.setExecutionPlacement(new ExecutionPlacement(
+						DEFAULT_TASK_MANAGER_ADDRESS,
+						cpuIds.get(0)));
+					targetVertex.setExecutionPlacement(new ExecutionPlacement(
+						DEFAULT_TASK_MANAGER_ADDRESS,
+						cpuIds.get(1)));
+					strandedVertices.remove(sourceVertex);
+					strandedVertices.remove(targetVertex);
+				} else {
+					strandedVertices.add(sourceVertex);
+					strandedVertices.add(targetVertex);
 				}
-			} else if (sourceVertexAssigned && !targetVertexAssigned) {
+			} else if (!targetVertexAssigned) {
 				int cpuId = topLevelContainer.scheduleExecutionVertex(
 					targetVertex);
 				if (cpuId != -1) {

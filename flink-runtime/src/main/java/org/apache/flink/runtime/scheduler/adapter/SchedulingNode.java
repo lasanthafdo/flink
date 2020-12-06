@@ -18,11 +18,10 @@
 
 package org.apache.flink.runtime.scheduler.adapter;
 
-import net.openhft.affinity.CpuLayout;
-
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionContainer;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
 
+import net.openhft.affinity.CpuLayout;
 import org.slf4j.Logger;
 
 import java.util.ArrayList;
@@ -31,9 +30,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.apache.flink.util.Preconditions.checkNotNull;
+import java.util.stream.Collectors;
 
 /**
  * Container class for SchedulingcpuSockets.
@@ -67,10 +64,10 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 
 	@Override
 	public int scheduleExecutionVertex(SchedulingExecutionVertex schedulingExecutionVertex) {
-		Optional<SchedulingExecutionContainer> targetCore = cpuSockets.values()
-			.stream()
-			.min(Comparator.comparing(sec -> sec.getResourceUsage(CPU)));
-		return targetCore
+		Optional<SchedulingExecutionContainer> targetSocket = cpuSockets.values()
+			.stream().filter(cpuSocket -> cpuSocket.getRemainingCapacity() >= 1)
+			.min(Comparator.comparing(sec -> sec.getResourceUsage(OPERATOR)));
+		return targetSocket
 			.map(schedulingExecutionContainer -> schedulingExecutionContainer.scheduleExecutionVertex(
 				schedulingExecutionVertex))
 			.orElse(-1);
@@ -81,18 +78,33 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 		SchedulingExecutionVertex sourceVertex,
 		SchedulingExecutionVertex targetVertex) {
 
-		Optional<SchedulingExecutionContainer> targetCore = cpuSockets.values()
-			.stream()
-			.min(Comparator.comparing(sec -> sec.getResourceUsage(CPU)));
+		//Try to schedule in a socket with two available CPU slots
+		Optional<SchedulingExecutionContainer> firstPreferenceTargetSocket = cpuSockets.values()
+			.stream().filter(cpuSocket -> cpuSocket.getRemainingCapacity() >= 2)
+			.min(Comparator.comparing(sec -> sec.getResourceUsage(OPERATOR)));
 		List<Integer> cpuIds = new ArrayList<>();
-		if (targetCore.isPresent()) {
-			SchedulingExecutionContainer cpuSocket = targetCore.get();
-			log.info("Scheduling in target core with status : " + targetCore.get().getStatus());
-			if (cpuSocket.getAvailableCapacity() >= 2) {
-				cpuIds.addAll(cpuSocket.tryScheduleInSameContainer(sourceVertex, targetVertex));
-			} else if (cpuSocket.getAvailableCapacity() == 1) {
-				cpuIds.add(cpuSocket.scheduleExecutionVertex(sourceVertex));
+		if (firstPreferenceTargetSocket.isPresent()) {
+			SchedulingExecutionContainer cpuSocket = firstPreferenceTargetSocket.get();
+			cpuIds.addAll(cpuSocket.tryScheduleInSameContainer(sourceVertex, targetVertex));
+/*
+		} else { // Couldn't find a socket with two available slots
+			List<SchedulingExecutionContainer> secondPreferenceTargetSockets = cpuSockets.values()
+				.stream().filter(cpuSocket -> cpuSocket.getRemainingCapacity() >= 2)
+				.sorted(Comparator.comparing(
+					sec -> sec.getResourceUsage(CPU),
+					Comparator.reverseOrder())).limit(2)
+				.collect(Collectors.toList());
+			if (secondPreferenceTargetSockets.size() > 0) {
+				cpuIds.add(secondPreferenceTargetSockets
+					.get(0)
+					.scheduleExecutionVertex(sourceVertex));
+				if (secondPreferenceTargetSockets.size() > 1) {
+					cpuIds.add(secondPreferenceTargetSockets
+						.get(1)
+						.scheduleExecutionVertex(targetVertex));
+				}
 			}
+*/
 		}
 		return cpuIds;
 	}
@@ -120,30 +132,32 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 	}
 
 	@Override
-	public int getAvailableCapacity() {
-		AtomicInteger integerCount = new AtomicInteger(0);
-		cpuSockets.values().forEach(schedulingExecutionContainer -> {
-			integerCount.addAndGet(schedulingExecutionContainer.getAvailableCapacity());
-		});
-		return integerCount.get();
+	public int getRemainingCapacity() {
+		int capacity = 0;
+		for (SchedulingExecutionContainer schedulingExecutionContainer : cpuSockets.values()) {
+			capacity += schedulingExecutionContainer.getRemainingCapacity();
+		}
+		return capacity;
 	}
 
 	@Override
 	public double getResourceUsage(String type) {
 		return cpuSockets.values()
 			.stream()
-			.mapToDouble(cpuSocket -> cpuSocket.getResourceUsage(SchedulingExecutionContainer.CPU))
+			.mapToDouble(cpuSocket -> cpuSocket.getResourceUsage(type))
 			.average()
 			.orElse(0d);
 	}
 
 	@Override
-	public void updateResourceUsageMetrics(String type, Map<Integer, Double> resourceUsageMetrics) {
+	public void updateResourceUsageMetrics(String type, Map<String, Double> resourceUsageMetrics) {
+		cpuSockets.values().forEach(cpuSocket -> {
+			cpuSocket.updateResourceUsageMetrics(type, resourceUsageMetrics);
+		});
 		if (CPU.equals(type)) {
-			cpuSockets.values().forEach(cpuSocket -> {
-				cpuSocket.updateResourceUsageMetrics(type, resourceUsageMetrics);
-			});
-			cpuUsageMetrics.putAll(resourceUsageMetrics);
+			cpuUsageMetrics.putAll(resourceUsageMetrics.entrySet()
+				.stream().collect(Collectors.toMap(
+					entry -> Integer.parseInt(entry.getKey()), Map.Entry::getValue)));
 		}
 	}
 
@@ -155,15 +169,15 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 	@Override
 	public String getStatus() {
 		StringBuilder currentSchedulingStateMsg = new StringBuilder();
-		cpuSockets.values().forEach(cpuSocket -> {
-			currentSchedulingStateMsg.append(cpuSocket.getStatus()).append(",\t");
-		});
 		currentSchedulingStateMsg
-			.append("Overall (Available CPUs: ")
-			.append(getAvailableCapacity())
-			.append(", Resource Usage: ")
-			.append(getResourceUsage(CPU))
-			.append(").");
+			.append("{Node: [{Available CPUs: ").append(getRemainingCapacity())
+			.append("}, {Container CPU Usage: ").append(getResourceUsage(CPU))
+			.append("}, {Operator CPU Usage:").append(getResourceUsage(OPERATOR))
+			.append("}, {Sockets: [");
+		cpuSockets.values().forEach(cpuSocket -> {
+			currentSchedulingStateMsg.append(cpuSocket.getStatus()).append(", ");
+		});
+		currentSchedulingStateMsg.append("]}}");
 		return currentSchedulingStateMsg.toString();
 	}
 }

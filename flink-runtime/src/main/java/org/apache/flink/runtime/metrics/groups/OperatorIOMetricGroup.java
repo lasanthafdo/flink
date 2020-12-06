@@ -19,8 +19,10 @@
 package org.apache.flink.runtime.metrics.groups;
 
 import org.apache.flink.metrics.Counter;
+import org.apache.flink.metrics.Gauge;
 import org.apache.flink.metrics.Meter;
 import org.apache.flink.metrics.MeterView;
+import org.apache.flink.runtime.executiongraph.metrics.CpuUsageGauge;
 import org.apache.flink.runtime.metrics.MetricNames;
 
 /**
@@ -35,12 +37,17 @@ public class OperatorIOMetricGroup extends ProxyMetricGroup<OperatorMetricGroup>
 	private final Meter numRecordsInRate;
 	private final Meter numRecordsOutRate;
 
+	//TODO probably needs its own metric group (OperatorResourceUsageMetricGroup?).
+	// However, piggybacking for now
+	private final Gauge<Long> currentCpuUsage;
+
 	public OperatorIOMetricGroup(OperatorMetricGroup parentMetricGroup) {
 		super(parentMetricGroup);
 		numRecordsIn = parentMetricGroup.counter(MetricNames.IO_NUM_RECORDS_IN);
 		numRecordsOut = parentMetricGroup.counter(MetricNames.IO_NUM_RECORDS_OUT);
 		numRecordsInRate = parentMetricGroup.meter(MetricNames.IO_NUM_RECORDS_IN_RATE, new MeterView(numRecordsIn));
 		numRecordsOutRate = parentMetricGroup.meter(MetricNames.IO_NUM_RECORDS_OUT_RATE, new MeterView(numRecordsOut));
+		currentCpuUsage = parentMetricGroup.gauge(MetricNames.CURRENT_CPU_USAGE, new CpuUsageGauge());
 	}
 
 	public Counter getNumRecordsInCounter() {
@@ -65,7 +72,6 @@ public class OperatorIOMetricGroup extends ProxyMetricGroup<OperatorMetricGroup>
 	public void reuseInputMetricsForTask() {
 		TaskIOMetricGroup taskIO = parentMetricGroup.parent().getIOMetricGroup();
 		taskIO.reuseRecordsInputCounter(this.numRecordsIn);
-
 	}
 
 	/**
@@ -74,5 +80,9 @@ public class OperatorIOMetricGroup extends ProxyMetricGroup<OperatorMetricGroup>
 	public void reuseOutputMetricsForTask() {
 		TaskIOMetricGroup taskIO = parentMetricGroup.parent().getIOMetricGroup();
 		taskIO.reuseRecordsOutputCounter(this.numRecordsOut);
+	}
+
+	public Gauge<Long> getCurrentCpuUsageGauge() {
+		return currentCpuUsage;
 	}
 }

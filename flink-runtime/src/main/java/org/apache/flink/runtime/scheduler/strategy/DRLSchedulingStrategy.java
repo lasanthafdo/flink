@@ -21,7 +21,6 @@ package org.apache.flink.runtime.scheduler.strategy;
 import org.apache.flink.runtime.execution.ExecutionPlacement;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
-import org.apache.flink.runtime.scheduler.DRLSchedulingAgent;
 import org.apache.flink.runtime.scheduler.DeploymentOption;
 import org.apache.flink.runtime.scheduler.ExecutionVertexDeploymentOption;
 import org.apache.flink.runtime.scheduler.SchedulerOperations;
@@ -134,8 +133,7 @@ public class DRLSchedulingStrategy implements SchedulingStrategy {
 			SchedulingExecutionVertex targetVertex = schedulingExecutionEdge.getTargetSchedulingExecutionVertex();
 
 			List<Integer> cpuIds = topLevelContainer.tryScheduleInSameContainer(
-				sourceVertex,
-				targetVertex);
+				sourceVertex, targetVertex);
 			if (cpuIds != null) {
 				if (cpuIds.size() >= 1) {
 					sourceVertex.setExecutionPlacement(new ExecutionPlacement(

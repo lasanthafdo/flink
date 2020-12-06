@@ -18,16 +18,16 @@
 
 package org.apache.flink.runtime.scheduler.adapter;
 
-import net.openhft.affinity.CpuLayout;
-
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionContainer;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
 
+import net.openhft.affinity.CpuLayout;
 import org.slf4j.Logger;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -121,6 +121,7 @@ public class SchedulingCpuCore implements SchedulingExecutionContainer {
 
 	@Override
 	public void releaseAllExecutionVertices() {
+
 		cpuAssignmentMap
 			.keySet()
 			.forEach(cpuAssignment -> cpuAssignmentMap.put(cpuAssignment, null));
@@ -132,7 +133,7 @@ public class SchedulingCpuCore implements SchedulingExecutionContainer {
 	}
 
 	@Override
-	public int getAvailableCapacity() {
+	public int getRemainingCapacity() {
 		AtomicInteger integerCount = new AtomicInteger();
 		cpuAssignmentMap
 			.entrySet()
@@ -144,24 +145,46 @@ public class SchedulingCpuCore implements SchedulingExecutionContainer {
 
 	@Override
 	public double getResourceUsage(String type) {
-		if (SchedulingExecutionContainer.CPU.equals(type)) {
+		if (CPU.equals(type)) {
 			return cpuUsageMetrics
 				.values()
 				.stream()
 				.mapToDouble(Double::doubleValue)
 				.average()
 				.orElse(0d);
+		} else if (OPERATOR.equals(type)) {
+			return cpuAssignmentMap
+				.values()
+				.stream()
+				.filter(Objects::nonNull)
+				.mapToDouble(SchedulingExecutionVertex::getCurrentCpuUsage)
+				.sum();
 		} else {
 			return 0d;
 		}
 	}
 
 	@Override
-	public void updateResourceUsageMetrics(String type, Map<Integer, Double> resourceUsageMetrics) {
+	public void updateResourceUsageMetrics(String type, Map<String, Double> resourceUsageMetrics) {
 		if (CPU.equals(type)) {
 			cpuAssignmentMap
 				.keySet()
-				.forEach(cpuId -> cpuUsageMetrics.put(cpuId, resourceUsageMetrics.get(cpuId)));
+				.forEach(cpuId -> cpuUsageMetrics.put(
+					cpuId,
+					resourceUsageMetrics.get(String.valueOf(cpuId))));
+		} else if (OPERATOR.equals(type)) {
+			cpuAssignmentMap
+				.values().stream().filter(Objects::nonNull)
+				.forEach(schedulingExecutionVertex -> {
+					Double operatorCpuUsage = resourceUsageMetrics.get(schedulingExecutionVertex
+						.getId()
+						.toString());
+					if (operatorCpuUsage != null) {
+						schedulingExecutionVertex.setCurrentCpuUsage(operatorCpuUsage);
+					} else {
+						schedulingExecutionVertex.setCurrentCpuUsage(0d);
+					}
+				});
 		}
 	}
 
@@ -173,22 +196,26 @@ public class SchedulingCpuCore implements SchedulingExecutionContainer {
 	@Override
 	public String getStatus() {
 		StringBuilder currentStatusMsg = new StringBuilder();
-		currentStatusMsg.append("(Available CPUs :").append(getAvailableCapacity())
-			.append(", Resource Usage: ").append(getResourceUsage(CPU))
-			.append(", Assignment:");
+		currentStatusMsg.append("{Core : [{Core ID:").append(getId())
+			.append("}, {Available CPUs : ").append(getRemainingCapacity())
+			.append("}, {Container CPU Usage : ").append(getResourceUsage(CPU))
+			.append("}, {Operator CPU Usage : ").append(getResourceUsage(OPERATOR))
+			.append("}, {Assignment : [");
 		cpuAssignmentMap.forEach((cpuId, vertex) -> {
 			currentStatusMsg
-				.append("[CPU ID: ").append(cpuId).append(", Vertex ID:");
+				.append("{CPU : [{CPU ID : ").append(cpuId)
+				.append("}, {Vertex ID : ");
 			if (vertex != null) {
 				currentStatusMsg
 					.append(vertex.getId())
-					.append(", Task Name: ")
+					.append("}, {Task Name : ")
 					.append(vertex.getTaskName())
-					.append("], ");
+					.append("}]}, ");
 			} else {
-				currentStatusMsg.append("Unassigned], ");
+				currentStatusMsg.append("Unassigned}]}, ");
 			}
 		});
+		currentStatusMsg.append("]}]}");
 
 		return currentStatusMsg.toString();
 	}

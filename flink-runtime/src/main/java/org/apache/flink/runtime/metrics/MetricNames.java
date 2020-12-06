@@ -75,4 +75,6 @@ public class MetricNames {
 	}
 
 	public static final String TASK_IDLE_TIME = "idleTimeMs" + SUFFIX_RATE;
+
+	public static final String CURRENT_CPU_USAGE = "currentCpuUsage";
 }

@@ -109,6 +109,16 @@ public class TestingSchedulingExecutionVertex implements SchedulingExecutionVert
 		return inputDependencyConstraint;
 	}
 
+	@Override
+	public double getCurrentCpuUsage() {
+		return 0;
+	}
+
+	@Override
+	public void setCurrentCpuUsage(double cpuUsage) {
+
+	}
+
 	void addConsumedPartition(TestingSchedulingResultPartition partition) {
 		consumedPartitions.add(partition);
 	}

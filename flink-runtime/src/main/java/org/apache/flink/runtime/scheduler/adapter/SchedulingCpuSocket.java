@@ -18,11 +18,10 @@
 
 package org.apache.flink.runtime.scheduler.adapter;
 
-import net.openhft.affinity.CpuLayout;
-
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionContainer;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
 
+import net.openhft.affinity.CpuLayout;
 import org.slf4j.Logger;
 
 import java.util.ArrayList;
@@ -31,9 +30,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
-import static org.apache.flink.util.Preconditions.checkNotNull;
 import static org.apache.flink.util.Preconditions.checkState;
 
 /**
@@ -72,8 +70,8 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 	@Override
 	public int scheduleExecutionVertex(SchedulingExecutionVertex schedulingExecutionVertex) {
 		Optional<SchedulingExecutionContainer> targetCore = cpuCores.values()
-			.stream()
-			.min(Comparator.comparing(sec -> sec.getResourceUsage(CPU)));
+			.stream().filter(cpuSocket -> cpuSocket.getRemainingCapacity() >= 1)
+			.min(Comparator.comparing(sec -> sec.getResourceUsage(OPERATOR)));
 		return targetCore
 			.map(schedulingExecutionContainer -> schedulingExecutionContainer.scheduleExecutionVertex(
 				schedulingExecutionVertex))
@@ -85,18 +83,13 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 		SchedulingExecutionVertex sourceVertex,
 		SchedulingExecutionVertex targetVertex) {
 
-		Optional<SchedulingExecutionContainer> targetCore = cpuCores.values()
-			.stream()
-			.min(Comparator.comparing(sec -> sec.getResourceUsage(CPU)));
 		List<Integer> cpuIds = new ArrayList<>();
+		Optional<SchedulingExecutionContainer> targetCore = cpuCores.values()
+			.stream().filter(cpuSocket -> cpuSocket.getRemainingCapacity() >= 2)
+			.min(Comparator.comparing(sec -> sec.getResourceUsage(OPERATOR)));
 		if (targetCore.isPresent()) {
 			SchedulingExecutionContainer cpuCore = targetCore.get();
-			log.info("Scheduling in target core with status : " + targetCore.get().getStatus());
-			if (cpuCore.getAvailableCapacity() >= 2) {
-				cpuIds.addAll(cpuCore.tryScheduleInSameContainer(sourceVertex, targetVertex));
-			} else if (cpuCore.getAvailableCapacity() == 1) {
-				cpuIds.add(cpuCore.scheduleExecutionVertex(sourceVertex));
-			}
+			cpuIds.addAll(cpuCore.tryScheduleInSameContainer(sourceVertex, targetVertex));
 		}
 		return cpuIds;
 	}
@@ -124,30 +117,35 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 	}
 
 	@Override
-	public int getAvailableCapacity() {
-		AtomicInteger integerCount = new AtomicInteger(0);
-		cpuCores.values().forEach(schedulingExecutionContainer -> {
-			integerCount.addAndGet(schedulingExecutionContainer.getAvailableCapacity());
-		});
-		return integerCount.get();
+	public int getRemainingCapacity() {
+		int capacity = 0;
+		for (SchedulingExecutionContainer schedulingExecutionContainer : cpuCores.values()) {
+			capacity += schedulingExecutionContainer.getRemainingCapacity();
+		}
+		return capacity;
 	}
 
 	@Override
 	public double getResourceUsage(String type) {
 		return cpuCores.values()
 			.stream()
-			.mapToDouble(cpuCore -> cpuCore.getResourceUsage(SchedulingExecutionContainer.CPU))
+			.mapToDouble(cpuCore -> cpuCore.getResourceUsage(type))
 			.average()
 			.orElse(0d);
 	}
 
 	@Override
-	public void updateResourceUsageMetrics(String type, Map<Integer, Double> resourceUsageMetrics) {
+	public void updateResourceUsageMetrics(String type, Map<String, Double> resourceUsageMetrics) {
+		cpuCores.values().forEach(cpuCore -> {
+			cpuCore.updateResourceUsageMetrics(type, resourceUsageMetrics);
+		});
 		if (CPU.equals(type)) {
-			cpuCores.values().forEach(cpuCore -> {
-				cpuCore.updateResourceUsageMetrics(type, resourceUsageMetrics);
-			});
-			cpuUsageMetrics.putAll(resourceUsageMetrics);
+			cpuUsageMetrics.putAll(resourceUsageMetrics
+				.entrySet()
+				.stream()
+				.collect(Collectors.toMap(
+					entry -> Integer.parseInt(entry.getKey()),
+					Map.Entry::getValue)));
 		}
 	}
 
@@ -160,14 +158,14 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 	public String getStatus() {
 		StringBuilder currentSchedulingStateMsg = new StringBuilder();
 		currentSchedulingStateMsg
-			.append("<Socket :").append(socketId).append("Available CPUs: ")
-			.append(getAvailableCapacity())
-			.append(", Resource Usage: ")
-			.append(getResourceUsage(CPU))
-			.append(") => ");
+			.append("{Socket: [{SocketID:").append(socketId)
+			.append("}, {Available CPUs: ").append(getRemainingCapacity())
+			.append("}, {Container CPU Usage: ").append(getResourceUsage(CPU))
+			.append("}, {Operator CPU Usage:").append(getResourceUsage(OPERATOR))
+			.append("}, {Cores: [");
 		cpuCores.values().forEach(cpuCore -> {
-			currentSchedulingStateMsg.append(cpuCore.getStatus()).append(",\t");
+			currentSchedulingStateMsg.append(cpuCore.getStatus()).append(", ");
 		});
-		return currentSchedulingStateMsg.append(">").toString();
+		return currentSchedulingStateMsg.append("]}}").toString();
 	}
 }

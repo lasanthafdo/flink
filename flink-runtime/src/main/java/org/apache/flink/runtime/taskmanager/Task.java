@@ -45,6 +45,7 @@ import org.apache.flink.runtime.execution.librarycache.LibraryCacheManager;
 import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
 import org.apache.flink.runtime.executiongraph.JobInformation;
 import org.apache.flink.runtime.executiongraph.TaskInformation;
+import org.apache.flink.runtime.executiongraph.metrics.CpuUsageGauge;
 import org.apache.flink.runtime.externalresource.ExternalResourceInfoProvider;
 import org.apache.flink.runtime.filecache.FileCache;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
@@ -63,6 +64,7 @@ import org.apache.flink.runtime.jobgraph.tasks.AbstractInvokable;
 import org.apache.flink.runtime.jobgraph.tasks.InputSplitProvider;
 import org.apache.flink.runtime.jobgraph.tasks.TaskOperatorEventGateway;
 import org.apache.flink.runtime.memory.MemoryManager;
+import org.apache.flink.runtime.metrics.groups.OperatorIOMetricGroup;
 import org.apache.flink.runtime.metrics.groups.TaskMetricGroup;
 import org.apache.flink.runtime.operators.coordination.OperatorEvent;
 import org.apache.flink.runtime.operators.coordination.TaskNotRunningException;
@@ -655,6 +657,12 @@ public class Task implements Runnable, TaskSlotPayload, TaskActions, PartitionPr
 	 */
 	@Override
 	public void run() {
+		OperatorIOMetricGroup operatorIOMetricGroup = metrics
+			.getOrAddOperator(taskInfo.getTaskName())
+			.getIOMetricGroup();
+		CpuUsageGauge cpuUsageGauge = (CpuUsageGauge) operatorIOMetricGroup.getCurrentCpuUsageGauge();
+		cpuUsageGauge.setThreadId(Thread.currentThread().getId());
+
 		if (pinnedToCpu) {
 			try (AffinityLock a1 = AffinityLock.acquireLock(cpuId)) {
 				LOG.info("Task {} is running on CPU {} ", taskInfo.getTaskName(), cpuId);
@@ -1078,7 +1086,8 @@ public class Task implements Runnable, TaskSlotPayload, TaskActions, PartitionPr
 			requiredJarFiles,
 			requiredClasspaths);
 
-		LOG.debug("Getting user code class loader for task {} at library cache manager took {} milliseconds",
+		LOG.debug(
+			"Getting user code class loader for task {} at library cache manager took {} milliseconds",
 			executionId,
 			System.currentTimeMillis() - startDownloadTime);
 
@@ -1296,7 +1305,8 @@ public class Task implements Runnable, TaskSlotPayload, TaskActions, PartitionPr
 					return;
 				}
 			} else {
-				throw new IllegalStateException(String.format("Unexpected state: %s of task %s (%s).",
+				throw new IllegalStateException(String.format(
+					"Unexpected state: %s of task %s (%s).",
 					current,
 					taskNameWithSubtask,
 					executionId));
@@ -1712,7 +1722,8 @@ public class Task implements Runnable, TaskSlotPayload, TaskActions, PartitionPr
 						bld.append(e).append('\n');
 					}
 
-					log.warn("Task '{}' did not react to cancelling signal for {} seconds, but is stuck in method:\n {}",
+					log.warn(
+						"Task '{}' did not react to cancelling signal for {} seconds, but is stuck in method:\n {}",
 						taskName,
 						(interruptIntervalMillis / 1000),
 						bld);

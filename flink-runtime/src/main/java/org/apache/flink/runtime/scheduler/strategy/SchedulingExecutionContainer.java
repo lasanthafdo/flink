@@ -29,6 +29,7 @@ import java.util.Map;
 public interface SchedulingExecutionContainer {
 
 	String CPU = "CPU";
+	String OPERATOR = "OP";
 
 	List<SchedulingExecutionContainer> getSubContainers();
 
@@ -36,7 +37,9 @@ public interface SchedulingExecutionContainer {
 
 	int scheduleExecutionVertex(SchedulingExecutionVertex schedulingExecutionVertex);
 
-	List<Integer> tryScheduleInSameContainer(SchedulingExecutionVertex sourceVertex, SchedulingExecutionVertex targetVertex);
+	List<Integer> tryScheduleInSameContainer(
+		SchedulingExecutionVertex sourceVertex,
+		SchedulingExecutionVertex targetVertex);
 
 	int releaseExecutionVertex(SchedulingExecutionVertex schedulingExecutionVertex);
 
@@ -44,11 +47,11 @@ public interface SchedulingExecutionContainer {
 
 	boolean isAssignedToContainer(SchedulingExecutionVertex schedulingExecutionVertex);
 
-	int getAvailableCapacity();
+	int getRemainingCapacity();
 
 	double getResourceUsage(String type);
 
-	void updateResourceUsageMetrics(String type, Map<Integer, Double> resourceUsageMetrics);
+	void updateResourceUsageMetrics(String type, Map<String, Double> resourceUsageMetrics);
 
 	int getId();
 

@@ -44,7 +44,6 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	protected final SchedulingTopology schedulingTopology;
 	protected final Logger log;
 	protected final CpuLayout cpuLayout;
-	protected final Map<Integer, SchedulingCpuSocket> cpuSocketMap;
 	protected final int nCpus;
 	protected final Map<String, Double> edgeFlowRates;
 	protected final Map<String, SchedulingExecutionEdge<? extends SchedulingExecutionVertex, ? extends SchedulingResultPartition>> edgeMap;
@@ -62,7 +61,6 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		this.schedulingTopology = checkNotNull(executionGraph.getSchedulingTopology());
 		this.log = log;
 		this.cpuLayout = AffinityLock.cpuLayout();
-		this.cpuSocketMap = new HashMap<>();
 		this.nCpus = cpuLayout.cpus();
 		this.edgeFlowRates = new HashMap<>();
 		this.edgeMap = new HashMap<>();
@@ -98,17 +96,32 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		});
 	}
 
+	private void logCurrentPlacement() {
+		StringBuilder currentPlacement = new StringBuilder("[");
+		schedulingTopology.getVertices().forEach(sourceVertex -> {
+			currentPlacement.append("{Vertex Name: ").append(sourceVertex.getTaskName())
+				.append(", CPU ID: ").append(sourceVertex.getExecutionPlacement().getCpuId())
+				.append(", CPU Usage: ").append(sourceVertex.getCurrentCpuUsage())
+				.append("}, ");
+
+		});
+		currentPlacement.append("]");
+		log.info("Current scheduling placement is : {}", currentPlacement);
+	}
+
 	protected void updateState() {
 		Map<String, Double> currentFlowRates = influxDBMetricsClient.getRateMetricsFor(
 			"taskmanager_job_task_edge_numRecordsProcessedPerSecond",
 			"edge_id",
 			"rate");
-		Map<Integer, Double> cpuMetrics = influxDBMetricsClient.getCpuMetrics(12);
-		cpuSocketMap.values().forEach(cpuSocket -> {
-			cpuSocket.updateResourceUsageMetrics(
-				SchedulingExecutionContainer.CPU,
-				cpuMetrics);
-		});
+		Map<String, Double> cpuMetrics = influxDBMetricsClient.getCpuMetrics(12);
+		Map<String, Double> operatorUsageMetrics = influxDBMetricsClient.getOperatorUsageMetrics();
+		schedulingNode.updateResourceUsageMetrics(
+			SchedulingExecutionContainer.CPU,
+			cpuMetrics);
+		schedulingNode.updateResourceUsageMetrics(
+			SchedulingExecutionContainer.OPERATOR,
+			operatorUsageMetrics);
 		Map<String, Double> filteredFlowRates = currentFlowRates
 			.entrySet()
 			.stream()
@@ -121,7 +134,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 			.sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
 			.map(mapEntry -> edgeMap.get(mapEntry.getKey()))
 			.collect(Collectors.toList());
-		log.info("CPU usage:\n {}", cpuMetrics);
+		logCurrentPlacement();
 	}
 
 	protected void setupInfluxDBConnection() {

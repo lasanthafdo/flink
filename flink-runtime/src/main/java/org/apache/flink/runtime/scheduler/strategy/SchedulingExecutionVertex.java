@@ -69,4 +69,8 @@ public interface SchedulingExecutionVertex
 	 * @return input dependency constraint
 	 */
 	InputDependencyConstraint getInputDependencyConstraint();
+
+	double getCurrentCpuUsage();
+
+	void setCurrentCpuUsage(double cpuUsage);
 }
