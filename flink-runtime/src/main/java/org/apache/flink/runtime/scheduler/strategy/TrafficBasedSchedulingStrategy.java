@@ -98,22 +98,11 @@ public class TrafficBasedSchedulingStrategy implements SchedulingStrategy {
 	}
 
 	private void setupDefaultPlacement() {
-		AtomicInteger sourceCpuId = new AtomicInteger(2);
-		AtomicInteger operatorCpuId = new AtomicInteger(8);
+		AtomicInteger currentCpuId = new AtomicInteger(2);
 		schedulingTopology.getVertices().forEach(schedulingExecutionVertex -> {
-			boolean isSourceVertex = schedulingExecutionVertex
-				.getConsumedResults()
-				.iterator()
-				.hasNext();
-			if (isSourceVertex) { // Source vertex
-				schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
-					DEFAULT_TASK_MANAGER_ADDRESS,
-					sourceCpuId.getAndAdd(2)));
-			} else {
-				schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
-					DEFAULT_TASK_MANAGER_ADDRESS,
-					operatorCpuId.getAndIncrement()));
-			}
+			schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
+				DEFAULT_TASK_MANAGER_ADDRESS,
+				currentCpuId.getAndIncrement()));
 		});
 	}
 

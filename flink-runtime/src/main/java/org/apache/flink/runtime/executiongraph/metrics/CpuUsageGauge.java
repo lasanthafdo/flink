@@ -23,8 +23,6 @@ import org.apache.flink.metrics.Gauge;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
 
-import static org.apache.flink.util.Preconditions.checkNotNull;
-
 /**
  * A gauge that returns the cpu usage for a threadID.
  */
@@ -34,6 +32,7 @@ public class CpuUsageGauge implements Gauge<Long> {
 
 	private final ThreadMXBean threadMXBean;
 	private long threadId;
+	private volatile long lastUsageValue;
 
 	public CpuUsageGauge() {
 		this.threadMXBean = ManagementFactory.getThreadMXBean();
@@ -48,7 +47,10 @@ public class CpuUsageGauge implements Gauge<Long> {
 	@Override
 	public Long getValue() {
 		if (threadId > 0) {
-			return threadMXBean.getThreadCpuTime(threadId);
+			long currentUsage = threadMXBean.getThreadCpuTime(threadId);
+			long cpuUsageSinceLast = currentUsage - lastUsageValue;
+			lastUsageValue = currentUsage;
+			return cpuUsageSinceLast;
 		}
 		return 0L;
 	}

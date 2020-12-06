@@ -158,14 +158,14 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 	public String getStatus() {
 		StringBuilder currentSchedulingStateMsg = new StringBuilder();
 		currentSchedulingStateMsg
-			.append("{Socket: [{SocketID:").append(socketId)
-			.append("}, {Available CPUs: ").append(getRemainingCapacity())
-			.append("}, {Container CPU Usage: ").append(getResourceUsage(CPU))
-			.append("}, {Operator CPU Usage:").append(getResourceUsage(OPERATOR))
-			.append("}, {Cores: [");
+			.append(" {SocketID : ").append(socketId)
+			.append(", Available CPUs : ").append(getRemainingCapacity())
+			.append(", Container CPU Usage : ").append(getResourceUsage(CPU))
+			.append(", Operator CPU Usage : ").append(getResourceUsage(OPERATOR))
+			.append(", Cores: [");
 		cpuCores.values().forEach(cpuCore -> {
-			currentSchedulingStateMsg.append(cpuCore.getStatus()).append(", ");
+			currentSchedulingStateMsg.append(cpuCore.getStatus()).append(",");
 		});
-		return currentSchedulingStateMsg.append("]}}").toString();
+		return currentSchedulingStateMsg.append("]}").toString();
 	}
 }

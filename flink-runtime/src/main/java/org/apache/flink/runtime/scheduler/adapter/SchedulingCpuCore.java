@@ -196,26 +196,26 @@ public class SchedulingCpuCore implements SchedulingExecutionContainer {
 	@Override
 	public String getStatus() {
 		StringBuilder currentStatusMsg = new StringBuilder();
-		currentStatusMsg.append("{Core : [{Core ID:").append(getId())
-			.append("}, {Available CPUs : ").append(getRemainingCapacity())
-			.append("}, {Container CPU Usage : ").append(getResourceUsage(CPU))
-			.append("}, {Operator CPU Usage : ").append(getResourceUsage(OPERATOR))
-			.append("}, {Assignment : [");
+		currentStatusMsg.append(" {Core ID : ").append(getId())
+			.append(", Available CPUs : ").append(getRemainingCapacity())
+			.append(", Container CPU Usage : ").append(getResourceUsage(CPU))
+			.append(", Operator CPU Usage : ").append(getResourceUsage(OPERATOR))
+			.append(", Assignment : [");
 		cpuAssignmentMap.forEach((cpuId, vertex) -> {
 			currentStatusMsg
-				.append("{CPU : [{CPU ID : ").append(cpuId)
-				.append("}, {Vertex ID : ");
+				.append("{CPU ID : ").append(cpuId)
+				.append(", Vertex ID : ");
 			if (vertex != null) {
 				currentStatusMsg
 					.append(vertex.getId())
-					.append("}, {Task Name : ")
+					.append(", Task Name : ")
 					.append(vertex.getTaskName())
-					.append("}]}, ");
+					.append("},");
 			} else {
-				currentStatusMsg.append("Unassigned}]}, ");
+				currentStatusMsg.append("Unassigned},");
 			}
 		});
-		currentStatusMsg.append("]}]}");
+		currentStatusMsg.append("]}");
 
 		return currentStatusMsg.toString();
 	}
