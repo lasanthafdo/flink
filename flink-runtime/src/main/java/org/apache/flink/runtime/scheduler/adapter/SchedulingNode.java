@@ -116,7 +116,7 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 
 	@Override
 	public void releaseAllExecutionVertices() {
-		log.info("Node status:\n {}", getStatus());
+		log.info("Node status: {}", getStatus());
 		cpuSockets.values().forEach(SchedulingExecutionContainer::releaseAllExecutionVertices);
 	}
 
@@ -128,6 +128,16 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 			}
 		}
 
+		return false;
+	}
+
+	@Override
+	public boolean forceSchedule(SchedulingExecutionVertex schedulingExecutionVertex, int cpuId) {
+		for (SchedulingExecutionContainer subContainer : getSubContainers()) {
+			if (subContainer.forceSchedule(schedulingExecutionVertex, cpuId)) {
+				return true;
+			}
+		}
 		return false;
 	}
 
@@ -164,6 +174,15 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 	@Override
 	public int getId() {
 		return -1;
+	}
+
+	@Override
+	public List<Integer> getCurrentAssignment() {
+		List<Integer> currentlyAssignedCpus = new ArrayList<>();
+		getSubContainers().forEach(subContainer -> {
+			currentlyAssignedCpus.addAll(subContainer.getCurrentAssignment());
+		});
+		return currentlyAssignedCpus;
 	}
 
 	@Override

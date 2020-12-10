@@ -47,6 +47,8 @@ public interface SchedulingExecutionContainer {
 
 	boolean isAssignedToContainer(SchedulingExecutionVertex schedulingExecutionVertex);
 
+	boolean forceSchedule(SchedulingExecutionVertex schedulingExecutionVertex, int cpuId);
+
 	int getRemainingCapacity();
 
 	double getResourceUsage(String type);
@@ -54,6 +56,8 @@ public interface SchedulingExecutionContainer {
 	void updateResourceUsageMetrics(String type, Map<String, Double> resourceUsageMetrics);
 
 	int getId();
+
+	List<Integer> getCurrentAssignment();
 
 	String getStatus();
 }

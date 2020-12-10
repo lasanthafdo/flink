@@ -101,7 +101,6 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 
 	@Override
 	public void releaseAllExecutionVertices() {
-		log.info("Socket status:\n {}", getStatus());
 		cpuCores.values().forEach(SchedulingExecutionContainer::releaseAllExecutionVertices);
 	}
 
@@ -113,6 +112,16 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 			}
 		}
 
+		return false;
+	}
+
+	@Override
+	public boolean forceSchedule(SchedulingExecutionVertex schedulingExecutionVertex, int cpuId) {
+		for (SchedulingExecutionContainer subContainer : getSubContainers()) {
+			if (subContainer.forceSchedule(schedulingExecutionVertex, cpuId)) {
+				return true;
+			}
+		}
 		return false;
 	}
 
@@ -152,6 +161,15 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 	@Override
 	public int getId() {
 		return socketId;
+	}
+
+	@Override
+	public List<Integer> getCurrentAssignment() {
+		List<Integer> currentlyAssignedCpus = new ArrayList<>();
+		getSubContainers().forEach(subContainer -> {
+			currentlyAssignedCpus.addAll(subContainer.getCurrentAssignment());
+		});
+		return currentlyAssignedCpus;
 	}
 
 	@Override

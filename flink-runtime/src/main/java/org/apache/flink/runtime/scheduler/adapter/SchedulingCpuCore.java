@@ -24,6 +24,7 @@ import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
 import net.openhft.affinity.CpuLayout;
 import org.slf4j.Logger;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -133,6 +134,16 @@ public class SchedulingCpuCore implements SchedulingExecutionContainer {
 	}
 
 	@Override
+	public boolean forceSchedule(SchedulingExecutionVertex schedulingExecutionVertex, int cpuId) {
+		if(cpuAssignmentMap.containsKey(cpuId)) {
+			cpuAssignmentMap.put(cpuId, schedulingExecutionVertex);
+			return true;
+		} else {
+			return false;
+		}
+	}
+
+	@Override
 	public int getRemainingCapacity() {
 		AtomicInteger integerCount = new AtomicInteger();
 		cpuAssignmentMap
@@ -191,6 +202,15 @@ public class SchedulingCpuCore implements SchedulingExecutionContainer {
 	@Override
 	public int getId() {
 		return coreId;
+	}
+
+	@Override
+	public List<Integer> getCurrentAssignment() {
+		return cpuAssignmentMap
+			.entrySet()
+			.stream()
+			.filter(entry -> entry.getValue() != null)
+			.map(Map.Entry::getKey).collect(Collectors.toList());
 	}
 
 	@Override

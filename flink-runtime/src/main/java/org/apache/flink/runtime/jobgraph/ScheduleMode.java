@@ -48,7 +48,12 @@ public enum ScheduleMode {
 	/**
 	 * Schedules all tasks immediately and places according to a model
 	 */
-	DRL(false);
+	DRL(false),
+
+	/**
+	 * Schedules all tasks immediately according to an adaptive model
+	 */
+	ADAPTIVE(false);
 
 	private final boolean allowLazyDeployment;
 

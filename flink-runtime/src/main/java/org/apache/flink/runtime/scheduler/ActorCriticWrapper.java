@@ -19,11 +19,22 @@
 package org.apache.flink.runtime.scheduler;
 
 import com.github.chen0040.rl.learning.actorcritic.ActorCriticLearner;
+import org.paukov.combinatorics.CombinatoricsVector;
+import org.paukov.combinatorics.Generator;
+import org.paukov.combinatorics.ICombinatoricsVector;
 import org.slf4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
+
+import static org.paukov.combinatorics.CombinatoricsFactory.createCompositionGenerator;
+import static org.paukov.combinatorics.CombinatoricsFactory.createSimpleCombinationGenerator;
 
 /**
  * Wrapper class for the actor-critic training.
@@ -37,8 +48,73 @@ public class ActorCriticWrapper {
 
 	private final ActorCriticLearner agent = new ActorCriticLearner(stateCount, actionCount);
 	private final List<Transition> transitionList = new ArrayList<>();
-	private InfluxDBMetricsClient influxDBMetricsClient;
-	private Logger log;
+	private InfluxDBTransitionsClient influxDBTransitionsClient;
+	private final Map<Integer, List<Integer>> stateSpaceMap;
+	private final int nCpus;
+	private final Logger log;
+
+	public ActorCriticWrapper(int nCpus, int nVertices, Logger log) {
+		stateSpaceMap = generateActionSpace(nCpus, nVertices);
+		this.stateCount = stateSpaceMap.size();
+		this.actionCount = stateSpaceMap.size();
+		this.nCpus = nCpus;
+		this.log = log;
+
+		setupInfluxDBConnection();
+	}
+
+	private Map<Integer, List<Integer>> generateActionSpace(int nCpus, int nVertices) {
+		Map<Integer, List<Integer>> actionMap = new HashMap<>();
+		CombinatoricsVector<Integer> cpuIds = new CombinatoricsVector<>();
+		for (int i = 0; i < nCpus; i++) {
+			cpuIds.addValue(i);
+		}
+		Generator<Integer> gen = createSimpleCombinationGenerator(cpuIds, nVertices);
+		int actionId = 1;
+		for (ICombinatoricsVector<Integer> cpuSelection : gen.generateAllObjects()) {
+			actionMap.put(actionId++, cpuSelection.getVector());
+		}
+		return actionMap;
+	}
+
+	private Map<Integer, List<Integer>> generateStateSpace(
+		int nVertices,
+		int maxPerCore,
+		int maxCores) {
+		long start = System.currentTimeMillis();
+		Generator<Integer> gen = createCompositionGenerator(nVertices);
+
+		List<ICombinatoricsVector<Integer>> filteredList = gen.generateFilteredObjects((index, integers) ->
+			integers.getSize() <= maxCores
+				&& integers.getVector().stream().max(Comparator.naturalOrder()).orElse(0)
+				<= maxPerCore);
+		int count = 0;
+		Map<Integer, List<Integer>> stateMap = new HashMap<>();
+		for (ICombinatoricsVector<Integer> p : filteredList) {
+			count++;
+			stateMap.put(count, p.getVector());
+		}
+		log.info(
+			"Added {} actions for {} vertices with maximum limit of {} in {} seconds.",
+			count,
+			nVertices,
+			maxPerCore,
+			(System.currentTimeMillis() - start));
+		return stateMap;
+	}
+
+	public int getStateFor(List<Integer> cpuAssignment) {
+		return stateSpaceMap
+			.entrySet()
+			.stream()
+			.filter(entry -> entry.getValue().size() == cpuAssignment.size() && entry
+				.getValue()
+				.containsAll(cpuAssignment))
+			.map(
+				Map.Entry::getKey)
+			.findFirst()
+			.orElse(-1);
+	}
 
 	static class Transition {
 		int oldState;
@@ -54,33 +130,53 @@ public class ActorCriticWrapper {
 		}
 	}
 
-	public ActorCriticWrapper(int actionCount, int stateCount, Logger log) {
-		this.stateCount = stateCount;
-		this.actionCount = actionCount;
-		this.log = log;
-		setupInfluxDBConnection();
-	}
-
 	private void setupInfluxDBConnection() {
-		influxDBMetricsClient = new InfluxDBMetricsClient(
+		influxDBTransitionsClient = new InfluxDBTransitionsClient(
 			"http://127.0.0.1:8086",
 			"flink-transitions", log);
-		influxDBMetricsClient.setup();
+		influxDBTransitionsClient.setup();
 	}
 
-	public int getSuggestedAction(double previousReward, int currentStateId) {
-		System.out.println("Agent does action-" + previousActionId);
-		System.out.println("Agent receives Reward = " + previousReward);
+	public List<Integer> getPlacementSolution(int action) {
+		return stateSpaceMap.get(action);
+	}
 
-		transitionList.add(new Transition(
+	public int getSuggestedAction(
+		double previousReward,
+		int currentStateId, Function<Integer, Double> stateRewardFunction) {
+		log.info("Agent does action : " + previousActionId);
+		log.info("Agent receives reward : " + previousReward);
+
+		Set<Integer> actionsAtState = stateSpaceMap.keySet();
+		Transition previousTransition = new Transition(
 			previousStateId,
 			previousActionId,
 			currentStateId,
-			previousReward));
-		int actionId = agent.selectAction(currentStateId);
+			previousReward);
+		agent.update(
+			previousTransition.oldState,
+			previousTransition.action,
+			previousTransition.newState,
+			actionsAtState,
+			previousTransition.reward,
+			stateRewardFunction);
+		int actionId = agent.selectAction(currentStateId, actionsAtState);
 		previousStateId = currentStateId;
 		previousActionId = actionId;
+		transitionList.add(previousTransition);
+		if (isValidAction(previousTransition.action) && isValidState(previousTransition.oldState)
+			&& isValidState(previousTransition.newState)) {
+			flushToDB(previousTransition);
+		}
 		return actionId;
+	}
+
+	private boolean isValidAction(int actionId) {
+		return stateSpaceMap.containsKey(actionId);
+	}
+
+	private boolean isValidState(int stateId) {
+		return stateSpaceMap.containsKey(stateId);
 	}
 
 	public void updateModel(final List<Transition> transitionSamples) {
@@ -100,8 +196,40 @@ public class ActorCriticWrapper {
 		}
 	}
 
-	public void flushTransitionsToDB() {
+	private void flushToDB(Transition transition) {
+		List<Integer> actionAsList = stateSpaceMap.get(transition.action);
+		List<Integer> oldStateAsList = stateSpaceMap.get(transition.oldState);
+		List<Integer> newStateAsList = stateSpaceMap.get(transition.newState);
 
+		if (actionAsList != null && oldStateAsList != null && newStateAsList != null) {
+			StringBuilder actionStr = new StringBuilder();
+			StringBuilder oldStateStr = new StringBuilder();
+			StringBuilder newStateStr = new StringBuilder();
+			for (int i = 0; i < nCpus; i++) {
+				if (actionAsList.contains(i)) {
+					actionStr.append(i).append(",");
+				}
+				if (oldStateAsList.contains(i)) {
+					oldStateStr.append(1).append(",");
+				} else {
+					oldStateStr.append(0).append(",");
+				}
+				if (newStateAsList.contains(i)) {
+					newStateStr.append(1).append(",");
+				} else {
+					newStateStr.append(0).append(",");
+				}
+			}
+			actionStr.deleteCharAt(actionStr.length() - 1);
+			oldStateStr.deleteCharAt(oldStateStr.length() - 1);
+			newStateStr.deleteCharAt(newStateStr.length() - 1);
+
+			influxDBTransitionsClient.writeToDB(
+				actionStr.toString(),
+				oldStateStr.toString(),
+				newStateStr.toString(),
+				transition.reward);
+		}
 	}
 
 	public void initMethod() {

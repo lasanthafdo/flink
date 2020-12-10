@@ -38,7 +38,7 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
 /**
  * {@link SchedulingStrategy} instance for streaming job which will schedule all tasks at the same time.
  */
-public class DRLSchedulingStrategy implements SchedulingStrategy {
+public class AdaptiveSchedulingStrategy implements SchedulingStrategy {
 
 	private final SchedulerOperations schedulerOperations;
 
@@ -47,7 +47,7 @@ public class DRLSchedulingStrategy implements SchedulingStrategy {
 	private final DeploymentOption deploymentOption = new DeploymentOption(false);
 
 
-	public DRLSchedulingStrategy(
+	public AdaptiveSchedulingStrategy(
 		SchedulerOperations schedulerOperations,
 		SchedulingTopology schedulingTopology) {
 
@@ -116,9 +116,6 @@ public class DRLSchedulingStrategy implements SchedulingStrategy {
 		topLevelContainer.releaseAllExecutionVertices();
 		AtomicInteger placementIndex = new AtomicInteger();
 		schedulingTopology.getVertices().forEach(schedulingExecutionVertex -> {
-			topLevelContainer.forceSchedule(
-				schedulingExecutionVertex,
-				placementSolution.get(placementIndex.get()));
 			schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
 				DEFAULT_TASK_MANAGER_ADDRESS,
 				placementSolution.get(placementIndex.getAndIncrement())));
@@ -126,7 +123,7 @@ public class DRLSchedulingStrategy implements SchedulingStrategy {
 	}
 
 	/**
-	 * The factory for creating {@link DRLSchedulingStrategy}.
+	 * The factory for creating {@link AdaptiveSchedulingStrategy}.
 	 */
 	public static class Factory implements SchedulingStrategyFactory {
 
@@ -134,7 +131,7 @@ public class DRLSchedulingStrategy implements SchedulingStrategy {
 		public SchedulingStrategy createInstance(
 			SchedulerOperations schedulerOperations,
 			SchedulingTopology schedulingTopology) {
-			return new DRLSchedulingStrategy(schedulerOperations, schedulingTopology);
+			return new AdaptiveSchedulingStrategy(schedulerOperations, schedulingTopology);
 		}
 	}
 }

@@ -1908,6 +1908,8 @@ public class StreamExecutionEnvironment {
 				scheduleMode = ScheduleMode.TRAFFIC_BASED;
 			} else if ("drl-based".equals(runtimeScheduleMode)) {
 				scheduleMode = ScheduleMode.DRL;
+			} else if ("adaptive".equals(runtimeScheduleMode)) {
+				scheduleMode = ScheduleMode.ADAPTIVE;
 			} else {
 				scheduleMode = ScheduleMode.PINNED;
 			}

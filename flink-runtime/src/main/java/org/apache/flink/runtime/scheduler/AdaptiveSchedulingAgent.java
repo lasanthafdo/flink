@@ -29,12 +29,13 @@ import org.apache.flink.runtime.scheduler.strategy.AbstractSchedulingAgent;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionContainer;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategy;
 
-import com.google.common.collect.Iterators;
 import org.slf4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
@@ -44,18 +45,19 @@ import static org.apache.flink.util.Preconditions.checkState;
 /**
  * A scheduling agent that will run periodically to reschedule.
  */
-public class DRLSchedulingAgent extends AbstractSchedulingAgent {
+public class AdaptiveSchedulingAgent extends AbstractSchedulingAgent {
 
 	private final SchedulingStrategy schedulingStrategy;
 	private final Logger log;
 	private final long waitTimeout;
 	private final int numRetries;
 	private final ActorCriticWrapper actorCriticWrapper;
+
 	private CompletableFuture<Collection<Acknowledge>> previousRescheduleFuture;
 
 	private int currentAction;
 
-	public DRLSchedulingAgent(
+	public AdaptiveSchedulingAgent(
 		Logger log,
 		ExecutionGraph executionGraph,
 		SchedulingStrategy schedulingStrategy,
@@ -69,11 +71,11 @@ public class DRLSchedulingAgent extends AbstractSchedulingAgent {
 		this.waitTimeout = waitTimeout;
 		this.numRetries = numRetries;
 
-		int nVertices = Iterators.size(executionGraph
-			.getSchedulingTopology()
-			.getVertices()
-			.iterator());
-		this.actorCriticWrapper = new ActorCriticWrapper(cpuLayout.cpus(), nVertices, log);
+		int nVertices = executionGraph.getNumberOfExecutionJobVertices();
+		this.actorCriticWrapper = new ActorCriticWrapper(
+			cpuLayout.cpus(),
+			nVertices,
+			log);
 	}
 
 	@Override

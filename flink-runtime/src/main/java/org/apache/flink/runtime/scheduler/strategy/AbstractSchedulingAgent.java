@@ -22,7 +22,6 @@ import org.apache.flink.runtime.executiongraph.ExecutionGraph;
 import org.apache.flink.runtime.scheduler.InfluxDBMetricsClient;
 import org.apache.flink.runtime.scheduler.SchedulingAgent;
 import org.apache.flink.runtime.scheduler.adapter.DefaultExecutionEdge;
-import org.apache.flink.runtime.scheduler.adapter.SchedulingCpuSocket;
 import org.apache.flink.runtime.scheduler.adapter.SchedulingNode;
 
 import net.openhft.affinity.AffinityLock;
@@ -72,6 +71,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 
 		initializeEdgeFlowRates();
 		setupInfluxDBConnection();
+		updateState();
 	}
 
 	protected void initializeEdgeFlowRates() {
@@ -165,6 +165,11 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	@Override
 	public SchedulingExecutionContainer getTopLevelContainer() {
 		return schedulingNode;
+	}
+
+	@Override
+	public List<Integer> getPlacementSolution() {
+		return null;
 	}
 
 	@Override

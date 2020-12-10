@@ -37,4 +37,6 @@ public interface SchedulingRuntimeState {
 	SchedulingExecutionContainer getTopLevelContainer();
 
 	double getOverallThroughput();
+
+	List<Integer> getPlacementSolution();
 }

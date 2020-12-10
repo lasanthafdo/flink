@@ -66,12 +66,12 @@
 			<fileMode>0644</fileMode>
 		</file>
 
-		<file>
+		<!--file>
 			<source>../flink-metrics/flink-metrics-datadog/target/flink-metrics-datadog-${project.version}.jar</source>
 			<outputDirectory>plugins/metrics-datadog/</outputDirectory>
 			<destName>flink-metrics-datadog-${project.version}.jar</destName>
 			<fileMode>0644</fileMode>
-		</file>
+		</file-->
 
 		<file>
 			<source>../flink-metrics/flink-metrics-slf4j/target/flink-metrics-slf4j-${project.version}.jar</source>
