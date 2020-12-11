@@ -60,6 +60,11 @@ public class TestSchedulingStrategy implements SchedulingStrategy {
 	}
 
 	@Override
+	public void setTopLevelContainer(SchedulingExecutionContainer schedulingExecutionContainer) {
+
+	}
+
+	@Override
 	public void restartTasks(final Set<ExecutionVertexID> verticesToRestart) {
 		this.receivedVerticesToRestart = verticesToRestart;
 	}

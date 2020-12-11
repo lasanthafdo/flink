@@ -109,12 +109,16 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		log.info("Current scheduling placement is : {}", currentPlacement);
 	}
 
+	protected Map<String, Double> getCpuMetrics() {
+		return influxDBMetricsClient.getCpuMetrics(nCpus);
+	}
+
 	protected void updateState() {
 		Map<String, Double> currentFlowRates = influxDBMetricsClient.getRateMetricsFor(
 			"taskmanager_job_task_edge_numRecordsProcessedPerSecond",
 			"edge_id",
 			"rate");
-		Map<String, Double> cpuMetrics = influxDBMetricsClient.getCpuMetrics(12);
+		Map<String, Double> cpuMetrics = influxDBMetricsClient.getCpuMetrics(nCpus);
 		Map<String, Double> operatorUsageMetrics = influxDBMetricsClient.getOperatorUsageMetrics();
 		schedulingNode.updateResourceUsageMetrics(
 			SchedulingExecutionContainer.CPU,

@@ -84,6 +84,7 @@ public abstract class SlotProviderStrategy {
 			case PINNED:
 			case TRAFFIC_BASED:
 			case DRL:
+			case ADAPTIVE:
 				return new NormalSlotProviderStrategy(slotProvider, allocationTimeout);
 			default:
 				throw new IllegalArgumentException(String.format(

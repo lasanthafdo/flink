@@ -32,6 +32,8 @@ import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategy;
 import com.google.common.collect.Iterators;
 import org.slf4j.Logger;
 
+import scala.Int;
+
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -85,7 +87,10 @@ public class DRLSchedulingAgent extends AbstractSchedulingAgent {
 	public void run() {
 		if (previousRescheduleFuture == null || previousRescheduleFuture.isDone()) {
 			updateState();
-			int currentStateId = actorCriticWrapper.getStateFor(getTopLevelContainer().getCurrentAssignment());
+			List<Integer> assignedCpuIds = new ArrayList<>(getTopLevelContainer()
+				.getCurrentCpuAssignment()
+				.values());
+			int currentStateId = actorCriticWrapper.getStateFor(assignedCpuIds);
 			currentAction = actorCriticWrapper.getSuggestedAction(
 				getOverallThroughput(),
 				currentStateId,

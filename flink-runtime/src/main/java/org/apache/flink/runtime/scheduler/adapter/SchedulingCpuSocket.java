@@ -79,6 +79,17 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 	}
 
 	@Override
+	public int getCpuIdForScheduling(SchedulingExecutionVertex schedulingExecutionVertex) {
+		Optional<SchedulingExecutionContainer> targetCore = cpuCores.values()
+			.stream().filter(cpuSocket -> cpuSocket.getRemainingCapacity() >= 1)
+			.min(Comparator.comparing(sec -> sec.getResourceUsage(OPERATOR)));
+		return targetCore
+			.map(schedulingExecutionContainer -> schedulingExecutionContainer.getCpuIdForScheduling(
+				schedulingExecutionVertex))
+			.orElse(-1);
+	}
+
+	@Override
 	public List<Integer> tryScheduleInSameContainer(
 		SchedulingExecutionVertex sourceVertex,
 		SchedulingExecutionVertex targetVertex) {
@@ -90,6 +101,21 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 		if (targetCore.isPresent()) {
 			SchedulingExecutionContainer cpuCore = targetCore.get();
 			cpuIds.addAll(cpuCore.tryScheduleInSameContainer(sourceVertex, targetVertex));
+		}
+		return cpuIds;
+	}
+
+	@Override
+	public List<Integer> getCpuIdsInSameContainer(
+		SchedulingExecutionVertex sourceVertex,
+		SchedulingExecutionVertex targetVertex) {
+		List<Integer> cpuIds = new ArrayList<>();
+		Optional<SchedulingExecutionContainer> targetCore = cpuCores.values()
+			.stream().filter(cpuSocket -> cpuSocket.getRemainingCapacity() >= 2)
+			.min(Comparator.comparing(sec -> sec.getResourceUsage(OPERATOR)));
+		if (targetCore.isPresent()) {
+			SchedulingExecutionContainer cpuCore = targetCore.get();
+			cpuIds.addAll(cpuCore.getCpuIdsInSameContainer(sourceVertex, targetVertex));
 		}
 		return cpuIds;
 	}
@@ -164,10 +190,10 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 	}
 
 	@Override
-	public List<Integer> getCurrentAssignment() {
-		List<Integer> currentlyAssignedCpus = new ArrayList<>();
+	public Map<SchedulingExecutionVertex, Integer> getCurrentCpuAssignment() {
+		Map<SchedulingExecutionVertex, Integer> currentlyAssignedCpus = new HashMap<>();
 		getSubContainers().forEach(subContainer -> {
-			currentlyAssignedCpus.addAll(subContainer.getCurrentAssignment());
+			currentlyAssignedCpus.putAll(subContainer.getCurrentCpuAssignment());
 		});
 		return currentlyAssignedCpus;
 	}

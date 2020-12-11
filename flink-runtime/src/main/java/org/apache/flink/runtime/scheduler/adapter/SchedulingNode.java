@@ -74,6 +74,17 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 	}
 
 	@Override
+	public int getCpuIdForScheduling(SchedulingExecutionVertex schedulingExecutionVertex) {
+		Optional<SchedulingExecutionContainer> targetSocket = cpuSockets.values()
+			.stream().filter(cpuSocket -> cpuSocket.getRemainingCapacity() >= 1)
+			.min(Comparator.comparing(sec -> sec.getResourceUsage(OPERATOR)));
+		return targetSocket
+			.map(schedulingExecutionContainer -> schedulingExecutionContainer.getCpuIdForScheduling(
+				schedulingExecutionVertex))
+			.orElse(-1);
+	}
+
+	@Override
 	public List<Integer> tryScheduleInSameContainer(
 		SchedulingExecutionVertex sourceVertex,
 		SchedulingExecutionVertex targetVertex) {
@@ -105,6 +116,21 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 				}
 			}
 */
+		}
+		return cpuIds;
+	}
+
+	@Override
+	public List<Integer> getCpuIdsInSameContainer(
+		SchedulingExecutionVertex sourceVertex,
+		SchedulingExecutionVertex targetVertex) {
+		Optional<SchedulingExecutionContainer> firstPreferenceTargetSocket = cpuSockets.values()
+			.stream().filter(cpuSocket -> cpuSocket.getRemainingCapacity() >= 2)
+			.min(Comparator.comparing(sec -> sec.getResourceUsage(OPERATOR)));
+		List<Integer> cpuIds = new ArrayList<>();
+		if (firstPreferenceTargetSocket.isPresent()) {
+			SchedulingExecutionContainer cpuSocket = firstPreferenceTargetSocket.get();
+			cpuIds.addAll(cpuSocket.getCpuIdsInSameContainer(sourceVertex, targetVertex));
 		}
 		return cpuIds;
 	}
@@ -177,10 +203,10 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 	}
 
 	@Override
-	public List<Integer> getCurrentAssignment() {
-		List<Integer> currentlyAssignedCpus = new ArrayList<>();
+	public Map<SchedulingExecutionVertex, Integer> getCurrentCpuAssignment() {
+		Map<SchedulingExecutionVertex, Integer> currentlyAssignedCpus = new HashMap<>();
 		getSubContainers().forEach(subContainer -> {
-			currentlyAssignedCpus.addAll(subContainer.getCurrentAssignment());
+			currentlyAssignedCpus.putAll(subContainer.getCurrentCpuAssignment());
 		});
 		return currentlyAssignedCpus;
 	}

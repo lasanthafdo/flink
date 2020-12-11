@@ -352,6 +352,18 @@ under the License.
 			<version>2.2</version>
 		</dependency>
 
+		<dependency>
+			<groupId>org.nd4j</groupId>
+			<artifactId>nd4j-native</artifactId>
+			<version>1.0.0-beta7</version>
+		</dependency>
+
+		<dependency>
+			<groupId>org.deeplearning4j</groupId>
+			<artifactId>deeplearning4j-core</artifactId>
+			<version>1.0.0-beta7</version>
+		</dependency>
+
 	</dependencies>
 
 	<!-- Dependency Management to converge transitive dependency versions -->

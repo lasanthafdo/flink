@@ -46,6 +46,8 @@ public interface SchedulingStrategy {
 	 */
 	void startScheduling(SchedulingRuntimeState runtimeState);
 
+	void setTopLevelContainer(SchedulingExecutionContainer schedulingExecutionContainer);
+
 	/**
 	 * Called whenever vertices need to be restarted (due to task failure).
 	 *

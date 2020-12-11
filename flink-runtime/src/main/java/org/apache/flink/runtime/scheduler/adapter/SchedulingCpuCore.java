@@ -24,7 +24,6 @@ import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
 import net.openhft.affinity.CpuLayout;
 import org.slf4j.Logger;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -82,6 +81,17 @@ public class SchedulingCpuCore implements SchedulingExecutionContainer {
 	}
 
 	@Override
+	public int getCpuIdForScheduling(SchedulingExecutionVertex schedulingExecutionVertex) {
+		return cpuAssignmentMap
+			.entrySet()
+			.stream()
+			.filter(mapEntry -> mapEntry.getValue() == null)
+			.findFirst()
+			.map(Map.Entry::getKey)
+			.orElse(-1);
+	}
+
+	@Override
 	public List<Integer> tryScheduleInSameContainer(
 		SchedulingExecutionVertex sourceVertex,
 		SchedulingExecutionVertex targetVertex) {
@@ -100,6 +110,21 @@ public class SchedulingCpuCore implements SchedulingExecutionContainer {
 			cpuIdList.removeIf(id -> id != sourceCpuId && id != targetCpuId);
 		}
 
+		return cpuIdList;
+	}
+
+	@Override
+	public List<Integer> getCpuIdsInSameContainer(
+		SchedulingExecutionVertex sourceVertex,
+		SchedulingExecutionVertex targetVertex) {
+		List<Integer> cpuIdList = cpuAssignmentMap
+			.entrySet()
+			.stream()
+			.filter(mapEntry -> mapEntry.getValue() == null)
+			.map(Map.Entry::getKey).collect(Collectors.toList());
+		if (cpuIdList.size() > 2) {
+			cpuIdList = cpuIdList.subList(0, 2);
+		}
 		return cpuIdList;
 	}
 
@@ -135,7 +160,7 @@ public class SchedulingCpuCore implements SchedulingExecutionContainer {
 
 	@Override
 	public boolean forceSchedule(SchedulingExecutionVertex schedulingExecutionVertex, int cpuId) {
-		if(cpuAssignmentMap.containsKey(cpuId)) {
+		if (cpuAssignmentMap.containsKey(cpuId)) {
 			cpuAssignmentMap.put(cpuId, schedulingExecutionVertex);
 			return true;
 		} else {
@@ -205,12 +230,12 @@ public class SchedulingCpuCore implements SchedulingExecutionContainer {
 	}
 
 	@Override
-	public List<Integer> getCurrentAssignment() {
+	public Map<SchedulingExecutionVertex, Integer> getCurrentCpuAssignment() {
 		return cpuAssignmentMap
 			.entrySet()
 			.stream()
 			.filter(entry -> entry.getValue() != null)
-			.map(Map.Entry::getKey).collect(Collectors.toList());
+			.collect(Collectors.toMap(Map.Entry::getValue, Map.Entry::getKey));
 	}
 
 	@Override

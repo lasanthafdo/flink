@@ -27,6 +27,8 @@ import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategy;
 
 import org.slf4j.Logger;
 
+import java.util.concurrent.ScheduledExecutorService;
+
 /**
  * Utility class to help the scheduling agent.
  */
@@ -36,7 +38,8 @@ public class SchedulingAgentUtils {
 		ExecutionGraph executionGraph,
 		ScheduleMode scheduleMode,
 		SchedulingStrategy schedulingStrategy,
-		Configuration jobMasterConfiguration) {
+		Configuration jobMasterConfiguration,
+		ScheduledExecutorService executorService) {
 
 		switch (scheduleMode) {
 			case PINNED:
@@ -125,6 +128,7 @@ public class SchedulingAgentUtils {
 							log,
 							executionGraph,
 							schedulingStrategy,
+							executorService,
 							triggerPeriod,
 							waitTimeOut,
 							numRetries);

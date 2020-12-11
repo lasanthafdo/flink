@@ -37,7 +37,13 @@ public interface SchedulingExecutionContainer {
 
 	int scheduleExecutionVertex(SchedulingExecutionVertex schedulingExecutionVertex);
 
+	int getCpuIdForScheduling(SchedulingExecutionVertex schedulingExecutionVertex);
+
 	List<Integer> tryScheduleInSameContainer(
+		SchedulingExecutionVertex sourceVertex,
+		SchedulingExecutionVertex targetVertex);
+
+	List<Integer> getCpuIdsInSameContainer(
 		SchedulingExecutionVertex sourceVertex,
 		SchedulingExecutionVertex targetVertex);
 
@@ -57,7 +63,7 @@ public interface SchedulingExecutionContainer {
 
 	int getId();
 
-	List<Integer> getCurrentAssignment();
+	Map<SchedulingExecutionVertex, Integer> getCurrentCpuAssignment();
 
 	String getStatus();
 }

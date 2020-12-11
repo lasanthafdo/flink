@@ -46,6 +46,7 @@ public class AdaptiveSchedulingStrategy implements SchedulingStrategy {
 
 	private final DeploymentOption deploymentOption = new DeploymentOption(false);
 
+	private SchedulingExecutionContainer topLevelContainer;
 
 	public AdaptiveSchedulingStrategy(
 		SchedulerOperations schedulerOperations,
@@ -104,6 +105,9 @@ public class AdaptiveSchedulingStrategy implements SchedulingStrategy {
 	private void setupDefaultPlacement() {
 		AtomicInteger currentCpuId = new AtomicInteger(2);
 		schedulingTopology.getVertices().forEach(schedulingExecutionVertex -> {
+			if (topLevelContainer != null) {
+				topLevelContainer.forceSchedule(schedulingExecutionVertex, currentCpuId.get());
+			}
 			schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
 				DEFAULT_TASK_MANAGER_ADDRESS,
 				currentCpuId.getAndIncrement()));
@@ -114,12 +118,22 @@ public class AdaptiveSchedulingStrategy implements SchedulingStrategy {
 		SchedulingExecutionContainer topLevelContainer = runtimeState.getTopLevelContainer();
 		List<Integer> placementSolution = runtimeState.getPlacementSolution();
 		topLevelContainer.releaseAllExecutionVertices();
-		AtomicInteger placementIndex = new AtomicInteger();
-		schedulingTopology.getVertices().forEach(schedulingExecutionVertex -> {
-			schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
-				DEFAULT_TASK_MANAGER_ADDRESS,
-				placementSolution.get(placementIndex.getAndIncrement())));
-		});
+		AtomicInteger placementIndex = new AtomicInteger(1);
+		schedulingTopology
+			.getVertices()
+			.forEach(schedulingExecutionVertex -> {
+				topLevelContainer.forceSchedule(
+					schedulingExecutionVertex,
+					placementSolution.indexOf(placementIndex.get()));
+				schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
+					DEFAULT_TASK_MANAGER_ADDRESS,
+					placementSolution.indexOf(placementIndex.getAndIncrement())));
+			});
+	}
+
+	@Override
+	public void setTopLevelContainer(SchedulingExecutionContainer topLevelContainer) {
+		this.topLevelContainer = topLevelContainer;
 	}
 
 	/**

@@ -170,7 +170,8 @@ public class DefaultScheduler extends SchedulerBase implements SchedulerOperatio
 			getExecutionGraph(),
 			jobGraph.getScheduleMode(),
 			this.schedulingStrategy,
-			jobMasterConfiguration);
+			jobMasterConfiguration,
+			getFutureExecutor());
 	}
 
 	// ------------------------------------------------------------------------
