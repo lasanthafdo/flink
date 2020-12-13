@@ -32,13 +32,12 @@ import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategy;
 import com.google.common.collect.Iterators;
 import org.slf4j.Logger;
 
-import scala.Int;
-
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.stream.StreamSupport;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 import static org.apache.flink.util.Preconditions.checkState;
@@ -71,10 +70,9 @@ public class DRLSchedulingAgent extends AbstractSchedulingAgent {
 		this.waitTimeout = waitTimeout;
 		this.numRetries = numRetries;
 
-		int nVertices = Iterators.size(executionGraph
+		int nVertices = Math.toIntExact(StreamSupport.stream(executionGraph
 			.getSchedulingTopology()
-			.getVertices()
-			.iterator());
+			.getVertices().spliterator(), false).count());
 		this.actorCriticWrapper = new ActorCriticWrapper(cpuLayout.cpus(), nVertices, log);
 	}
 

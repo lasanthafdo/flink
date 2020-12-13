@@ -64,7 +64,8 @@ public class SchedulingAgentUtils {
 							"Incorrect number of arguments in the scheduling agent configuration string.");
 					}
 				} else {
-					throw new IllegalConfigurationException("Unable to obtain agent configuration details");
+					throw new IllegalConfigurationException(
+						"Unable to obtain agent configuration details");
 				}
 			case TRAFFIC_BASED:
 				if (jobMasterConfiguration.contains(DeploymentOptions.SCHEDULING_AGENT_CONFIG_STRING)) {
@@ -88,7 +89,8 @@ public class SchedulingAgentUtils {
 							"Incorrect number of arguments in the scheduling agent configuration string.");
 					}
 				} else {
-					throw new IllegalConfigurationException("Unable to obtain agent configuration details");
+					throw new IllegalConfigurationException(
+						"Unable to obtain agent configuration details");
 				}
 			case DRL:
 				if (jobMasterConfiguration.contains(DeploymentOptions.SCHEDULING_AGENT_CONFIG_STRING)) {
@@ -112,32 +114,57 @@ public class SchedulingAgentUtils {
 							"Incorrect number of arguments in the scheduling agent configuration string.");
 					}
 				} else {
-					throw new IllegalConfigurationException("Unable to obtain agent configuration details");
+					throw new IllegalConfigurationException(
+						"Unable to obtain agent configuration details");
 				}
 			case ADAPTIVE:
 				if (jobMasterConfiguration.contains(DeploymentOptions.SCHEDULING_AGENT_CONFIG_STRING)) {
 					String agentConfigString = jobMasterConfiguration.getString(
 						DeploymentOptions.SCHEDULING_AGENT_CONFIG_STRING);
 					String[] configElements = agentConfigString.split(",", 3);
+					long triggerPeriod;
+					long waitTimeOut;
+					int numRetries;
+					NeuralNetworkConfiguration neuralNetworkConfiguration;
 					if (configElements.length == 3) {
-						long triggerPeriod = Long.parseLong(configElements[0]);
-						long waitTimeOut = Long.parseLong(configElements[1]);
-						int numRetries = Integer.parseInt(configElements[2]);
+						triggerPeriod = Long.parseLong(configElements[0]);
+						waitTimeOut = Long.parseLong(configElements[1]);
+						numRetries = Integer.parseInt(configElements[2]);
 
-						return new AdaptiveSchedulingAgent(
-							log,
-							executionGraph,
-							schedulingStrategy,
-							executorService,
-							triggerPeriod,
-							waitTimeOut,
-							numRetries);
+						neuralNetworkConfiguration = new NeuralNetworkConfiguration();
+					} else if (configElements.length == 8) {
+						triggerPeriod = Long.parseLong(configElements[0]);
+						waitTimeOut = Long.parseLong(configElements[1]);
+						numRetries = Integer.parseInt(configElements[2]);
+						int numEpochs = Integer.parseInt(configElements[3]);
+						long seed = Long.parseLong(configElements[4]);
+						double learningRate = Double.parseDouble(configElements[5]);
+						double epsilonGreedyThreshold = Double.parseDouble(configElements[6]);
+						int trainTriggerThreshold = Integer.parseInt(configElements[7]);
+
+						neuralNetworkConfiguration = new NeuralNetworkConfiguration(
+							numEpochs,
+							seed,
+							learningRate,
+							epsilonGreedyThreshold,
+							trainTriggerThreshold);
 					} else {
 						throw new IllegalConfigurationException(
 							"Incorrect number of arguments in the scheduling agent configuration string.");
 					}
+					return new AdaptiveSchedulingAgent(
+						log,
+						executionGraph,
+						schedulingStrategy,
+						executorService,
+						triggerPeriod,
+						waitTimeOut,
+						numRetries,
+						neuralNetworkConfiguration);
+
 				} else {
-					throw new IllegalConfigurationException("Unable to obtain agent configuration details");
+					throw new IllegalConfigurationException(
+						"Unable to obtain agent configuration details");
 				}
 			case EAGER:
 			case LAZY_FROM_SOURCES:

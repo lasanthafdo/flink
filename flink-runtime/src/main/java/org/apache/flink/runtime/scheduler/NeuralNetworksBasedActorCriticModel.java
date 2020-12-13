@@ -42,6 +42,8 @@ import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
+import static org.apache.flink.util.Preconditions.checkNotNull;
+
 /**
  * Wrapper class for the actor-critic training.
  */
@@ -50,32 +52,40 @@ public class NeuralNetworksBasedActorCriticModel {
 	private final int nVertices;
 	private final int nCpus;
 
-	private InfluxDBTransitionsClient influxDBTransitionsClient;
 	private final Logger log;
 	private MultiLayerNetwork net;
-	private final int nEpochs = 100;
+	private final long seed;
 	private final int numInputs;
-	private final int numOutputs = 1;
-	private final long seed = 680;
-	private final double learningRate = 0.01;
+	private final int numOutputs;
+	private final int nEpochs;
+	private final double learningRate;
+	private final int trainTriggerThreshold;
+	private final double epsilonGreedyThreshold;
+	private final Random rand;
+
 	private MultiLayerConfiguration conf;
 	private Cache<INDArray, INDArray> trainingCache;
 	private boolean isTrained = false;
 	private int updatesSinceLastTraining = 0;
-	private final int trainTriggerThreshold = 10;
-	private final Random rand = new Random(seed);
-	private final double epsilonGreedyThreshold = 0.3;
 
 	public NeuralNetworksBasedActorCriticModel(
 		int nCpus,
 		int nVertices,
-		int numInputs,
+		NeuralNetworkConfiguration neuralNetworkConfiguration,
 		Logger log) {
 
 		this.nCpus = nCpus;
 		this.nVertices = nVertices;
 		this.log = log;
-		this.numInputs = numInputs;
+		checkNotNull(neuralNetworkConfiguration);
+		this.seed = neuralNetworkConfiguration.getSeed();
+		this.rand = new Random(this.seed);
+		this.numInputs = neuralNetworkConfiguration.getNumInputs();
+		this.numOutputs = neuralNetworkConfiguration.getNumOutputs();
+		this.nEpochs = neuralNetworkConfiguration.getNumEpochs();
+		this.learningRate = neuralNetworkConfiguration.getLearningRate();
+		this.epsilonGreedyThreshold = neuralNetworkConfiguration.getEpsilonGreedyThreshold();
+		this.trainTriggerThreshold = neuralNetworkConfiguration.getTrainTriggerThreshold();
 		setupNeuralNetwork();
 	}
 

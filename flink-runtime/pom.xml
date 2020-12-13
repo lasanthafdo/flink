@@ -17,8 +17,9 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 -->
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+		 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		 xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
 
 	<modelVersion>4.0.0</modelVersion>
 
@@ -33,6 +34,13 @@ under the License.
 	<name>flink-runtime</name>
 
 	<packaging>jar</packaging>
+
+	<properties>
+		<dl4j-master.version>1.0.0-beta7</dl4j-master.version>
+		<!-- Change the nd4j.backend property to nd4j-cuda-X-platform to use CUDA GPUs -->
+		<!-- <nd4j.backend>nd4j-cuda-10.2-platform</nd4j.backend> -->
+		<nd4j.backend>nd4j-native</nd4j.backend>
+	</properties>
 
 	<dependencies>
 
@@ -113,7 +121,7 @@ under the License.
 			<groupId>org.apache.commons</groupId>
 			<artifactId>commons-lang3</artifactId>
 		</dependency>
-		
+
 		<dependency>
 			<groupId>commons-cli</groupId>
 			<artifactId>commons-cli</artifactId>
@@ -352,18 +360,37 @@ under the License.
 			<version>2.2</version>
 		</dependency>
 
+		<!-- DL4J dependencies -->
 		<dependency>
 			<groupId>org.nd4j</groupId>
-			<artifactId>nd4j-native</artifactId>
-			<version>1.0.0-beta7</version>
+			<artifactId>${nd4j.backend}</artifactId>
+			<version>${dl4j-master.version}</version>
 		</dependency>
-
 		<dependency>
 			<groupId>org.deeplearning4j</groupId>
-			<artifactId>deeplearning4j-core</artifactId>
-			<version>1.0.0-beta7</version>
+			<artifactId>deeplearning4j-nn</artifactId>
+			<version>${dl4j-master.version}</version>
 		</dependency>
 
+		<!--dependency>
+			<groupId>org.deeplearning4j</groupId>
+			<artifactId>deeplearning4j-modelimport</artifactId>
+			<version>${dl4j-master.version}</version>
+			<classifier>linux-x86_64</classifier>
+		</dependency-->
+		<!-- ParallelWrapper & ParallelInference live here -->
+		<!--dependency>
+			<groupId>org.deeplearning4j</groupId>
+			<artifactId>deeplearning4j-parallel-wrapper</artifactId>
+			<version>${dl4j-master.version}</version>
+		</dependency-->
+
+		<!--dependency>
+			<groupId>org.bytedeco</groupId>
+			<artifactId>javacpp</artifactId>
+			<version>1.5.3</version>
+			<classifier>linux-x86_64</classifier>
+		</dependency-->
 	</dependencies>
 
 	<!-- Dependency Management to converge transitive dependency versions -->
@@ -413,7 +440,9 @@ under the License.
 
 				<configuration>
 					<skip>true</skip>
-					<suppressionsLocation combine.self="override">/tools/maven/suppressions-runtime.xml</suppressionsLocation>
+					<suppressionsLocation combine.self="override">
+						/tools/maven/suppressions-runtime.xml
+					</suppressionsLocation>
 				</configuration>
 			</plugin>
 			<!-- Scala Compiler -->
@@ -464,8 +493,10 @@ under the License.
 						<buildcommand>org.scala-ide.sdt.core.scalabuilder</buildcommand>
 					</buildcommands>
 					<classpathContainers>
-						<classpathContainer>org.scala-ide.sdt.launching.SCALA_CONTAINER</classpathContainer>
-						<classpathContainer>org.eclipse.jdt.launching.JRE_CONTAINER</classpathContainer>
+						<classpathContainer>org.scala-ide.sdt.launching.SCALA_CONTAINER
+						</classpathContainer>
+						<classpathContainer>org.eclipse.jdt.launching.JRE_CONTAINER
+						</classpathContainer>
 					</classpathContainers>
 					<excludes>
 						<exclude>org.scala-lang:scala-library</exclude>
@@ -517,7 +548,8 @@ under the License.
 				<groupId>org.scalastyle</groupId>
 				<artifactId>scalastyle-maven-plugin</artifactId>
 				<configuration>
-					<configLocation>${project.basedir}/../tools/maven/scalastyle-config.xml</configLocation>
+					<configLocation>${project.basedir}/../tools/maven/scalastyle-config.xml
+					</configLocation>
 				</configuration>
 			</plugin>
 
@@ -602,7 +634,8 @@ under the License.
 							<relocations combine.children="append">
 								<relocation>
 									<pattern>org.jboss.netty</pattern>
-									<shadedPattern>org.apache.flink.shaded.akka.org.jboss.netty</shadedPattern>
+									<shadedPattern>org.apache.flink.shaded.akka.org.jboss.netty
+									</shadedPattern>
 								</relocation>
 							</relocations>
 							<filters>
@@ -616,7 +649,7 @@ under the License.
 										 	copied into this modules's NOTICE file. -->
 										<exclude>META-INF/NOTICE.txt</exclude>
 									</excludes>
-								</filter>	
+								</filter>
 								<filter>
 									<artifact>*</artifact>
 									<excludes>

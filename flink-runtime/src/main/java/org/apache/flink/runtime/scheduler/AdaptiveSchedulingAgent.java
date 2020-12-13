@@ -36,7 +36,6 @@ import org.slf4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -79,7 +78,8 @@ public class AdaptiveSchedulingAgent extends AbstractSchedulingAgent {
 		ScheduledExecutorService actorCriticExecutor,
 		long triggerPeriod,
 		long waitTimeout,
-		int numRetries) {
+		int numRetries,
+		NeuralNetworkConfiguration neuralNetworkConfiguration) {
 
 		super(log, triggerPeriod, executionGraph);
 		this.log = log;
@@ -91,8 +91,9 @@ public class AdaptiveSchedulingAgent extends AbstractSchedulingAgent {
 		this.nCpus = cpuLayout.cpus();
 		this.nVertices = executionGraph.getTotalNumberOfVertices();
 		int numInputs = (nVertices + 1) * nCpus + edgeMap.size();
+		neuralNetworkConfiguration.setNumInputs(numInputs);
 		this.actorCriticModel = new NeuralNetworksBasedActorCriticModel(
-			nCpus, nVertices, numInputs, log);
+			nCpus, nVertices, neuralNetworkConfiguration, log);
 		this.actorCriticExecutor = actorCriticExecutor;
 		this.previousPlacementAction = new ArrayList<>();
 		setupUpdateTriggerThread();
