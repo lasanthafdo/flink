@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.runtime.scheduler;
+package org.apache.flink.runtime.scheduler.agent;
 
 public class NeuralNetworkConfiguration {
 	private int numEpochs;
@@ -25,10 +25,12 @@ public class NeuralNetworkConfiguration {
 	private final long seed;
 	private double learningRate;
 	private double epsilonGreedyThreshold;
+	private int numHiddenNodes;
 	private int trainTriggerThreshold;
+	private int maxTrainingCacheSize;
 
 	public NeuralNetworkConfiguration() {
-		this(100, 680, 0.01, 0.3, 10);
+		this(100, 680, 0.01, 0.3, 10, 50, 1000);
 	}
 
 	public NeuralNetworkConfiguration(
@@ -36,13 +38,17 @@ public class NeuralNetworkConfiguration {
 		long seed,
 		double learningRate,
 		double epsilonGreedyThreshold,
-		int trainTriggerThreshold) {
+		int numHiddenNodes,
+		int trainTriggerThreshold,
+		int maxTrainingCacheSize) {
 
 		this.numEpochs = numEpochs;
 		this.seed = seed;
 		this.learningRate = learningRate;
 		this.epsilonGreedyThreshold = epsilonGreedyThreshold;
+		this.numHiddenNodes = numHiddenNodes;
 		this.trainTriggerThreshold = trainTriggerThreshold;
+		this.maxTrainingCacheSize = maxTrainingCacheSize;
 	}
 
 	public int getNumEpochs() {
@@ -101,5 +107,21 @@ public class NeuralNetworkConfiguration {
 	public NeuralNetworkConfiguration setTrainTriggerThreshold(int trainTriggerThreshold) {
 		this.trainTriggerThreshold = trainTriggerThreshold;
 		return this;
+	}
+
+	public int getMaxTrainingCacheSize() {
+		return maxTrainingCacheSize;
+	}
+
+	public void setMaxTrainingCacheSize(int maxTrainingCacheSize) {
+		this.maxTrainingCacheSize = maxTrainingCacheSize;
+	}
+
+	public int getNumHiddenNodes() {
+		return numHiddenNodes;
+	}
+
+	public void setNumHiddenNodes(int numHiddenNodes) {
+		this.numHiddenNodes = numHiddenNodes;
 	}
 }

@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.runtime.scheduler;
+package org.apache.flink.runtime.scheduler.agent;
 
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.runtime.concurrent.FutureUtils;
@@ -25,19 +25,15 @@ import org.apache.flink.runtime.executiongraph.Execution;
 import org.apache.flink.runtime.executiongraph.ExecutionGraph;
 import org.apache.flink.runtime.executiongraph.ExecutionVertex;
 import org.apache.flink.runtime.messages.Acknowledge;
-import org.apache.flink.runtime.scheduler.strategy.AbstractSchedulingAgent;
-import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionContainer;
+import org.apache.flink.runtime.scheduler.agent.AbstractSchedulingAgent;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategy;
 
-import com.google.common.collect.Iterators;
 import org.slf4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.stream.StreamSupport;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 import static org.apache.flink.util.Preconditions.checkState;
@@ -45,55 +41,24 @@ import static org.apache.flink.util.Preconditions.checkState;
 /**
  * A scheduling agent that will run periodically to reschedule.
  */
-public class DRLSchedulingAgent extends AbstractSchedulingAgent {
+public class TrafficBasedSchedulingAgent extends AbstractSchedulingAgent {
 
 	private final SchedulingStrategy schedulingStrategy;
-	private final Logger log;
-	private final long waitTimeout;
-	private final int numRetries;
-	private final ActorCriticWrapper actorCriticWrapper;
 	private CompletableFuture<Collection<Acknowledge>> previousRescheduleFuture;
 
-	private int currentAction;
-
-	public DRLSchedulingAgent(
-		Logger log,
-		ExecutionGraph executionGraph,
+	public TrafficBasedSchedulingAgent(
+		Logger log, ExecutionGraph executionGraph,
 		SchedulingStrategy schedulingStrategy,
-		long triggerPeriod,
-		long waitTimeout,
-		int numRetries) {
+		long triggerPeriod, long waitTimeout, int numRetries, int updatePeriod) {
+		super(log, triggerPeriod, executionGraph, waitTimeout, numRetries);
 
-		super(log, triggerPeriod, executionGraph);
-		this.log = log;
 		this.schedulingStrategy = checkNotNull(schedulingStrategy);
-		this.waitTimeout = waitTimeout;
-		this.numRetries = numRetries;
-
-		int nVertices = Math.toIntExact(StreamSupport.stream(executionGraph
-			.getSchedulingTopology()
-			.getVertices().spliterator(), false).count());
-		this.actorCriticWrapper = new ActorCriticWrapper(cpuLayout.cpus(), nVertices, log);
-	}
-
-	@Override
-	public List<Integer> getPlacementSolution() {
-		return actorCriticWrapper.getPlacementSolution(currentAction);
 	}
 
 	@Override
 	public void run() {
 		if (previousRescheduleFuture == null || previousRescheduleFuture.isDone()) {
-			updateState();
-			List<Integer> assignedCpuIds = new ArrayList<>(getTopLevelContainer()
-				.getCurrentCpuAssignment()
-				.values());
-			int currentStateId = actorCriticWrapper.getStateFor(assignedCpuIds);
-			currentAction = actorCriticWrapper.getSuggestedAction(
-				getOverallThroughput(),
-				currentStateId,
-				stateId -> -1.0 * getTopLevelContainer().getResourceUsage(
-					SchedulingExecutionContainer.CPU));
+			setCurrentPlacementSolution();
 			log.info("Rescheduling job '" + executionGraph.getJobName() + "'");
 			previousRescheduleFuture = rescheduleEager();
 		}
@@ -147,6 +112,16 @@ public class DRLSchedulingAgent extends AbstractSchedulingAgent {
 			} else {
 				schedulingStrategy.startScheduling(this);
 			}
+		}).whenComplete((ack, fail) -> {
+			if (fail != null) {
+				log.error("Periodic scheduling failed.", fail);
+			}
 		});
+	}
+
+	@Override
+	protected void setCurrentPlacementSolution() {
+		updateStateInformation();
+		currentPlacementAction = getTrafficBasedPlacementAction();
 	}
 }

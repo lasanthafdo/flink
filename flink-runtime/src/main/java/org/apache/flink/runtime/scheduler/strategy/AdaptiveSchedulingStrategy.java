@@ -91,7 +91,7 @@ public class AdaptiveSchedulingStrategy implements SchedulingStrategy {
 		if (runtimeState == null) {
 			setupDefaultPlacement();
 		} else {
-			setupDRLPlacement(runtimeState);
+			setupAdaptivePlacement(runtimeState);
 		}
 		final List<ExecutionVertexDeploymentOption> executionVertexDeploymentOptions =
 			SchedulingStrategyUtils.createExecutionVertexDeploymentOptionsInTopologicalOrder(
@@ -114,7 +114,7 @@ public class AdaptiveSchedulingStrategy implements SchedulingStrategy {
 		});
 	}
 
-	private void setupDRLPlacement(@NotNull SchedulingRuntimeState runtimeState) {
+	private void setupAdaptivePlacement(@NotNull SchedulingRuntimeState runtimeState) {
 		SchedulingExecutionContainer topLevelContainer = runtimeState.getTopLevelContainer();
 		List<Integer> placementSolution = runtimeState.getPlacementSolution();
 		topLevelContainer.releaseAllExecutionVertices();

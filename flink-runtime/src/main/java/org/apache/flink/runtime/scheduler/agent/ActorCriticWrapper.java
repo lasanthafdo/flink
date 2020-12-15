@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.runtime.scheduler;
+package org.apache.flink.runtime.scheduler.agent;
 
 import com.github.chen0040.rl.learning.actorcritic.ActorCriticLearner;
 import org.paukov.combinatorics.CombinatoricsVector;
@@ -44,7 +44,6 @@ public class ActorCriticWrapper {
 	private int stateCount;
 	private int actionCount;
 	private int previousStateId;
-	private int previousActionId;
 
 	private final ActorCriticLearner agent = new ActorCriticLearner(stateCount, actionCount);
 	private final List<Transition> transitionList = new ArrayList<>();
@@ -52,6 +51,8 @@ public class ActorCriticWrapper {
 	private final Map<Integer, List<Integer>> stateSpaceMap;
 	private final int nCpus;
 	private final Logger log;
+	private int currentStateId;
+	private int currentActionId;
 
 	public ActorCriticWrapper(int nCpus, int nVertices, Logger log) {
 		stateSpaceMap = generateActionSpace(nCpus, nVertices);
@@ -141,34 +142,42 @@ public class ActorCriticWrapper {
 		return stateSpaceMap.get(action);
 	}
 
-	public int getSuggestedAction(
-		double previousReward,
-		int currentStateId, Function<Integer, Double> stateRewardFunction) {
-		log.info("Agent does action : " + previousActionId);
-		log.info("Agent receives reward : " + previousReward);
+	public void updateState(
+		double reward,
+		int currentStateId,
+		Function<Integer, Double> stateRewardFunction) {
 
-		Set<Integer> actionsAtState = stateSpaceMap.keySet();
-		Transition previousTransition = new Transition(
-			previousStateId,
-			previousActionId,
-			currentStateId,
-			previousReward);
-		agent.update(
-			previousTransition.oldState,
-			previousTransition.action,
-			previousTransition.newState,
-			actionsAtState,
-			previousTransition.reward,
-			stateRewardFunction);
-		int actionId = agent.selectAction(currentStateId, actionsAtState);
-		previousStateId = currentStateId;
-		previousActionId = actionId;
-		transitionList.add(previousTransition);
-		if (isValidAction(previousTransition.action) && isValidState(previousTransition.oldState)
-			&& isValidState(previousTransition.newState)) {
-			flushToDB(previousTransition);
+		if (this.currentStateId != currentStateId) {
+			log.info("Updating agent state with received reward : " + reward);
+
+			this.previousStateId = this.currentStateId;
+			this.currentStateId = currentStateId;
+
+			Set<Integer> actionsAtState = stateSpaceMap.keySet();
+			Transition currentTransition = new Transition(
+				previousStateId,
+				currentActionId,
+				currentStateId,
+				reward);
+			agent.update(
+				currentTransition.oldState,
+				currentTransition.action,
+				currentTransition.newState,
+				actionsAtState,
+				currentTransition.reward,
+				stateRewardFunction);
+			transitionList.add(currentTransition);
+			if (isValidAction(currentTransition.action) && isValidState(currentTransition.oldState)
+				&& isValidState(currentTransition.newState)) {
+				flushToDB(currentTransition);
+			}
 		}
-		return actionId;
+	}
+
+	public int getSuggestedAction(int currentStateId) {
+		Set<Integer> actionsAtState = stateSpaceMap.keySet();
+		this.currentActionId = agent.selectAction(currentStateId, actionsAtState);
+		return currentActionId;
 	}
 
 	private boolean isValidAction(int actionId) {

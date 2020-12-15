@@ -44,7 +44,6 @@ import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.JobEdge;
 import org.apache.flink.runtime.jobgraph.JobVertex;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
-import org.apache.flink.runtime.jobgraph.ScheduleMode;
 import org.apache.flink.runtime.jobmanager.scheduler.CoLocationGroup;
 import org.apache.flink.runtime.jobmanager.scheduler.SlotSharingGroup;
 import org.apache.flink.runtime.operators.coordination.OperatorCoordinator;
@@ -55,10 +54,12 @@ import org.apache.flink.util.IOUtils;
 import org.apache.flink.util.OptionalFailure;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.SerializedValue;
+
 import org.slf4j.Logger;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -127,10 +128,10 @@ public class ExecutionJobVertex implements AccessExecutionJobVertex, Archiveable
 	 */
 	@VisibleForTesting
 	ExecutionJobVertex(
-			ExecutionGraph graph,
-			JobVertex jobVertex,
-			int defaultParallelism,
-			Time timeout) throws JobException {
+		ExecutionGraph graph,
+		JobVertex jobVertex,
+		int defaultParallelism,
+		Time timeout) throws JobException {
 
 		this(
 			graph,
@@ -143,13 +144,13 @@ public class ExecutionJobVertex implements AccessExecutionJobVertex, Archiveable
 	}
 
 	public ExecutionJobVertex(
-			ExecutionGraph graph,
-			JobVertex jobVertex,
-			int defaultParallelism,
-			int maxPriorAttemptsHistoryLength,
-			Time timeout,
-			long initialGlobalModVersion,
-			long createTimestamp) throws JobException {
+		ExecutionGraph graph,
+		JobVertex jobVertex,
+		int defaultParallelism,
+		int maxPriorAttemptsHistoryLength,
+		Time timeout,
+		long initialGlobalModVersion,
+		long createTimestamp) throws JobException {
 
 		if (graph == null || jobVertex == null) {
 			throw new NullPointerException();
@@ -167,19 +168,23 @@ public class ExecutionJobVertex implements AccessExecutionJobVertex, Archiveable
 
 		// if no max parallelism was configured by the user, we calculate and set a default
 		setMaxParallelismInternal(maxParallelismConfigured ?
-				configuredMaxParallelism : KeyGroupRangeAssignment.computeDefaultMaxParallelism(numTaskVertices));
+			configuredMaxParallelism : KeyGroupRangeAssignment.computeDefaultMaxParallelism(
+			numTaskVertices));
 
 		// verify that our parallelism is not higher than the maximum parallelism
 		if (numTaskVertices > maxParallelism) {
 			throw new JobException(
-				String.format("Vertex %s's parallelism (%s) is higher than the max parallelism (%s). Please lower the parallelism or increase the max parallelism.",
+				String.format(
+					"Vertex %s's parallelism (%s) is higher than the max parallelism (%s). Please lower the parallelism or increase the max parallelism.",
 					jobVertex.getName(),
 					numTaskVertices,
 					maxParallelism));
 		}
 
 		this.parallelism = numTaskVertices;
-		this.resourceProfile = ResourceProfile.fromResourceSpec(jobVertex.getMinResources(), MemorySize.ZERO);
+		this.resourceProfile = ResourceProfile.fromResourceSpec(
+			jobVertex.getMinResources(),
+			MemorySize.ZERO);
 
 		this.taskVertices = new ExecutionVertex[numTaskVertices];
 
@@ -201,23 +206,23 @@ public class ExecutionJobVertex implements AccessExecutionJobVertex, Archiveable
 			final IntermediateDataSet result = jobVertex.getProducedDataSets().get(i);
 
 			this.producedDataSets[i] = new IntermediateResult(
-					result.getId(),
-					this,
-					numTaskVertices,
-					result.getResultType());
+				result.getId(),
+				this,
+				numTaskVertices,
+				result.getResultType());
 		}
 
 		// create all task vertices
 		for (int i = 0; i < numTaskVertices; i++) {
 			ExecutionVertex vertex = new ExecutionVertex(
-					this,
-					i,
-					producedDataSets,
-					timeout,
-					initialGlobalModVersion,
-					createTimestamp,
-					maxPriorAttemptsHistoryLength,
-					graph.getScheduleMode() == ScheduleMode.PINNED);
+				this,
+				i,
+				producedDataSets,
+				timeout,
+				initialGlobalModVersion,
+				createTimestamp,
+				maxPriorAttemptsHistoryLength,
+				graph.getScheduleMode().pinTaskToCpu());
 
 			this.taskVertices[i] = vertex;
 		}
@@ -225,22 +230,30 @@ public class ExecutionJobVertex implements AccessExecutionJobVertex, Archiveable
 		// sanity check for the double referencing between intermediate result partitions and execution vertices
 		for (IntermediateResult ir : this.producedDataSets) {
 			if (ir.getNumberOfAssignedPartitions() != parallelism) {
-				throw new RuntimeException("The intermediate result's partitions were not correctly assigned.");
+				throw new RuntimeException(
+					"The intermediate result's partitions were not correctly assigned.");
 			}
 		}
 
-		final List<SerializedValue<OperatorCoordinator.Provider>> coordinatorProviders = getJobVertex().getOperatorCoordinators();
+		final List<SerializedValue<OperatorCoordinator.Provider>> coordinatorProviders = getJobVertex()
+			.getOperatorCoordinators();
 		if (coordinatorProviders.isEmpty()) {
 			this.operatorCoordinators = Collections.emptyList();
 		} else {
-			final ArrayList<OperatorCoordinatorHolder> coordinators = new ArrayList<>(coordinatorProviders.size());
+			final ArrayList<OperatorCoordinatorHolder> coordinators = new ArrayList<>(
+				coordinatorProviders.size());
 			try {
 				for (final SerializedValue<OperatorCoordinator.Provider> provider : coordinatorProviders) {
-					coordinators.add(OperatorCoordinatorHolder.create(provider, this, graph.getUserClassLoader()));
+					coordinators.add(OperatorCoordinatorHolder.create(
+						provider,
+						this,
+						graph.getUserClassLoader()));
 				}
 			} catch (Exception | LinkageError e) {
 				IOUtils.closeAllQuietly(coordinators);
-				throw new JobException("Cannot instantiate the coordinator for operator " + getName(), e);
+				throw new JobException(
+					"Cannot instantiate the coordinator for operator " + getName(),
+					e);
 			}
 			this.operatorCoordinators = Collections.unmodifiableList(coordinators);
 		}
@@ -263,13 +276,13 @@ public class ExecutionJobVertex implements AccessExecutionJobVertex, Archiveable
 				} finally {
 					currentThread.setContextClassLoader(oldContextClassLoader);
 				}
-			}
-			else {
+			} else {
 				inputSplits = null;
 			}
-		}
-		catch (Throwable t) {
-			throw new JobException("Creating the input splits caused an error: " + t.getMessage(), t);
+		} catch (Throwable t) {
+			throw new JobException(
+				"Creating the input splits caused an error: " + t.getMessage(),
+				t);
 		}
 	}
 
@@ -284,9 +297,10 @@ public class ExecutionJobVertex implements AccessExecutionJobVertex, Archiveable
 
 	public void setMaxParallelism(int maxParallelismDerived) {
 
-		Preconditions.checkState(!maxParallelismConfigured,
-				"Attempt to override a configured max parallelism. Configured: " + this.maxParallelism
-						+ ", argument: " + maxParallelismDerived);
+		Preconditions.checkState(
+			!maxParallelismConfigured,
+			"Attempt to override a configured max parallelism. Configured: " + this.maxParallelism
+				+ ", argument: " + maxParallelismDerived);
 
 		setMaxParallelismInternal(maxParallelismDerived);
 	}
@@ -297,9 +311,9 @@ public class ExecutionJobVertex implements AccessExecutionJobVertex, Archiveable
 		}
 
 		Preconditions.checkArgument(maxParallelism > 0
-						&& maxParallelism <= KeyGroupRangeAssignment.UPPER_BOUND_MAX_PARALLELISM,
-				"Overriding max parallelism is not in valid bounds (1..%s), found: %s",
-				KeyGroupRangeAssignment.UPPER_BOUND_MAX_PARALLELISM, maxParallelism);
+				&& maxParallelism <= KeyGroupRangeAssignment.UPPER_BOUND_MAX_PARALLELISM,
+			"Overriding max parallelism is not in valid bounds (1..%s), found: %s",
+			KeyGroupRangeAssignment.UPPER_BOUND_MAX_PARALLELISM, maxParallelism);
 
 		this.maxParallelism = maxParallelism;
 	}
@@ -421,7 +435,11 @@ public class ExecutionJobVertex implements AccessExecutionJobVertex, Archiveable
 		List<JobEdge> inputs = jobVertex.getInputs();
 
 		if (LOG.isDebugEnabled()) {
-			LOG.debug(String.format("Connecting ExecutionJobVertex %s (%s) to %d predecessors.", jobVertex.getID(), jobVertex.getName(), inputs.size()));
+			LOG.debug(String.format(
+				"Connecting ExecutionJobVertex %s (%s) to %d predecessors.",
+				jobVertex.getID(),
+				jobVertex.getName(),
+				inputs.size()));
 		}
 
 		for (int num = 0; num < inputs.size(); num++) {
@@ -429,11 +447,20 @@ public class ExecutionJobVertex implements AccessExecutionJobVertex, Archiveable
 
 			if (LOG.isDebugEnabled()) {
 				if (edge.getSource() == null) {
-					LOG.debug(String.format("Connecting input %d of vertex %s (%s) to intermediate result referenced via ID %s.",
-							num, jobVertex.getID(), jobVertex.getName(), edge.getSourceId()));
+					LOG.debug(String.format(
+						"Connecting input %d of vertex %s (%s) to intermediate result referenced via ID %s.",
+						num,
+						jobVertex.getID(),
+						jobVertex.getName(),
+						edge.getSourceId()));
 				} else {
-					LOG.debug(String.format("Connecting input %d of vertex %s (%s) to intermediate result referenced via predecessor %s (%s).",
-							num, jobVertex.getID(), jobVertex.getName(), edge.getSource().getProducer().getID(), edge.getSource().getProducer().getName()));
+					LOG.debug(String.format(
+						"Connecting input %d of vertex %s (%s) to intermediate result referenced via predecessor %s (%s).",
+						num,
+						jobVertex.getID(),
+						jobVertex.getName(),
+						edge.getSource().getProducer().getID(),
+						edge.getSource().getProducer().getName()));
 				}
 			}
 
@@ -441,7 +468,8 @@ public class ExecutionJobVertex implements AccessExecutionJobVertex, Archiveable
 			// in which this method is called for the job vertices is not a topological order
 			IntermediateResult ires = intermediateDataSets.get(edge.getSourceId());
 			if (ires == null) {
-				throw new JobException("Cannot connect this job graph to the previous graph. No previous intermediate result found for ID "
+				throw new JobException(
+					"Cannot connect this job graph to the previous graph. No previous intermediate result found for ID "
 						+ edge.getSourceId());
 			}
 
@@ -496,7 +524,7 @@ public class ExecutionJobVertex implements AccessExecutionJobVertex, Archiveable
 	}
 
 	public void resetForNewExecution(final long timestamp, final long expectedGlobalModVersion)
-			throws GlobalModVersionMismatch {
+		throws GlobalModVersionMismatch {
 
 		synchronized (stateMonitor) {
 			// check and reset the sharing groups with scheduler hints
@@ -509,12 +537,14 @@ public class ExecutionJobVertex implements AccessExecutionJobVertex, Archiveable
 				if (this.inputSplits != null) {
 					// lazy assignment
 					@SuppressWarnings("unchecked")
-					InputSplitSource<InputSplit> splitSource = (InputSplitSource<InputSplit>) jobVertex.getInputSplitSource();
+					InputSplitSource<InputSplit> splitSource = (InputSplitSource<InputSplit>) jobVertex
+						.getInputSplitSource();
 					this.splitAssigner = splitSource.getInputSplitAssigner(this.inputSplits);
 				}
-			}
-			catch (Throwable t) {
-				throw new RuntimeException("Re-creating the input split assigner failed: " + t.getMessage(), t);
+			} catch (Throwable t) {
+				throw new RuntimeException(
+					"Re-creating the input split assigner failed: " + t.getMessage(),
+					t);
 			}
 		}
 	}
@@ -527,7 +557,9 @@ public class ExecutionJobVertex implements AccessExecutionJobVertex, Archiveable
 		Map<String, OptionalFailure<Accumulator<?, ?>>> userAccumulators = new HashMap<>();
 
 		for (ExecutionVertex vertex : taskVertices) {
-			Map<String, Accumulator<?, ?>> next = vertex.getCurrentExecutionAttempt().getUserAccumulators();
+			Map<String, Accumulator<?, ?>> next = vertex
+				.getCurrentExecutionAttempt()
+				.getUserAccumulators();
 			if (next != null) {
 				AccumulatorHelper.mergeInto(userAccumulators, next);
 			}
@@ -562,14 +594,17 @@ public class ExecutionJobVertex implements AccessExecutionJobVertex, Archiveable
 	 * and so on.
 	 *
 	 * @param verticesPerState The number of vertices in each state (indexed by the ordinal of
-	 *                         the ExecutionState values).
+	 * 	the ExecutionState values).
 	 * @param parallelism The parallelism of the ExecutionJobVertex
 	 *
 	 * @return The aggregate state of this ExecutionJobVertex.
 	 */
-	public static ExecutionState getAggregateJobVertexState(int[] verticesPerState, int parallelism) {
+	public static ExecutionState getAggregateJobVertexState(
+		int[] verticesPerState,
+		int parallelism) {
 		if (verticesPerState == null || verticesPerState.length != ExecutionState.values().length) {
-			throw new IllegalArgumentException("Must provide an array as large as there are execution states.");
+			throw new IllegalArgumentException(
+				"Must provide an array as large as there are execution states.");
 		}
 
 		if (verticesPerState[ExecutionState.FAILED.ordinal()] > 0) {
@@ -577,18 +612,14 @@ public class ExecutionJobVertex implements AccessExecutionJobVertex, Archiveable
 		}
 		if (verticesPerState[ExecutionState.CANCELING.ordinal()] > 0) {
 			return ExecutionState.CANCELING;
-		}
-		else if (verticesPerState[ExecutionState.CANCELED.ordinal()] > 0) {
+		} else if (verticesPerState[ExecutionState.CANCELED.ordinal()] > 0) {
 			return ExecutionState.CANCELED;
-		}
-		else if (verticesPerState[ExecutionState.RUNNING.ordinal()] > 0) {
+		} else if (verticesPerState[ExecutionState.RUNNING.ordinal()] > 0) {
 			return ExecutionState.RUNNING;
-		}
-		else if (verticesPerState[ExecutionState.FINISHED.ordinal()] > 0) {
+		} else if (verticesPerState[ExecutionState.FINISHED.ordinal()] > 0) {
 			return verticesPerState[ExecutionState.FINISHED.ordinal()] == parallelism ?
-					ExecutionState.FINISHED : ExecutionState.RUNNING;
-		}
-		else {
+				ExecutionState.FINISHED : ExecutionState.RUNNING;
+		} else {
 			// all else collapses under created
 			return ExecutionState.CREATED;
 		}

@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.runtime.scheduler;
+package org.apache.flink.runtime.scheduler.agent;
 
 import org.influxdb.InfluxDB;
 import org.influxdb.InfluxDBFactory;

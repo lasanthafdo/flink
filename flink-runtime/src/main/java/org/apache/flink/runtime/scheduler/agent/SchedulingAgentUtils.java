@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.runtime.scheduler;
+package org.apache.flink.runtime.scheduler.agent;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.DeploymentOptions;
@@ -33,7 +33,7 @@ import java.util.concurrent.ScheduledExecutorService;
  * Utility class to help the scheduling agent.
  */
 public class SchedulingAgentUtils {
-	static SchedulingAgent buildSchedulingAgent(
+	public static SchedulingAgent buildSchedulingAgent(
 		Logger log,
 		ExecutionGraph executionGraph,
 		ScheduleMode scheduleMode,
@@ -41,6 +41,7 @@ public class SchedulingAgentUtils {
 		Configuration jobMasterConfiguration,
 		ScheduledExecutorService executorService) {
 
+		int nDefaultConfigElements = 4;
 		switch (scheduleMode) {
 			case PINNED:
 				if (jobMasterConfiguration.contains(DeploymentOptions.SCHEDULING_AGENT_CONFIG_STRING)) {
@@ -71,11 +72,12 @@ public class SchedulingAgentUtils {
 				if (jobMasterConfiguration.contains(DeploymentOptions.SCHEDULING_AGENT_CONFIG_STRING)) {
 					String agentConfigString = jobMasterConfiguration.getString(
 						DeploymentOptions.SCHEDULING_AGENT_CONFIG_STRING);
-					String[] configElements = agentConfigString.split(",", 3);
-					if (configElements.length == 3) {
+					String[] configElements = agentConfigString.split(",", nDefaultConfigElements);
+					if (configElements.length == nDefaultConfigElements) {
 						long triggerPeriod = Long.parseLong(configElements[0]);
 						long waitTimeOut = Long.parseLong(configElements[1]);
 						int numRetries = Integer.parseInt(configElements[2]);
+						int updatePeriod = Integer.parseInt(configElements[3]);
 
 						return new TrafficBasedSchedulingAgent(
 							log,
@@ -83,7 +85,8 @@ public class SchedulingAgentUtils {
 							schedulingStrategy,
 							triggerPeriod,
 							waitTimeOut,
-							numRetries);
+							numRetries,
+							updatePeriod);
 					} else {
 						throw new IllegalConfigurationException(
 							"Incorrect number of arguments in the scheduling agent configuration string.");
@@ -96,19 +99,22 @@ public class SchedulingAgentUtils {
 				if (jobMasterConfiguration.contains(DeploymentOptions.SCHEDULING_AGENT_CONFIG_STRING)) {
 					String agentConfigString = jobMasterConfiguration.getString(
 						DeploymentOptions.SCHEDULING_AGENT_CONFIG_STRING);
-					String[] configElements = agentConfigString.split(",", 3);
-					if (configElements.length == 3) {
+					String[] configElements = agentConfigString.split(",", nDefaultConfigElements);
+					if (configElements.length == nDefaultConfigElements) {
 						long triggerPeriod = Long.parseLong(configElements[0]);
 						long waitTimeOut = Long.parseLong(configElements[1]);
 						int numRetries = Integer.parseInt(configElements[2]);
+						int updatePeriod = Integer.parseInt(configElements[3]);
 
 						return new DRLSchedulingAgent(
 							log,
 							executionGraph,
 							schedulingStrategy,
+							executorService,
 							triggerPeriod,
 							waitTimeOut,
-							numRetries);
+							numRetries,
+							updatePeriod);
 					} else {
 						throw new IllegalConfigurationException(
 							"Incorrect number of arguments in the scheduling agent configuration string.");
@@ -121,33 +127,40 @@ public class SchedulingAgentUtils {
 				if (jobMasterConfiguration.contains(DeploymentOptions.SCHEDULING_AGENT_CONFIG_STRING)) {
 					String agentConfigString = jobMasterConfiguration.getString(
 						DeploymentOptions.SCHEDULING_AGENT_CONFIG_STRING);
-					String[] configElements = agentConfigString.split(",", 3);
+					String[] configElements = agentConfigString.split(",", 11);
 					long triggerPeriod;
 					long waitTimeOut;
 					int numRetries;
+					int updatePeriod;
 					NeuralNetworkConfiguration neuralNetworkConfiguration;
-					if (configElements.length == 3) {
+					if (configElements.length == nDefaultConfigElements) {
 						triggerPeriod = Long.parseLong(configElements[0]);
 						waitTimeOut = Long.parseLong(configElements[1]);
 						numRetries = Integer.parseInt(configElements[2]);
+						updatePeriod = Integer.parseInt(configElements[3]);
 
 						neuralNetworkConfiguration = new NeuralNetworkConfiguration();
-					} else if (configElements.length == 8) {
+					} else if (configElements.length == 11) {
 						triggerPeriod = Long.parseLong(configElements[0]);
 						waitTimeOut = Long.parseLong(configElements[1]);
 						numRetries = Integer.parseInt(configElements[2]);
-						int numEpochs = Integer.parseInt(configElements[3]);
-						long seed = Long.parseLong(configElements[4]);
-						double learningRate = Double.parseDouble(configElements[5]);
-						double epsilonGreedyThreshold = Double.parseDouble(configElements[6]);
-						int trainTriggerThreshold = Integer.parseInt(configElements[7]);
+						updatePeriod = Integer.parseInt(configElements[3]);
+						int numEpochs = Integer.parseInt(configElements[4]);
+						long seed = Long.parseLong(configElements[5]);
+						double learningRate = Double.parseDouble(configElements[6]);
+						double epsilonGreedyThreshold = Double.parseDouble(configElements[7]);
+						int numHiddenNodes = Integer.parseInt(configElements[8]);
+						int trainTriggerThreshold = Integer.parseInt(configElements[9]);
+						int maxTrainingCacheSize = Integer.parseInt(configElements[10]);
 
 						neuralNetworkConfiguration = new NeuralNetworkConfiguration(
 							numEpochs,
 							seed,
 							learningRate,
 							epsilonGreedyThreshold,
-							trainTriggerThreshold);
+							numHiddenNodes,
+							trainTriggerThreshold,
+							maxTrainingCacheSize);
 					} else {
 						throw new IllegalConfigurationException(
 							"Incorrect number of arguments in the scheduling agent configuration string.");
@@ -160,8 +173,8 @@ public class SchedulingAgentUtils {
 						triggerPeriod,
 						waitTimeOut,
 						numRetries,
+						updatePeriod,
 						neuralNetworkConfiguration);
-
 				} else {
 					throw new IllegalConfigurationException(
 						"Unable to obtain agent configuration details");

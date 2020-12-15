@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.runtime.scheduler;
+package org.apache.flink.runtime.scheduler.agent;
 
 /**
  * The scheduling agent interface used for dynamic oeprator placement.
@@ -28,4 +28,6 @@ public interface SchedulingAgent extends Runnable {
 	 * @return the period between executions in milliseconds
 	 */
 	long getTriggerPeriod();
+
+	void shutdownAgent();
 }

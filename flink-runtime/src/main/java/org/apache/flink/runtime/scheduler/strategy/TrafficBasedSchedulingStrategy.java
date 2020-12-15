@@ -113,70 +113,19 @@ public class TrafficBasedSchedulingStrategy implements SchedulingStrategy {
 
 	private void setupTrafficBasedPlacement(SchedulingRuntimeState runtimeState) {
 		SchedulingExecutionContainer topLevelContainer = runtimeState.getTopLevelContainer();
+		List<Integer> placementSolution = runtimeState.getPlacementSolution();
 		topLevelContainer.releaseAllExecutionVertices();
-		List<SchedulingExecutionEdge> orderedEdgeList = runtimeState.getOrderedEdgeList();
-		Set<SchedulingExecutionVertex> strandedVertices = new HashSet<>();
-		orderedEdgeList.forEach(schedulingExecutionEdge -> {
-			SchedulingExecutionVertex sourceVertex = schedulingExecutionEdge.getSourceSchedulingExecutionVertex();
-			SchedulingExecutionVertex targetVertex = schedulingExecutionEdge.getTargetSchedulingExecutionVertex();
-
-			boolean sourceVertexAssigned = topLevelContainer.isAssignedToContainer(
-				sourceVertex);
-			boolean targetVertexAssigned = topLevelContainer.isAssignedToContainer(
-				targetVertex);
-
-			if (!sourceVertexAssigned && !targetVertexAssigned) {
-				List<Integer> cpuIds = topLevelContainer.tryScheduleInSameContainer(
-					sourceVertex, targetVertex);
-				if (cpuIds.size() >= 2) {
-					sourceVertex.setExecutionPlacement(new ExecutionPlacement(
-						DEFAULT_TASK_MANAGER_ADDRESS,
-						cpuIds.get(0)));
-					targetVertex.setExecutionPlacement(new ExecutionPlacement(
-						DEFAULT_TASK_MANAGER_ADDRESS,
-						cpuIds.get(1)));
-					strandedVertices.remove(sourceVertex);
-					strandedVertices.remove(targetVertex);
-				} else {
-					strandedVertices.add(sourceVertex);
-					strandedVertices.add(targetVertex);
-				}
-			} else if (!targetVertexAssigned) {
-				int cpuId = topLevelContainer.scheduleExecutionVertex(
-					targetVertex);
-				if (cpuId != -1) {
-					targetVertex.setExecutionPlacement(new ExecutionPlacement(
-						DEFAULT_TASK_MANAGER_ADDRESS, cpuId));
-					strandedVertices.remove(targetVertex);
-				} else {
-					strandedVertices.add(targetVertex);
-				}
-			} else if (!sourceVertexAssigned) {
-				int cpuId = topLevelContainer.scheduleExecutionVertex(
-					sourceVertex);
-				if (cpuId != -1) {
-					sourceVertex.setExecutionPlacement(new ExecutionPlacement(
-						DEFAULT_TASK_MANAGER_ADDRESS, cpuId));
-					strandedVertices.remove(sourceVertex);
-				} else {
-					strandedVertices.add(sourceVertex);
-				}
-			}
-		});
-		strandedVertices.forEach(schedulingExecutionVertex -> {
-			int cpuId = topLevelContainer.scheduleExecutionVertex(
-				schedulingExecutionVertex);
-			if (cpuId == -1) {
-				throw new FlinkRuntimeException(
-					"Cannot allocate a CPU for executing operator with ID "
-						+ schedulingExecutionVertex.getId());
-			} else {
+		AtomicInteger placementIndex = new AtomicInteger(1);
+		schedulingTopology
+			.getVertices()
+			.forEach(schedulingExecutionVertex -> {
+				topLevelContainer.forceSchedule(
+					schedulingExecutionVertex,
+					placementSolution.indexOf(placementIndex.get()));
 				schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
 					DEFAULT_TASK_MANAGER_ADDRESS,
-					cpuId
-				));
-			}
-		});
+					placementSolution.indexOf(placementIndex.getAndIncrement())));
+			});
 	}
 
 	/**

@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.runtime.scheduler;
+package org.apache.flink.runtime.scheduler.agent;
 
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.runtime.concurrent.FutureUtils;
@@ -25,30 +25,15 @@ import org.apache.flink.runtime.executiongraph.Execution;
 import org.apache.flink.runtime.executiongraph.ExecutionGraph;
 import org.apache.flink.runtime.executiongraph.ExecutionVertex;
 import org.apache.flink.runtime.messages.Acknowledge;
-import org.apache.flink.runtime.scheduler.adapter.DefaultExecutionEdge;
-import org.apache.flink.runtime.scheduler.adapter.SchedulingCpuCore;
-import org.apache.flink.runtime.scheduler.adapter.SchedulingCpuSocket;
-import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionContainer;
-import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionEdge;
-import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
-import org.apache.flink.runtime.scheduler.strategy.SchedulingResultPartition;
-import org.apache.flink.runtime.scheduler.strategy.SchedulingRuntimeState;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategy;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingTopology;
 
 import org.slf4j.Logger;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 import static org.apache.flink.util.Preconditions.checkState;
@@ -85,6 +70,11 @@ public class PeriodicSchedulingAgent implements SchedulingAgent {
 	@Override
 	public long getTriggerPeriod() {
 		return triggerPeriod;
+	}
+
+	@Override
+	public void shutdownAgent() {
+
 	}
 
 	@Override

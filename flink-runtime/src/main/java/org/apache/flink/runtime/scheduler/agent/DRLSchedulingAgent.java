@@ -16,11 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.runtime.scheduler;
-
-import net.openhft.affinity.AffinityLock;
-
-import net.openhft.affinity.CpuLayout;
+package org.apache.flink.runtime.scheduler.agent;
 
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.runtime.concurrent.FutureUtils;
@@ -29,32 +25,19 @@ import org.apache.flink.runtime.executiongraph.Execution;
 import org.apache.flink.runtime.executiongraph.ExecutionGraph;
 import org.apache.flink.runtime.executiongraph.ExecutionVertex;
 import org.apache.flink.runtime.messages.Acknowledge;
-import org.apache.flink.runtime.scheduler.adapter.DefaultExecutionEdge;
-import org.apache.flink.runtime.scheduler.adapter.SchedulingCpuCore;
-import org.apache.flink.runtime.scheduler.adapter.SchedulingCpuSocket;
-import org.apache.flink.runtime.scheduler.adapter.SchedulingNode;
-import org.apache.flink.runtime.scheduler.strategy.AbstractSchedulingAgent;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionContainer;
-import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionEdge;
-import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
-import org.apache.flink.runtime.scheduler.strategy.SchedulingResultPartition;
-import org.apache.flink.runtime.scheduler.strategy.SchedulingRuntimeState;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategy;
-import org.apache.flink.runtime.scheduler.strategy.SchedulingTopology;
 
 import org.slf4j.Logger;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
-import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.StreamSupport;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 import static org.apache.flink.util.Preconditions.checkState;
@@ -62,28 +45,72 @@ import static org.apache.flink.util.Preconditions.checkState;
 /**
  * A scheduling agent that will run periodically to reschedule.
  */
-public class TrafficBasedSchedulingAgent extends AbstractSchedulingAgent {
+public class DRLSchedulingAgent extends AbstractSchedulingAgent {
 
 	private final SchedulingStrategy schedulingStrategy;
-	private final long waitTimeout;
-	private final int numRetries;
-
+	private final ActorCriticWrapper actorCriticWrapper;
 	private CompletableFuture<Collection<Acknowledge>> previousRescheduleFuture;
+	private final ScheduledExecutorService executorService;
+	private final long updatePeriodInSeconds;
 
-	public TrafficBasedSchedulingAgent(
-		Logger log, ExecutionGraph executionGraph,
+	public DRLSchedulingAgent(
+		Logger log,
+		ExecutionGraph executionGraph,
 		SchedulingStrategy schedulingStrategy,
-		long triggerPeriod, long waitTimeout, int numRetries) {
-		super(log, triggerPeriod, executionGraph);
+		ScheduledExecutorService executorService,
+		long triggerPeriod,
+		long waitTimeout,
+		int numRetries,
+		int updatePeriod) {
 
+		super(log, triggerPeriod, executionGraph, waitTimeout, numRetries);
 		this.schedulingStrategy = checkNotNull(schedulingStrategy);
-		this.waitTimeout = waitTimeout;
-		this.numRetries = numRetries;
+
+		int nVertices = Math.toIntExact(StreamSupport.stream(executionGraph
+			.getSchedulingTopology()
+			.getVertices().spliterator(), false).count());
+		this.actorCriticWrapper = new ActorCriticWrapper(cpuLayout.cpus(), nVertices, log);
+		this.executorService = executorService;
+		this.updatePeriodInSeconds = updatePeriod;
+		setupUpdateTriggerThread();
+	}
+
+	private void setupUpdateTriggerThread() {
+		updateExecutor = executorService.scheduleAtFixedRate(() -> {
+			try {
+				setCurrentPlacementSolution();
+			} catch (Exception e) {
+				log.error(
+					"Encountered exception when trying to update state: {}",
+					e.getMessage(),
+					e);
+			}
+		}, updatePeriodInSeconds, updatePeriodInSeconds, TimeUnit.SECONDS);
+	}
+
+	@Override
+	public List<Integer> getPlacementSolution() {
+		return currentPlacementAction;
+	}
+
+	@Override
+	protected void setCurrentPlacementSolution() {
+		updateStateInformation();
+		List<Integer> assignedCpuIds = new ArrayList<>(getTopLevelContainer()
+			.getCurrentCpuAssignment()
+			.values());
+		int currentStateId = actorCriticWrapper.getStateFor(assignedCpuIds);
+		actorCriticWrapper.updateState(
+			getOverallThroughput(),
+			currentStateId,
+			stateId -> -1.0
+				* getTopLevelContainer().getResourceUsage(SchedulingExecutionContainer.CPU));
+		int currentAction = actorCriticWrapper.getSuggestedAction(currentStateId);
+		currentPlacementAction = actorCriticWrapper.getPlacementSolution(currentAction);
 	}
 
 	@Override
 	public void run() {
-		updateState();
 		if (previousRescheduleFuture == null || previousRescheduleFuture.isDone()) {
 			log.info("Rescheduling job '" + executionGraph.getJobName() + "'");
 			previousRescheduleFuture = rescheduleEager();
@@ -137,10 +164,6 @@ public class TrafficBasedSchedulingAgent extends AbstractSchedulingAgent {
 				throw new CompletionException("Halt process unsuccessful", fail);
 			} else {
 				schedulingStrategy.startScheduling(this);
-			}
-		}).whenComplete((ack, fail) -> {
-			if (fail != null) {
-				log.error("Periodic scheduling failed.", fail);
 			}
 		});
 	}

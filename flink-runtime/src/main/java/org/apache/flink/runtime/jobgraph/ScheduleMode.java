@@ -23,42 +23,44 @@ package org.apache.flink.runtime.jobgraph;
  */
 public enum ScheduleMode {
 	/** Schedule tasks lazily from the sources. Downstream tasks are started once their input data are ready */
-	LAZY_FROM_SOURCES(true),
+	LAZY_FROM_SOURCES(true, false),
 
 	/**
 	 * Same as LAZY_FROM_SOURCES just with the difference that it uses batch slot requests which support the
 	 * execution of jobs with fewer slots than requested. However, the user needs to make sure that the job
 	 * does not contain any pipelined shuffles (every pipelined region can be executed with a single slot).
 	 */
-	LAZY_FROM_SOURCES_WITH_BATCH_SLOT_REQUEST(true),
+	LAZY_FROM_SOURCES_WITH_BATCH_SLOT_REQUEST(true, false),
 
 	/** Schedules all tasks immediately. */
-	EAGER(false),
+	EAGER(false, false),
 
 	/**
 	 * Schedules all tasks immediately and pins a task to a CPU
 	 */
-	PINNED(false),
+	PINNED(false, true),
 
 	/**
 	 * Use the traffic based algorithm
 	 */
-	TRAFFIC_BASED(false),
+	TRAFFIC_BASED(false, true),
 
 	/**
 	 * Schedules all tasks immediately and places according to a model
 	 */
-	DRL(false),
+	DRL(false, true),
 
 	/**
 	 * Schedules all tasks immediately according to an adaptive model
 	 */
-	ADAPTIVE(false);
+	ADAPTIVE(false, true);
 
 	private final boolean allowLazyDeployment;
+	private final boolean pinTaskToCpu;
 
-	ScheduleMode(boolean allowLazyDeployment) {
+	ScheduleMode(boolean allowLazyDeployment, boolean pinTaskToCpu) {
 		this.allowLazyDeployment = allowLazyDeployment;
+		this.pinTaskToCpu = pinTaskToCpu;
 	}
 
 	/**
@@ -67,4 +69,12 @@ public enum ScheduleMode {
 	public boolean allowLazyDeployment() {
 		return allowLazyDeployment;
 	}
+
+	/**
+	 * Returns whether we are to pin a task to a CPU.
+	 */
+	public boolean pinTaskToCpu() {
+		return pinTaskToCpu;
+	}
+
 }

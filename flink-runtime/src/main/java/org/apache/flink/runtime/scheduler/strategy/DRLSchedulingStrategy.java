@@ -119,7 +119,7 @@ public class DRLSchedulingStrategy implements SchedulingStrategy {
 		SchedulingExecutionContainer topLevelContainer = runtimeState.getTopLevelContainer();
 		List<Integer> placementSolution = runtimeState.getPlacementSolution();
 		topLevelContainer.releaseAllExecutionVertices();
-		AtomicInteger placementIndex = new AtomicInteger();
+		AtomicInteger placementIndex = new AtomicInteger(0);
 		schedulingTopology.getVertices().forEach(schedulingExecutionVertex -> {
 			topLevelContainer.forceSchedule(
 				schedulingExecutionVertex,
