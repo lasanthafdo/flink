@@ -78,7 +78,7 @@ public class DRLSchedulingAgent extends AbstractSchedulingAgent {
 	private void setupUpdateTriggerThread() {
 		updateExecutor = executorService.scheduleAtFixedRate(() -> {
 			try {
-				setCurrentPlacementSolution();
+				updatePlacementSolution();
 			} catch (Exception e) {
 				log.error(
 					"Encountered exception when trying to update state: {}",
@@ -90,11 +90,11 @@ public class DRLSchedulingAgent extends AbstractSchedulingAgent {
 
 	@Override
 	public List<Integer> getPlacementSolution() {
-		return currentPlacementAction;
+		return suggestedPlacementAction;
 	}
 
 	@Override
-	protected void setCurrentPlacementSolution() {
+	protected void updatePlacementSolution() {
 		updateStateInformation();
 		List<Integer> assignedCpuIds = new ArrayList<>(getTopLevelContainer()
 			.getCurrentCpuAssignment()
@@ -106,7 +106,7 @@ public class DRLSchedulingAgent extends AbstractSchedulingAgent {
 			stateId -> -1.0
 				* getTopLevelContainer().getResourceUsage(SchedulingExecutionContainer.CPU));
 		int currentAction = actorCriticWrapper.getSuggestedAction(currentStateId);
-		currentPlacementAction = actorCriticWrapper.getPlacementSolution(currentAction);
+		suggestedPlacementAction = actorCriticWrapper.getPlacementSolution(currentAction);
 	}
 
 	@Override

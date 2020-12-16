@@ -30,7 +30,7 @@ public class NeuralNetworkConfiguration {
 	private int maxTrainingCacheSize;
 
 	public NeuralNetworkConfiguration() {
-		this(100, 680, 0.01, 0.3, 10, 50, 1000);
+		this(100, 680, 0.01, 0.3, 50, 10, 1000);
 	}
 
 	public NeuralNetworkConfiguration(

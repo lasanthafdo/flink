@@ -53,6 +53,8 @@ public class NeuralNetworksBasedActorCriticModel {
 	private final int nCpus;
 
 	private final Logger log;
+	private final int numHiddenNodes;
+	private final int maxTrainingCacheSize;
 	private MultiLayerNetwork net;
 	private final long seed;
 	private final int numInputs;
@@ -61,6 +63,7 @@ public class NeuralNetworksBasedActorCriticModel {
 	private final double learningRate;
 	private final int trainTriggerThreshold;
 	private final double epsilonGreedyThreshold;
+	private double diminishingGreedyThreshold;
 	private final Random rand;
 
 	private MultiLayerConfiguration conf;
@@ -85,7 +88,10 @@ public class NeuralNetworksBasedActorCriticModel {
 		this.nEpochs = neuralNetworkConfiguration.getNumEpochs();
 		this.learningRate = neuralNetworkConfiguration.getLearningRate();
 		this.epsilonGreedyThreshold = neuralNetworkConfiguration.getEpsilonGreedyThreshold();
+		this.diminishingGreedyThreshold = 0.9;
 		this.trainTriggerThreshold = neuralNetworkConfiguration.getTrainTriggerThreshold();
+		this.numHiddenNodes = neuralNetworkConfiguration.getNumHiddenNodes();
+		this.maxTrainingCacheSize = neuralNetworkConfiguration.getMaxTrainingCacheSize();
 		setupNeuralNetwork();
 	}
 
@@ -95,7 +101,10 @@ public class NeuralNetworksBasedActorCriticModel {
 		net = new MultiLayerNetwork(conf);
 		net.init();
 		net.setListeners(new ScoreIterationListener(100));
-		setTrainingCache();
+		trainingCache = CacheBuilder.newBuilder()
+			.maximumSize(maxTrainingCacheSize)
+			.expireAfterWrite(1, TimeUnit.HOURS)
+			.build();
 	}
 
 	public void updateTrainingData(
@@ -125,6 +134,7 @@ public class NeuralNetworksBasedActorCriticModel {
 			}
 			if (inputArray != null && inputArray.shape()[0] >= trainTriggerThreshold) {
 				train(inputArray, labelArray);
+				trainingCache.invalidateAll();
 			}
 			updatesSinceLastTraining = 0;
 		}
@@ -146,13 +156,6 @@ public class NeuralNetworksBasedActorCriticModel {
 			Nd4j.createFromArray(throughput));
 	}
 
-	private void setTrainingCache() {
-		trainingCache = CacheBuilder.newBuilder()
-			.maximumSize(100)
-			.expireAfterWrite(1, TimeUnit.HOURS)
-			.build();
-	}
-
 	private void train(INDArray inputData, INDArray labels) {
 		for (int i = 0; i < nEpochs; i++) {
 			net.fit(inputData, labels);
@@ -165,7 +168,6 @@ public class NeuralNetworksBasedActorCriticModel {
 	}
 
 	private MultiLayerConfiguration getDeepDenseLayerNetworkConfiguration() {
-		final int numHiddenNodes = 50;
 		return new NeuralNetConfiguration.Builder()
 			.seed(seed)
 			.weightInit(WeightInit.XAVIER)
@@ -183,20 +185,13 @@ public class NeuralNetworksBasedActorCriticModel {
 
 	public List<Integer> selectAction(
 		Map<List<Integer>, Double> suggestedActions,
-		List<Integer> previousAction,
-		Double currentThroughput,
+		double currentThroughput,
 		List<Double> cpuUsageMetrics,
 		List<Double> edgeFlowRates) {
 
-		updateTrainingCache(previousAction, cpuUsageMetrics, edgeFlowRates, currentThroughput);
-		double previousMaxThroughput = suggestedActions
-			.values()
-			.stream()
-			.max(Comparator.naturalOrder())
-			.orElse(0.0);
-
+		List<Integer> placementSuggestion;
 		double epsilonGreedyScore = rand.nextDouble();
-		if (epsilonGreedyScore > epsilonGreedyThreshold) {
+		if (epsilonGreedyScore > diminishingGreedyThreshold) {
 			if (isTrained) {
 				log.info("Predicting using {} suggested actions ", suggestedActions.size());
 				List<Double> predictedValues = new ArrayList<>();
@@ -214,22 +209,29 @@ public class NeuralNetworksBasedActorCriticModel {
 					.stream()
 					.max(Comparator.naturalOrder())
 					.orElse(0.0);
-				if (predictedMaxThroughput > previousMaxThroughput
-					|| (previousMaxThroughput - predictedMaxThroughput) < 100000.0) {
+				if (predictedMaxThroughput > currentThroughput
+					|| (currentThroughput - predictedMaxThroughput) < 100000.0) {
 					int argMax = predictedValues.indexOf(predictedMaxThroughput);
 					if (argMax >= 0) {
 						List<List<Integer>> suggestedActionList = new ArrayList<>(suggestedActions.keySet());
+						placementSuggestion = suggestedActionList.get(argMax);
+						log.info("Suggested actions : {}", suggestedActionList);
+						log.info("Predicted values: {}", predictedValues);
 						log.info(
 							"Suggesting action with predicted throughput of {} : {} ",
-							predictedMaxThroughput,
-							suggestedActionList.get(argMax));
-						return suggestedActionList.get(argMax);
+							predictedMaxThroughput, placementSuggestion);
+						return placementSuggestion;
 					}
 				}
 			}
 		} else {
+			if (diminishingGreedyThreshold > epsilonGreedyThreshold) {
+				diminishingGreedyThreshold -= 0.01;
+			}
 			int randomIndex = rand.nextInt(suggestedActions.size());
-			return new ArrayList<>(suggestedActions.keySet()).get(randomIndex);
+			placementSuggestion = new ArrayList<>(suggestedActions.keySet()).get(randomIndex);
+			log.info("Suggesting action {} with random index {}", placementSuggestion, randomIndex);
+			return placementSuggestion;
 		}
 
 		return suggestedActions

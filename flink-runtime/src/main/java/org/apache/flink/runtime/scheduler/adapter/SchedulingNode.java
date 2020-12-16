@@ -142,7 +142,9 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 
 	@Override
 	public void releaseAllExecutionVertices() {
-		log.info("Node status: {}", getStatus());
+		if (log.isDebugEnabled()) {
+			log.debug("Node status: {}", getStatus());
+		}
 		cpuSockets.values().forEach(SchedulingExecutionContainer::releaseAllExecutionVertices);
 	}
 

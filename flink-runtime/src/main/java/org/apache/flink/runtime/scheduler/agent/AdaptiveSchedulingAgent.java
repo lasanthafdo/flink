@@ -55,10 +55,8 @@ public class AdaptiveSchedulingAgent extends AbstractSchedulingAgent {
 
 	private CompletableFuture<Collection<Acknowledge>> previousRescheduleFuture;
 
-	private final Map<List<Integer>, Double> potentialPlacementActions = new HashMap<>();
+	private final Map<List<Integer>, Double> potentialPlacementActions;
 	private final ScheduledExecutorService actorCriticExecutor;
-	private final int nCpus;
-	private final int nVertices;
 	private final int updatePeriodInSeconds;
 
 	public AdaptiveSchedulingAgent(
@@ -76,28 +74,30 @@ public class AdaptiveSchedulingAgent extends AbstractSchedulingAgent {
 		this.schedulingStrategy = checkNotNull(schedulingStrategy);
 		this.schedulingStrategy.setTopLevelContainer(getTopLevelContainer());
 
-		this.nCpus = cpuLayout.cpus();
-		this.nVertices = executionGraph.getTotalNumberOfVertices();
+		int nCpus = cpuLayout.cpus();
 		int numInputs = (nVertices + 1) * nCpus + edgeMap.size();
 		neuralNetworkConfiguration.setNumInputs(numInputs);
 		this.actorCriticModel = new NeuralNetworksBasedActorCriticModel(
 			nCpus, nVertices, neuralNetworkConfiguration, log);
 		this.actorCriticExecutor = actorCriticExecutor;
 		this.updatePeriodInSeconds = updatePeriodInSeconds;
+		this.potentialPlacementActions = new TopKMap<>(20);
 		setupUpdateTriggerThread();
 	}
 
 	private void setupUpdateTriggerThread() {
 		updateExecutor = actorCriticExecutor.scheduleAtFixedRate(() -> {
 			try {
-				if (!previousPlacementAction.isEmpty()) {
+				updateStateInformation();
+				updateCurrentPlacementActionInformation();
+				if (!currentPlacementAction.isEmpty()) {
 					actorCriticModel.updateTrainingData(
-						previousPlacementAction,
+						currentPlacementAction,
 						new ArrayList<>(getCpuMetrics().values()),
 						new ArrayList<>(getEdgeThroughput().values()),
 						getOverallThroughput());
 				}
-				setCurrentPlacementSolution();
+				updatePlacementSolution();
 			} catch (Exception e) {
 				log.error(
 					"Encountered exception when trying to update training data: {}",
@@ -109,34 +109,34 @@ public class AdaptiveSchedulingAgent extends AbstractSchedulingAgent {
 
 	@Override
 	public List<Integer> getPlacementSolution() {
-		return currentPlacementAction;
+		return suggestedPlacementAction;
 	}
 
 	@Override
-	protected void setCurrentPlacementSolution() {
-		updateStateInformation();
-		previousPlacementAction = getPreviousPlacementAction();
-		potentialPlacementActions.put(previousPlacementAction, getOverallThroughput());
-		potentialPlacementActions.put(getTrafficBasedPlacementAction(), 0.0);
+	protected void updatePlacementSolution() {
+		double currentThroughput = getOverallThroughput();
+		potentialPlacementActions.put(currentPlacementAction, currentThroughput);
+		potentialPlacementActions.put(getTrafficBasedPlacementAction(), currentThroughput);
 
-		currentPlacementAction = actorCriticModel.selectAction(
+		suggestedPlacementAction = actorCriticModel.selectAction(
 			potentialPlacementActions,
-			previousPlacementAction,
-			getOverallThroughput(),
+			currentThroughput,
 			new ArrayList<>(getCpuMetrics().values()),
 			new ArrayList<>(edgeFlowRates.values()));
-		if (currentPlacementAction == null || currentPlacementAction.isEmpty()) {
-			currentPlacementAction = getTrafficBasedPlacementAction();
-		} else {
-			previousPlacementAction = currentPlacementAction;
+		if (suggestedPlacementAction == null || suggestedPlacementAction.isEmpty()) {
+			suggestedPlacementAction = getTrafficBasedPlacementAction();
 		}
+		log.info(
+			"Suggested placement action: {}, current placement action: {}, throughput: {}",
+			suggestedPlacementAction,
+			currentPlacementAction,
+			currentThroughput);
 	}
 
 	@Override
 	public void run() {
 		if (previousRescheduleFuture == null || previousRescheduleFuture.isDone()) {
 			try {
-				setCurrentPlacementSolution();
 				log.info("Rescheduling job '" + executionGraph.getJobName() + "'");
 				previousRescheduleFuture = rescheduleEager();
 			} catch (Exception e) {
@@ -146,26 +146,6 @@ public class AdaptiveSchedulingAgent extends AbstractSchedulingAgent {
 					e);
 			}
 		}
-	}
-
-	private List<Integer> getPreviousPlacementAction() {
-		Map<Integer, Integer> currentPlacementTemp = new HashMap<>();
-		Map<SchedulingExecutionVertex, Integer> cpuAssignmentMap = getTopLevelContainer()
-			.getCurrentCpuAssignment();
-		if (cpuAssignmentMap != null && cpuAssignmentMap.size() == nVertices) {
-			AtomicInteger vertexCount = new AtomicInteger(1);
-			IterableUtils
-				.toStream(schedulingTopology.getVertices())
-				.forEachOrdered(schedulingExecutionVertex -> {
-					currentPlacementTemp.put(
-						cpuAssignmentMap.get(schedulingExecutionVertex),
-						vertexCount.getAndIncrement());
-				});
-		} else {
-			log.warn("Could not retrieve CPU assignment for this job.");
-		}
-
-		return new ArrayList<>(currentPlacementTemp.values());
 	}
 
 	private CompletableFuture<Collection<Acknowledge>> rescheduleEager() {

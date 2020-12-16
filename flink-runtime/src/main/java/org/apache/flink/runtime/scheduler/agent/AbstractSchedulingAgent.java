@@ -32,6 +32,9 @@ import org.apache.flink.runtime.scheduler.strategy.SchedulingResultPartition;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingRuntimeState;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingTopology;
 import org.apache.flink.util.FlinkRuntimeException;
+
+import org.apache.flink.util.IterableUtils;
+
 import org.slf4j.Logger;
 
 import java.util.ArrayList;
@@ -61,9 +64,10 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	protected final SchedulingNode schedulingNode;
 	protected final long waitTimeout;
 	protected final int numRetries;
+	protected final int nVertices;
 	protected List<SchedulingExecutionEdge> orderedEdgeList;
+	protected List<Integer> suggestedPlacementAction;
 	protected List<Integer> currentPlacementAction;
-	protected List<Integer> previousPlacementAction;
 	protected ScheduledFuture<?> updateExecutor;
 	private InfluxDBMetricsClient influxDBMetricsClient;
 
@@ -92,7 +96,8 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		updateStateInformation();
 		this.waitTimeout = waitTimeout;
 		this.numRetries = numRetries;
-		this.previousPlacementAction = new ArrayList<>();
+		this.currentPlacementAction = new ArrayList<>();
+		this.nVertices = executionGraph.getTotalNumberOfVertices();
 	}
 
 	protected void initializeEdgeFlowRates() {
@@ -194,7 +199,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 
 	@Override
 	public List<Integer> getPlacementSolution() {
-		return currentPlacementAction;
+		return suggestedPlacementAction;
 	}
 
 	@Override
@@ -204,12 +209,15 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 
 	@Override
 	public void shutdownAgent() {
-		if(updateExecutor != null) {
+		log.info(
+			"Shutting down scheduling agent for {} scheduling mode",
+			executionGraph.getScheduleMode());
+		if (updateExecutor != null) {
 			updateExecutor.cancel(true);
 		}
 	}
 
-	protected abstract void setCurrentPlacementSolution();
+	protected abstract void updatePlacementSolution();
 
 	protected List<Integer> getTrafficBasedPlacementAction() {
 		SchedulingExecutionContainer topLevelContainer = getTopLevelContainer();
@@ -280,5 +288,27 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 			.map(Map.Entry::getValue)
 			.collect(
 				Collectors.toList());
+	}
+
+	protected void updateCurrentPlacementActionInformation() {
+		Map<Integer, Integer> currentPlacementTemp = new HashMap<>();
+		Map<SchedulingExecutionVertex, Integer> cpuAssignmentMap = getTopLevelContainer()
+			.getCurrentCpuAssignment();
+		if (cpuAssignmentMap != null && cpuAssignmentMap.size() == nVertices) {
+			AtomicInteger vertexCount = new AtomicInteger(1);
+			IterableUtils
+				.toStream(schedulingTopology.getVertices())
+				.forEachOrdered(schedulingExecutionVertex -> {
+					currentPlacementTemp.put(
+						cpuAssignmentMap.get(schedulingExecutionVertex),
+						vertexCount.getAndIncrement());
+				});
+		} else {
+			log.warn("Could not retrieve current CPU assignment for this job.");
+		}
+
+		if (!currentPlacementTemp.isEmpty()) {
+			currentPlacementAction = new ArrayList<>(currentPlacementTemp.values());
+		}
 	}
 }

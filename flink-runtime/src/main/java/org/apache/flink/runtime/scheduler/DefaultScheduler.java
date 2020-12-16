@@ -202,6 +202,7 @@ public class DefaultScheduler extends SchedulerBase implements SchedulerOperatio
 			CompletableFuture<Void> jobTerminationFuture = getTerminationFuture();
 			jobTerminationFuture.whenComplete(
 				(ignored, failure) -> {
+					schedulingAgent.shutdownAgent();
 					agentFuture.cancel(true);
 				});
 		}
