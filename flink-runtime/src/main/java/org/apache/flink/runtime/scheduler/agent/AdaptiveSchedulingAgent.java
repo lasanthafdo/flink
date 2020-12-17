@@ -27,6 +27,7 @@ import org.apache.flink.runtime.executiongraph.ExecutionVertex;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategy;
+import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.IterableUtils;
 
 import org.slf4j.Logger;
@@ -125,6 +126,10 @@ public class AdaptiveSchedulingAgent extends AbstractSchedulingAgent {
 			new ArrayList<>(edgeFlowRates.values()));
 		if (suggestedPlacementAction == null || suggestedPlacementAction.isEmpty()) {
 			suggestedPlacementAction = getTrafficBasedPlacementAction();
+		}
+		if (!isValidPlacementAction(suggestedPlacementAction)) {
+			throw new FlinkRuntimeException(
+				"Invalid placement action " + suggestedPlacementAction + " suggested.");
 		}
 		log.info(
 			"Suggested placement action: {}, current placement action: {}, throughput: {}",

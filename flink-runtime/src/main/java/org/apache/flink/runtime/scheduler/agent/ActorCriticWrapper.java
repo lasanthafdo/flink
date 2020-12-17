@@ -78,32 +78,6 @@ public class ActorCriticWrapper {
 		return actionMap;
 	}
 
-	private Map<Integer, List<Integer>> generateStateSpace(
-		int nVertices,
-		int maxPerCore,
-		int maxCores) {
-		long start = System.currentTimeMillis();
-		Generator<Integer> gen = createCompositionGenerator(nVertices);
-
-		List<ICombinatoricsVector<Integer>> filteredList = gen.generateFilteredObjects((index, integers) ->
-			integers.getSize() <= maxCores
-				&& integers.getVector().stream().max(Comparator.naturalOrder()).orElse(0)
-				<= maxPerCore);
-		int count = 0;
-		Map<Integer, List<Integer>> stateMap = new HashMap<>();
-		for (ICombinatoricsVector<Integer> p : filteredList) {
-			count++;
-			stateMap.put(count, p.getVector());
-		}
-		log.info(
-			"Added {} actions for {} vertices with maximum limit of {} in {} seconds.",
-			count,
-			nVertices,
-			maxPerCore,
-			(System.currentTimeMillis() - start));
-		return stateMap;
-	}
-
 	public int getStateFor(List<Integer> cpuAssignment) {
 		return stateSpaceMap
 			.entrySet()
@@ -188,23 +162,6 @@ public class ActorCriticWrapper {
 		return stateSpaceMap.containsKey(stateId);
 	}
 
-	public void updateModel(final List<Transition> transitionSamples) {
-		for (int i = transitionSamples.size() - 1; i >= 0; --i) {
-			Transition nextTransition = transitionSamples.get(i);
-			if (i != transitionSamples.size() - 1) {
-				nextTransition = transitionSamples.get(i + 1);
-			}
-			Transition currentTransition = transitionSamples.get(i);
-			agent.update(
-				currentTransition.oldState,
-				currentTransition.action,
-				currentTransition.newState,
-				Collections.singleton(nextTransition.action),
-				currentTransition.reward,
-				(stateId) -> 0d);
-		}
-	}
-
 	private void flushToDB(Transition transition) {
 		List<Integer> actionAsList = stateSpaceMap.get(transition.action);
 		List<Integer> oldStateAsList = stateSpaceMap.get(transition.oldState);
@@ -239,38 +196,6 @@ public class ActorCriticWrapper {
 				newStateStr.toString(),
 				transition.reward);
 		}
-	}
-
-	public void initMethod() {
-/*
-		ActorCriticAgent agent = new ActorCriticAgent(stateCount, actionCount);
-		Vec stateValues = new Vec(stateCount);
-
-		Random random = new Random();
-		agent.start(random.nextInt(stateCount));
-		for (
-			int time = 0;
-			time < 1000; ++time) {
-
-			int actionId = agent.selectAction();
-			System.out.println("Agent does action-" + actionId);
-
-			int newStateId = world.update(agent, actionId);
-			double reward = world.reward(agent);
-
-			System.out.println("Now the new state is " + newStateId);
-			System.out.println("Agent receives Reward = " + reward);
-
-			//TODO set CPU usage, edge flow rates
-			System.out.println("World state values changed ...");
-			for (int stateId = 0; stateId < stateCount; ++stateId) {
-				// Set the state values for each state
-				stateValues.set(stateId, random.nextDouble());
-			}
-
-			agent.update(actionId, newStateId, reward, stateValues);
-		}
-*/
 	}
 
 }

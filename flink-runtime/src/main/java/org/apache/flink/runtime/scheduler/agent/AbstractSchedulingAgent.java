@@ -311,4 +311,13 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 			currentPlacementAction = new ArrayList<>(currentPlacementTemp.values());
 		}
 	}
+
+	protected boolean isValidPlacementAction(List<Integer> suggestedPlacementAction) {
+		return suggestedPlacementAction.size() == nVertices
+			&& suggestedPlacementAction
+			.stream()
+			.noneMatch(cpuId -> cpuId < 0 || cpuId > (nCpus - 1))
+			&& suggestedPlacementAction.stream().distinct().count()
+			== suggestedPlacementAction.size();
+	}
 }

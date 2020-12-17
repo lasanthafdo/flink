@@ -115,16 +115,16 @@ public class TrafficBasedSchedulingStrategy implements SchedulingStrategy {
 		SchedulingExecutionContainer topLevelContainer = runtimeState.getTopLevelContainer();
 		List<Integer> placementSolution = runtimeState.getPlacementSolution();
 		topLevelContainer.releaseAllExecutionVertices();
-		AtomicInteger placementIndex = new AtomicInteger(1);
+		AtomicInteger placementIndex = new AtomicInteger(0);
 		schedulingTopology
 			.getVertices()
 			.forEach(schedulingExecutionVertex -> {
 				topLevelContainer.forceSchedule(
 					schedulingExecutionVertex,
-					placementSolution.indexOf(placementIndex.get()));
+					placementSolution.get(placementIndex.get()));
 				schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
 					DEFAULT_TASK_MANAGER_ADDRESS,
-					placementSolution.indexOf(placementIndex.getAndIncrement())));
+					placementSolution.get(placementIndex.getAndIncrement())));
 			});
 	}
 

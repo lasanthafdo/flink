@@ -27,6 +27,7 @@ import org.apache.flink.runtime.executiongraph.ExecutionVertex;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionContainer;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategy;
+import org.apache.flink.util.FlinkRuntimeException;
 
 import org.slf4j.Logger;
 
@@ -78,6 +79,7 @@ public class DRLSchedulingAgent extends AbstractSchedulingAgent {
 	private void setupUpdateTriggerThread() {
 		updateExecutor = executorService.scheduleAtFixedRate(() -> {
 			try {
+				updateStateInformation();
 				updatePlacementSolution();
 			} catch (Exception e) {
 				log.error(
@@ -95,7 +97,6 @@ public class DRLSchedulingAgent extends AbstractSchedulingAgent {
 
 	@Override
 	protected void updatePlacementSolution() {
-		updateStateInformation();
 		List<Integer> assignedCpuIds = new ArrayList<>(getTopLevelContainer()
 			.getCurrentCpuAssignment()
 			.values());
@@ -107,6 +108,10 @@ public class DRLSchedulingAgent extends AbstractSchedulingAgent {
 				* getTopLevelContainer().getResourceUsage(SchedulingExecutionContainer.CPU));
 		int currentAction = actorCriticWrapper.getSuggestedAction(currentStateId);
 		suggestedPlacementAction = actorCriticWrapper.getPlacementSolution(currentAction);
+		if (!isValidPlacementAction(suggestedPlacementAction)) {
+			throw new FlinkRuntimeException(
+				"Invalid placement action " + suggestedPlacementAction + " suggested.");
+		}
 	}
 
 	@Override

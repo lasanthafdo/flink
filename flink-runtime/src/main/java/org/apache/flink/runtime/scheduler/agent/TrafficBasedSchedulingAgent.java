@@ -26,6 +26,7 @@ import org.apache.flink.runtime.executiongraph.ExecutionGraph;
 import org.apache.flink.runtime.executiongraph.ExecutionVertex;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategy;
+import org.apache.flink.util.FlinkRuntimeException;
 
 import org.slf4j.Logger;
 
@@ -57,6 +58,7 @@ public class TrafficBasedSchedulingAgent extends AbstractSchedulingAgent {
 	@Override
 	public void run() {
 		if (previousRescheduleFuture == null || previousRescheduleFuture.isDone()) {
+			updateStateInformation();
 			updatePlacementSolution();
 			log.info("Rescheduling job '" + executionGraph.getJobName() + "'");
 			previousRescheduleFuture = rescheduleEager();
@@ -120,7 +122,10 @@ public class TrafficBasedSchedulingAgent extends AbstractSchedulingAgent {
 
 	@Override
 	protected void updatePlacementSolution() {
-		updateStateInformation();
 		suggestedPlacementAction = getTrafficBasedPlacementAction();
+		if (!isValidPlacementAction(suggestedPlacementAction)) {
+			throw new FlinkRuntimeException(
+				"Invalid placement action " + suggestedPlacementAction + " suggested.");
+		}
 	}
 }
