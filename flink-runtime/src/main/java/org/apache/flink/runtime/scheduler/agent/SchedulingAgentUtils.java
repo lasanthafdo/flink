@@ -83,6 +83,7 @@ public class SchedulingAgentUtils {
 							log,
 							executionGraph,
 							schedulingStrategy,
+							executorService,
 							triggerPeriod,
 							waitTimeOut,
 							numRetries,

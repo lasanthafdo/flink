@@ -80,6 +80,7 @@ public class DRLSchedulingAgent extends AbstractSchedulingAgent {
 		updateExecutor = executorService.scheduleAtFixedRate(() -> {
 			try {
 				updateStateInformation();
+				updateCurrentPlacementActionInformation();
 				updatePlacementSolution();
 			} catch (Exception e) {
 				log.error(
@@ -97,10 +98,7 @@ public class DRLSchedulingAgent extends AbstractSchedulingAgent {
 
 	@Override
 	protected void updatePlacementSolution() {
-		List<Integer> assignedCpuIds = new ArrayList<>(getTopLevelContainer()
-			.getCurrentCpuAssignment()
-			.values());
-		int currentStateId = actorCriticWrapper.getStateFor(assignedCpuIds);
+		int currentStateId = actorCriticWrapper.getStateFor(currentPlacementAction);
 		actorCriticWrapper.updateState(
 			getOverallThroughput(),
 			currentStateId,
@@ -117,8 +115,15 @@ public class DRLSchedulingAgent extends AbstractSchedulingAgent {
 	@Override
 	public void run() {
 		if (previousRescheduleFuture == null || previousRescheduleFuture.isDone()) {
-			log.info("Rescheduling job '" + executionGraph.getJobName() + "'");
-			previousRescheduleFuture = rescheduleEager();
+			if (suggestedPlacementAction.equals(currentPlacementAction)) {
+				log.info(
+					"Current placement action {} is the same as the suggested placement action {}. Skipping rescheduling.",
+					currentPlacementAction,
+					suggestedPlacementAction);
+			} else {
+				log.info("Rescheduling job '" + executionGraph.getJobName() + "'");
+				previousRescheduleFuture = rescheduleEager();
+			}
 		}
 	}
 

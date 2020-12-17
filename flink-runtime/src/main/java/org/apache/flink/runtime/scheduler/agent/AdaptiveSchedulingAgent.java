@@ -142,8 +142,15 @@ public class AdaptiveSchedulingAgent extends AbstractSchedulingAgent {
 	public void run() {
 		if (previousRescheduleFuture == null || previousRescheduleFuture.isDone()) {
 			try {
-				log.info("Rescheduling job '" + executionGraph.getJobName() + "'");
-				previousRescheduleFuture = rescheduleEager();
+				if (suggestedPlacementAction.equals(currentPlacementAction)) {
+					log.info(
+						"Current placement action {} is the same as the suggested placement action {}. Skipping rescheduling.",
+						currentPlacementAction,
+						suggestedPlacementAction);
+				} else {
+					log.info("Rescheduling job '" + executionGraph.getJobName() + "'");
+					previousRescheduleFuture = rescheduleEager();
+				}
 			} catch (Exception e) {
 				log.error(
 					"Encountered exception while trying to reschedule : {}",

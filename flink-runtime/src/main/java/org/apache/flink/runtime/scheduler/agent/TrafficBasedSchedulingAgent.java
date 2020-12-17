@@ -34,6 +34,8 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 import static org.apache.flink.util.Preconditions.checkState;
@@ -44,24 +46,57 @@ import static org.apache.flink.util.Preconditions.checkState;
 public class TrafficBasedSchedulingAgent extends AbstractSchedulingAgent {
 
 	private final SchedulingStrategy schedulingStrategy;
+	private final ScheduledExecutorService executorService;
+	private final long updatePeriodInSeconds;
 	private CompletableFuture<Collection<Acknowledge>> previousRescheduleFuture;
 
 	public TrafficBasedSchedulingAgent(
 		Logger log, ExecutionGraph executionGraph,
 		SchedulingStrategy schedulingStrategy,
+		ScheduledExecutorService executorService,
 		long triggerPeriod, long waitTimeout, int numRetries, int updatePeriod) {
 		super(log, triggerPeriod, executionGraph, waitTimeout, numRetries);
 
 		this.schedulingStrategy = checkNotNull(schedulingStrategy);
+		this.executorService = executorService;
+		this.updatePeriodInSeconds = updatePeriod;
+		setupUpdateTriggerThread();
+	}
+
+	private void setupUpdateTriggerThread() {
+		updateExecutor = executorService.scheduleAtFixedRate(() -> {
+			try {
+				updateStateInformation();
+				updateCurrentPlacementActionInformation();
+				updatePlacementSolution();
+			} catch (Exception e) {
+				log.error(
+					"Encountered exception when trying to update state: {}",
+					e.getMessage(),
+					e);
+			}
+		}, updatePeriodInSeconds, updatePeriodInSeconds, TimeUnit.SECONDS);
 	}
 
 	@Override
 	public void run() {
 		if (previousRescheduleFuture == null || previousRescheduleFuture.isDone()) {
-			updateStateInformation();
-			updatePlacementSolution();
-			log.info("Rescheduling job '" + executionGraph.getJobName() + "'");
-			previousRescheduleFuture = rescheduleEager();
+			try {
+				if (suggestedPlacementAction.equals(currentPlacementAction)) {
+					log.info(
+						"Current placement action {} is the same as the suggested placement action {}. Skipping rescheduling.",
+						currentPlacementAction,
+						suggestedPlacementAction);
+				} else {
+					log.info("Rescheduling job '" + executionGraph.getJobName() + "'");
+					previousRescheduleFuture = rescheduleEager();
+				}
+			} catch (Exception e) {
+				log.error(
+					"Encountered exception while trying to reschedule : {}",
+					e.getMessage(),
+					e);
+			}
 		}
 	}
 
