@@ -58,6 +58,7 @@ public class NeuralNetworksBasedActorCriticModel {
 	private final Logger log;
 	private final int numHiddenNodes;
 	private final int maxTrainingCacheSize;
+	private final int scoreIterationPrintFrequency;
 	private MultiLayerNetwork net;
 	private final long seed;
 	private final int numInputs;
@@ -95,6 +96,7 @@ public class NeuralNetworksBasedActorCriticModel {
 		this.trainTriggerThreshold = neuralNetworkConfiguration.getTrainTriggerThreshold();
 		this.numHiddenNodes = neuralNetworkConfiguration.getNumHiddenNodes();
 		this.maxTrainingCacheSize = neuralNetworkConfiguration.getMaxTrainingCacheSize();
+		this.scoreIterationPrintFrequency = neuralNetworkConfiguration.getNumEpochs();
 		setupNeuralNetwork();
 	}
 
@@ -103,7 +105,7 @@ public class NeuralNetworksBasedActorCriticModel {
 		//Create the network
 		net = new MultiLayerNetwork(conf);
 		net.init();
-		net.setListeners(new ScoreIterationListener(100));
+		net.setListeners(new ScoreIterationListener(scoreIterationPrintFrequency));
 		trainingCache = CacheBuilder.newBuilder()
 			.maximumSize(maxTrainingCacheSize)
 			.expireAfterWrite(1, TimeUnit.HOURS)
@@ -212,8 +214,8 @@ public class NeuralNetworksBasedActorCriticModel {
 					.stream()
 					.max(Comparator.naturalOrder())
 					.orElse(0.0);
-				if (predictedMaxThroughput > currentThroughput
-					|| (currentThroughput - predictedMaxThroughput) < 100000.0) {
+//				if (predictedMaxThroughput > currentThroughput
+//					|| (currentThroughput - predictedMaxThroughput) < 100000.0) {
 					int argMax = predictedValues.indexOf(predictedMaxThroughput);
 					if (argMax >= 0) {
 						List<List<Integer>> suggestedActionList = new ArrayList<>(suggestedActions.keySet());
@@ -224,7 +226,7 @@ public class NeuralNetworksBasedActorCriticModel {
 							"Suggesting action with predicted throughput of {} : {} ",
 							predictedMaxThroughput, placementSuggestion);
 						return placementSuggestion;
-					}
+//					}
 				}
 			}
 		} else {

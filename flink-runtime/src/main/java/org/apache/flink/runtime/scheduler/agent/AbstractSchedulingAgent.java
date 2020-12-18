@@ -120,18 +120,16 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	}
 
 	private void logCurrentPlacement() {
-		if (log.isDebugEnabled()) {
-			StringBuilder currentPlacement = new StringBuilder("[");
-			schedulingTopology.getVertices().forEach(sourceVertex -> {
-				currentPlacement.append("{Vertex Name: ").append(sourceVertex.getTaskName())
-					.append(", CPU ID: ").append(sourceVertex.getExecutionPlacement().getCpuId())
-					.append(", CPU Usage: ").append(sourceVertex.getCurrentCpuUsage())
-					.append("}, ");
+		StringBuilder currentPlacement = new StringBuilder("[");
+		schedulingTopology.getVertices().forEach(sourceVertex -> {
+			currentPlacement.append("{Vertex Name: ").append(sourceVertex.getTaskName())
+				.append(", CPU ID: ").append(sourceVertex.getExecutionPlacement().getCpuId())
+				.append(", CPU Usage: ").append(sourceVertex.getCurrentCpuUsage())
+				.append("}, ");
 
-			});
-			currentPlacement.append("]");
-			log.debug("Current scheduling placement is : {}", currentPlacement);
-		}
+		});
+		currentPlacement.append("]");
+		log.info("Current scheduling placement is : {}", currentPlacement);
 	}
 
 	protected Map<String, Double> getCpuMetrics() {

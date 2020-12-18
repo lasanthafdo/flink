@@ -97,6 +97,7 @@ public class AdaptiveSchedulingAgent extends AbstractSchedulingAgent {
 					rescheduleEager();
 					if (trainingPhaseUpdateCount++ >= frequentUpdatesThreshold) {
 						inTrainingPhase = false;
+						log.info("Leaving training phase. Update count is {}", trainingPhaseUpdateCount);
 						setupUpdateTriggerThread();
 					}
 				},
@@ -104,7 +105,7 @@ public class AdaptiveSchedulingAgent extends AbstractSchedulingAgent {
 				TimeUnit.SECONDS);
 		} else {
 			if (updateExecutor != null) {
-				updateExecutor.cancel(true);
+				updateExecutor.cancel(false);
 			}
 			updateExecutor = actorCriticExecutor.scheduleAtFixedRate(
 				this::executeUpdateProcess,
