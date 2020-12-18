@@ -64,23 +64,30 @@ public class TrafficBasedSchedulingAgent extends AbstractSchedulingAgent {
 	}
 
 	private void setupUpdateTriggerThread() {
-		updateExecutor = executorService.scheduleAtFixedRate(() -> {
-			try {
-				updateStateInformation();
-				updateCurrentPlacementActionInformation();
-				updatePlacementSolution();
-			} catch (Exception e) {
-				log.error(
-					"Encountered exception when trying to update state: {}",
-					e.getMessage(),
-					e);
-			}
-		}, updatePeriodInSeconds, updatePeriodInSeconds, TimeUnit.SECONDS);
+		updateExecutor = executorService.scheduleAtFixedRate(
+			this::executeUpdateProcess,
+			updatePeriodInSeconds,
+			updatePeriodInSeconds,
+			TimeUnit.SECONDS);
+	}
+
+	private void executeUpdateProcess() {
+		try {
+			updateStateInformation();
+			updateCurrentPlacementActionInformation();
+			updatePlacementSolution();
+		} catch (Exception e) {
+			log.error(
+				"Encountered exception when trying to update state: {}",
+				e.getMessage(),
+				e);
+		}
 	}
 
 	@Override
 	public void run() {
 		if (previousRescheduleFuture == null || previousRescheduleFuture.isDone()) {
+			executeUpdateProcess();
 			try {
 				if (suggestedPlacementAction.equals(currentPlacementAction)) {
 					log.info(

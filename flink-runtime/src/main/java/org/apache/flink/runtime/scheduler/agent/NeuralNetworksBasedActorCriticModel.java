@@ -36,11 +36,14 @@ import org.nd4j.linalg.lossfunctions.LossFunctions;
 import org.slf4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
@@ -228,9 +231,8 @@ public class NeuralNetworksBasedActorCriticModel {
 			if (diminishingGreedyThreshold > epsilonGreedyThreshold) {
 				diminishingGreedyThreshold -= 0.01;
 			}
-			int randomIndex = rand.nextInt(suggestedActions.size());
-			placementSuggestion = new ArrayList<>(suggestedActions.keySet()).get(randomIndex);
-			log.info("Suggesting action {} with random index {}", placementSuggestion, randomIndex);
+			placementSuggestion = getRandomPlacementAction();
+			log.info("Suggesting random action {}", placementSuggestion);
 			return placementSuggestion;
 		}
 
@@ -240,6 +242,16 @@ public class NeuralNetworksBasedActorCriticModel {
 			.max(Map.Entry.comparingByValue())
 			.map(Map.Entry::getKey)
 			.orElse(null);
+	}
+
+	private List<Integer> getRandomPlacementAction() {
+		List<Integer> cpuAssignmentIds = IntStream
+			.range(0, nCpus)
+			.boxed()
+			.collect(Collectors.toList());
+		Collections.shuffle(cpuAssignmentIds, rand);
+
+		return cpuAssignmentIds.subList(0, nVertices);
 	}
 
 	private INDArray encodePlacement(List<Integer> placementAction) {

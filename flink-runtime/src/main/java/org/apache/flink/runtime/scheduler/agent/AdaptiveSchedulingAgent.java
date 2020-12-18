@@ -25,23 +25,19 @@ import org.apache.flink.runtime.executiongraph.Execution;
 import org.apache.flink.runtime.executiongraph.ExecutionGraph;
 import org.apache.flink.runtime.executiongraph.ExecutionVertex;
 import org.apache.flink.runtime.messages.Acknowledge;
-import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategy;
 import org.apache.flink.util.FlinkRuntimeException;
-import org.apache.flink.util.IterableUtils;
 
 import org.slf4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 import static org.apache.flink.util.Preconditions.checkState;
@@ -59,6 +55,10 @@ public class AdaptiveSchedulingAgent extends AbstractSchedulingAgent {
 	private final Map<List<Integer>, Double> potentialPlacementActions;
 	private final ScheduledExecutorService actorCriticExecutor;
 	private final int updatePeriodInSeconds;
+	private final long trainingPhaseUpdatePeriodInSeconds;
+	private int trainingPhaseUpdateCount = 0;
+	private boolean inTrainingPhase = true;
+	private final int frequentUpdatesThreshold;
 
 	public AdaptiveSchedulingAgent(
 		Logger log,
@@ -69,6 +69,8 @@ public class AdaptiveSchedulingAgent extends AbstractSchedulingAgent {
 		long waitTimeout,
 		int numRetries,
 		int updatePeriodInSeconds,
+		int tpUpdatePeriod,
+		int freqUpdateThreshold,
 		NeuralNetworkConfiguration neuralNetworkConfiguration) {
 
 		super(log, triggerPeriod, executionGraph, waitTimeout, numRetries);
@@ -82,30 +84,54 @@ public class AdaptiveSchedulingAgent extends AbstractSchedulingAgent {
 			nCpus, nVertices, neuralNetworkConfiguration, log);
 		this.actorCriticExecutor = actorCriticExecutor;
 		this.updatePeriodInSeconds = updatePeriodInSeconds;
-		this.potentialPlacementActions = new TopKMap<>(20);
+		this.potentialPlacementActions = new TopKMap<>(neuralNetworkConfiguration.getNumActionSuggestions());
+		this.trainingPhaseUpdatePeriodInSeconds = tpUpdatePeriod;
+		this.frequentUpdatesThreshold = freqUpdateThreshold;
 		setupUpdateTriggerThread();
 	}
 
 	private void setupUpdateTriggerThread() {
-		updateExecutor = actorCriticExecutor.scheduleAtFixedRate(() -> {
-			try {
-				updateStateInformation();
-				updateCurrentPlacementActionInformation();
-				if (!currentPlacementAction.isEmpty()) {
-					actorCriticModel.updateTrainingData(
-						currentPlacementAction,
-						new ArrayList<>(getCpuMetrics().values()),
-						new ArrayList<>(getEdgeThroughput().values()),
-						getOverallThroughput());
-				}
-				updatePlacementSolution();
-			} catch (Exception e) {
-				log.error(
-					"Encountered exception when trying to update training data: {}",
-					e.getMessage(),
-					e);
+		if (inTrainingPhase) {
+			updateExecutor = actorCriticExecutor.scheduleAtFixedRate(() -> {
+					executeUpdateProcess();
+					rescheduleEager();
+					if (trainingPhaseUpdateCount++ >= frequentUpdatesThreshold) {
+						inTrainingPhase = false;
+						setupUpdateTriggerThread();
+					}
+				},
+				trainingPhaseUpdatePeriodInSeconds, trainingPhaseUpdatePeriodInSeconds,
+				TimeUnit.SECONDS);
+		} else {
+			if (updateExecutor != null) {
+				updateExecutor.cancel(true);
 			}
-		}, updatePeriodInSeconds, updatePeriodInSeconds, TimeUnit.SECONDS);
+			updateExecutor = actorCriticExecutor.scheduleAtFixedRate(
+				this::executeUpdateProcess,
+				updatePeriodInSeconds,
+				updatePeriodInSeconds,
+				TimeUnit.SECONDS);
+		}
+	}
+
+	private void executeUpdateProcess() {
+		try {
+			updateStateInformation();
+			updateCurrentPlacementActionInformation();
+			if (!currentPlacementAction.isEmpty()) {
+				actorCriticModel.updateTrainingData(
+					currentPlacementAction,
+					new ArrayList<>(getCpuMetrics().values()),
+					new ArrayList<>(getEdgeThroughput().values()),
+					getOverallThroughput());
+			}
+			updatePlacementSolution();
+		} catch (Exception e) {
+			log.error(
+				"Encountered exception when trying to update training data: {}",
+				e.getMessage(),
+				e);
+		}
 	}
 
 	@Override
@@ -140,7 +166,9 @@ public class AdaptiveSchedulingAgent extends AbstractSchedulingAgent {
 
 	@Override
 	public void run() {
-		if (previousRescheduleFuture == null || previousRescheduleFuture.isDone()) {
+		if (!inTrainingPhase && (previousRescheduleFuture == null
+			|| previousRescheduleFuture.isDone())) {
+			executeUpdateProcess();
 			try {
 				if (suggestedPlacementAction.equals(currentPlacementAction)) {
 					log.info(

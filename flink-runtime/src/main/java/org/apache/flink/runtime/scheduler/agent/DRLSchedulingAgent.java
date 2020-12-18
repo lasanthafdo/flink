@@ -77,18 +77,24 @@ public class DRLSchedulingAgent extends AbstractSchedulingAgent {
 	}
 
 	private void setupUpdateTriggerThread() {
-		updateExecutor = executorService.scheduleAtFixedRate(() -> {
-			try {
-				updateStateInformation();
-				updateCurrentPlacementActionInformation();
-				updatePlacementSolution();
-			} catch (Exception e) {
-				log.error(
-					"Encountered exception when trying to update state: {}",
-					e.getMessage(),
-					e);
-			}
-		}, updatePeriodInSeconds, updatePeriodInSeconds, TimeUnit.SECONDS);
+		updateExecutor = executorService.scheduleAtFixedRate(
+			this::executeUpdateProcess,
+			updatePeriodInSeconds,
+			updatePeriodInSeconds,
+			TimeUnit.SECONDS);
+	}
+
+	private void executeUpdateProcess() {
+		try {
+			updateStateInformation();
+			updateCurrentPlacementActionInformation();
+			updatePlacementSolution();
+		} catch (Exception e) {
+			log.error(
+				"Encountered exception when trying to update state: {}",
+				e.getMessage(),
+				e);
+		}
 	}
 
 	@Override
@@ -115,6 +121,7 @@ public class DRLSchedulingAgent extends AbstractSchedulingAgent {
 	@Override
 	public void run() {
 		if (previousRescheduleFuture == null || previousRescheduleFuture.isDone()) {
+			executeUpdateProcess();
 			if (suggestedPlacementAction.equals(currentPlacementAction)) {
 				log.info(
 					"Current placement action {} is the same as the suggested placement action {}. Skipping rescheduling.",

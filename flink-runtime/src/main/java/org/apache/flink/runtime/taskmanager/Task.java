@@ -665,7 +665,7 @@ public class Task implements Runnable, TaskSlotPayload, TaskActions, PartitionPr
 
 		if (pinnedToCpu) {
 			try (AffinityLock a1 = AffinityLock.acquireLock(cpuId)) {
-				LOG.info("Task {} is running on CPU {} ", taskInfo.getTaskName(), cpuId);
+				LOG.info("Task {} is running on CPU {} ", taskInfo.getTaskNameWithSubtasks(), cpuId);
 				doRun();
 			} finally {
 				terminationFuture.complete(executionState);

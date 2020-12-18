@@ -21,10 +21,6 @@ package org.apache.flink.runtime.scheduler.agent;
 import org.apache.flink.runtime.executiongraph.ExecutionGraph;
 import org.apache.flink.runtime.scheduler.adapter.DefaultExecutionEdge;
 import org.apache.flink.runtime.scheduler.adapter.SchedulingNode;
-
-import net.openhft.affinity.AffinityLock;
-import net.openhft.affinity.CpuLayout;
-
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionContainer;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionEdge;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
@@ -32,9 +28,10 @@ import org.apache.flink.runtime.scheduler.strategy.SchedulingResultPartition;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingRuntimeState;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingTopology;
 import org.apache.flink.util.FlinkRuntimeException;
-
 import org.apache.flink.util.IterableUtils;
 
+import net.openhft.affinity.AffinityLock;
+import net.openhft.affinity.CpuLayout;
 import org.slf4j.Logger;
 
 import java.util.ArrayList;
@@ -91,7 +88,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 			schedulingNode.addCpu(cpuId);
 		}
 
-		initializeEdgeFlowRates();
+		initializeEdgeMap();
 		setupInfluxDBConnection();
 		updateStateInformation();
 		this.waitTimeout = waitTimeout;
@@ -100,7 +97,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		this.nVertices = executionGraph.getTotalNumberOfVertices();
 	}
 
-	protected void initializeEdgeFlowRates() {
+	protected void initializeEdgeMap() {
 		schedulingTopology.getVertices().forEach(schedulingExecutionVertex -> {
 			AtomicInteger consumerCount = new AtomicInteger(0);
 			schedulingExecutionVertex.getConsumedResults().forEach(schedulingResultPartition -> {
@@ -123,16 +120,18 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	}
 
 	private void logCurrentPlacement() {
-		StringBuilder currentPlacement = new StringBuilder("[");
-		schedulingTopology.getVertices().forEach(sourceVertex -> {
-			currentPlacement.append("{Vertex Name: ").append(sourceVertex.getTaskName())
-				.append(", CPU ID: ").append(sourceVertex.getExecutionPlacement().getCpuId())
-				.append(", CPU Usage: ").append(sourceVertex.getCurrentCpuUsage())
-				.append("}, ");
+		if (log.isDebugEnabled()) {
+			StringBuilder currentPlacement = new StringBuilder("[");
+			schedulingTopology.getVertices().forEach(sourceVertex -> {
+				currentPlacement.append("{Vertex Name: ").append(sourceVertex.getTaskName())
+					.append(", CPU ID: ").append(sourceVertex.getExecutionPlacement().getCpuId())
+					.append(", CPU Usage: ").append(sourceVertex.getCurrentCpuUsage())
+					.append("}, ");
 
-		});
-		currentPlacement.append("]");
-		log.info("Current scheduling placement is : {}", currentPlacement);
+			});
+			currentPlacement.append("]");
+			log.debug("Current scheduling placement is : {}", currentPlacement);
+		}
 	}
 
 	protected Map<String, Double> getCpuMetrics() {
@@ -215,6 +214,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		if (updateExecutor != null) {
 			updateExecutor.cancel(true);
 		}
+		influxDBMetricsClient.closeConnection();
 	}
 
 	protected abstract void updatePlacementSolution();

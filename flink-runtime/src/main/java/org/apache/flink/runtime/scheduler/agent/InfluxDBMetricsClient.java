@@ -36,7 +36,6 @@ public class InfluxDBMetricsClient {
 	private final String databaseName;
 	private final Logger log;
 	private InfluxDB influxDB;
-	private final int readMetricIntervalInMinutes = 1;
 
 	public InfluxDBMetricsClient(String serverURL, String databaseName, Logger log) {
 		this.serverURL = serverURL;
@@ -59,9 +58,7 @@ public class InfluxDBMetricsClient {
 		Map<String, Double> resultMap = new HashMap<>();
 		try {
 			QueryResult queryResult = influxDB.query(new Query(
-				"SELECT MEAN(" + valueField + ") FROM " + metricName + " WHERE time > now() - "
-					+ readMetricIntervalInMinutes
-					+ "m GROUP BY " + keyField));
+				"SELECT LAST(" + valueField + ") FROM " + metricName + " GROUP BY " + keyField));
 			List<QueryResult.Result> results = queryResult.getResults();
 			results.forEach(result -> {
 				List<QueryResult.Series> series = result.getSeries();
@@ -95,8 +92,7 @@ public class InfluxDBMetricsClient {
 			int cpuId = i;
 			try {
 				QueryResult queryResult = influxDB.query(new Query(
-					"SELECT value FROM taskmanager_System_CPU_UsageCPU" + i
-						+ " WHERE time > now() - " + 3 + "m ORDER BY time DESC LIMIT 1"));
+					"SELECT LAST(value) FROM taskmanager_System_CPU_UsageCPU" + i));
 				List<QueryResult.Result> results = queryResult.getResults();
 				results.forEach(result -> {
 					List<QueryResult.Series> series = result.getSeries();
@@ -121,9 +117,7 @@ public class InfluxDBMetricsClient {
 		Map<String, Double> resultMap = new HashMap<>();
 		try {
 			QueryResult queryResult = influxDB.query(new Query(
-				"SELECT MEAN(value) FROM taskmanager_job_task_operator_currentCpuUsage WHERE time > now() - "
-					+ readMetricIntervalInMinutes
-					+ "m GROUP BY operator_id, subtask_index"));
+				"SELECT LAST(value) FROM taskmanager_job_task_operator_currentCpuUsage GROUP BY operator_id, subtask_index"));
 			List<QueryResult.Result> results = queryResult.getResults();
 			results.forEach(result -> {
 				List<QueryResult.Series> series = result.getSeries();
@@ -152,6 +146,5 @@ public class InfluxDBMetricsClient {
 
 	public void closeConnection() {
 		influxDB.close();
-
 	}
 }

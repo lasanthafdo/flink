@@ -28,9 +28,10 @@ public class NeuralNetworkConfiguration {
 	private int numHiddenNodes;
 	private int trainTriggerThreshold;
 	private int maxTrainingCacheSize;
+	private int numActionSuggestions;
 
 	public NeuralNetworkConfiguration() {
-		this(100, 680, 0.01, 0.3, 50, 10, 1000);
+		this(100, 680, 0.01, 0.3, 50, 10, 100, 20);
 	}
 
 	public NeuralNetworkConfiguration(
@@ -40,7 +41,8 @@ public class NeuralNetworkConfiguration {
 		double epsilonGreedyThreshold,
 		int numHiddenNodes,
 		int trainTriggerThreshold,
-		int maxTrainingCacheSize) {
+		int maxTrainingCacheSize,
+		int numActionSuggestions) {
 
 		this.numEpochs = numEpochs;
 		this.seed = seed;
@@ -49,6 +51,7 @@ public class NeuralNetworkConfiguration {
 		this.numHiddenNodes = numHiddenNodes;
 		this.trainTriggerThreshold = trainTriggerThreshold;
 		this.maxTrainingCacheSize = maxTrainingCacheSize;
+		this.numActionSuggestions = numActionSuggestions;
 	}
 
 	public int getNumEpochs() {
@@ -124,4 +127,9 @@ public class NeuralNetworkConfiguration {
 	public void setNumHiddenNodes(int numHiddenNodes) {
 		this.numHiddenNodes = numHiddenNodes;
 	}
+
+	public int getNumActionSuggestions() {
+		return numActionSuggestions;
+	}
+
 }

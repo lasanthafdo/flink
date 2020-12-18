@@ -128,11 +128,13 @@ public class SchedulingAgentUtils {
 				if (jobMasterConfiguration.contains(DeploymentOptions.SCHEDULING_AGENT_CONFIG_STRING)) {
 					String agentConfigString = jobMasterConfiguration.getString(
 						DeploymentOptions.SCHEDULING_AGENT_CONFIG_STRING);
-					String[] configElements = agentConfigString.split(",", 11);
+					String[] configElements = agentConfigString.split(",", 14);
 					long triggerPeriod;
 					long waitTimeOut;
 					int numRetries;
 					int updatePeriod;
+					int tpUpdatePeriod = 0;
+					int freqUpdatesThreshold = 0;
 					NeuralNetworkConfiguration neuralNetworkConfiguration;
 					if (configElements.length == nDefaultConfigElements) {
 						triggerPeriod = Long.parseLong(configElements[0]);
@@ -141,7 +143,7 @@ public class SchedulingAgentUtils {
 						updatePeriod = Integer.parseInt(configElements[3]);
 
 						neuralNetworkConfiguration = new NeuralNetworkConfiguration();
-					} else if (configElements.length == 11) {
+					} else if (configElements.length == 14) {
 						triggerPeriod = Long.parseLong(configElements[0]);
 						waitTimeOut = Long.parseLong(configElements[1]);
 						numRetries = Integer.parseInt(configElements[2]);
@@ -153,15 +155,14 @@ public class SchedulingAgentUtils {
 						int numHiddenNodes = Integer.parseInt(configElements[8]);
 						int trainTriggerThreshold = Integer.parseInt(configElements[9]);
 						int maxTrainingCacheSize = Integer.parseInt(configElements[10]);
+						int numActionSuggestions = Integer.parseInt(configElements[11]);
+						tpUpdatePeriod = Integer.parseInt(configElements[12]);
+						freqUpdatesThreshold = Integer.parseInt(configElements[13]);
 
 						neuralNetworkConfiguration = new NeuralNetworkConfiguration(
-							numEpochs,
-							seed,
-							learningRate,
-							epsilonGreedyThreshold,
-							numHiddenNodes,
-							trainTriggerThreshold,
-							maxTrainingCacheSize);
+							numEpochs, seed, learningRate, epsilonGreedyThreshold,
+							numHiddenNodes, trainTriggerThreshold, maxTrainingCacheSize,
+							numActionSuggestions);
 					} else {
 						throw new IllegalConfigurationException(
 							"Incorrect number of arguments in the scheduling agent configuration string.");
@@ -175,6 +176,8 @@ public class SchedulingAgentUtils {
 						waitTimeOut,
 						numRetries,
 						updatePeriod,
+						tpUpdatePeriod,
+						freqUpdatesThreshold,
 						neuralNetworkConfiguration);
 				} else {
 					throw new IllegalConfigurationException(
