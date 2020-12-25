@@ -26,7 +26,6 @@ import org.apache.flink.runtime.scheduler.ExecutionVertexDeploymentOption;
 import org.apache.flink.runtime.scheduler.SchedulerOperations;
 import org.apache.flink.util.FlinkRuntimeException;
 
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -90,7 +89,7 @@ public class TrafficBasedSchedulingStrategy implements SchedulingStrategy {
 		if (runtimeState == null) {
 			setupDefaultPlacement();
 		} else {
-			setupTrafficBasedPlacement(runtimeState);
+			setupDerivedPlacement(runtimeState);
 		}
 
 		final List<ExecutionVertexDeploymentOption> executionVertexDeploymentOptions =
@@ -103,7 +102,7 @@ public class TrafficBasedSchedulingStrategy implements SchedulingStrategy {
 	}
 
 	private void setupDefaultPlacement() {
-		AtomicInteger currentCpuId = new AtomicInteger(2);
+		AtomicInteger currentCpuId = new AtomicInteger(1);
 		schedulingTopology.getVertices().forEach(schedulingExecutionVertex -> {
 			schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
 				DEFAULT_TASK_MANAGER_ADDRESS,
@@ -111,21 +110,24 @@ public class TrafficBasedSchedulingStrategy implements SchedulingStrategy {
 		});
 	}
 
-	private void setupTrafficBasedPlacement(SchedulingRuntimeState runtimeState) {
+	private void setupDerivedPlacement(SchedulingRuntimeState runtimeState) {
 		SchedulingExecutionContainer topLevelContainer = runtimeState.getTopLevelContainer();
-		List<Integer> placementSolution = runtimeState.getPlacementSolution();
-		topLevelContainer.releaseAllExecutionVertices();
-		AtomicInteger placementIndex = new AtomicInteger(0);
-		schedulingTopology
-			.getVertices()
-			.forEach(schedulingExecutionVertex -> {
+		List<Integer> placementAction = runtimeState.getPlacementSolution();
+		if (runtimeState.isValidPlacementAction(placementAction)) {
+			topLevelContainer.releaseAllExecutionVertices();
+			AtomicInteger placementIndex = new AtomicInteger(0);
+			schedulingTopology.getVertices().forEach(schedulingExecutionVertex -> {
 				topLevelContainer.forceSchedule(
 					schedulingExecutionVertex,
-					placementSolution.get(placementIndex.get()));
+					placementAction.get(placementIndex.get()));
 				schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
 					DEFAULT_TASK_MANAGER_ADDRESS,
-					placementSolution.get(placementIndex.getAndIncrement())));
+					placementAction.get(placementIndex.getAndIncrement())));
 			});
+		} else {
+			throw new FlinkRuntimeException(
+				"Suggested operator placement action " + placementAction + " is invalid");
+		}
 	}
 
 	/**

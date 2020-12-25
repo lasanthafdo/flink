@@ -18,12 +18,7 @@
 
 package org.apache.flink.runtime.scheduler.agent;
 
-import org.apache.flink.api.common.JobStatus;
-import org.apache.flink.runtime.concurrent.FutureUtils;
-import org.apache.flink.runtime.execution.ExecutionState;
-import org.apache.flink.runtime.executiongraph.Execution;
 import org.apache.flink.runtime.executiongraph.ExecutionGraph;
-import org.apache.flink.runtime.executiongraph.ExecutionVertex;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionContainer;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategy;
@@ -31,30 +26,26 @@ import org.apache.flink.util.FlinkRuntimeException;
 
 import org.slf4j.Logger;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.StreamSupport;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
-import static org.apache.flink.util.Preconditions.checkState;
 
 /**
  * A scheduling agent that will run periodically to reschedule.
  */
-public class DRLSchedulingAgent extends AbstractSchedulingAgent {
+public class QActorCriticSchedulingAgent extends AbstractSchedulingAgent {
 
-	private final SchedulingStrategy schedulingStrategy;
-	private final ActorCriticWrapper actorCriticWrapper;
+	private final QActorCriticWrapper qActorCriticWrapper;
 	private CompletableFuture<Collection<Acknowledge>> previousRescheduleFuture;
 	private final ScheduledExecutorService executorService;
 	private final long updatePeriodInSeconds;
 
-	public DRLSchedulingAgent(
+	public QActorCriticSchedulingAgent(
 		Logger log,
 		ExecutionGraph executionGraph,
 		SchedulingStrategy schedulingStrategy,
@@ -64,14 +55,13 @@ public class DRLSchedulingAgent extends AbstractSchedulingAgent {
 		int numRetries,
 		int updatePeriod) {
 
-		super(log, triggerPeriod, executionGraph, waitTimeout, numRetries);
-		this.schedulingStrategy = checkNotNull(schedulingStrategy);
+		super(log, triggerPeriod, executionGraph, schedulingStrategy, waitTimeout, numRetries);
 
 		int nVertices = Math.toIntExact(StreamSupport.stream(executionGraph
 			.getSchedulingTopology()
 			.getVertices().spliterator(), false).count());
-		this.actorCriticWrapper = new ActorCriticWrapper(cpuLayout.cpus(), nVertices, log);
-		this.executorService = executorService;
+		this.qActorCriticWrapper = new QActorCriticWrapper(cpuLayout.cpus(), nVertices, log);
+		this.executorService = checkNotNull(executorService);
 		this.updatePeriodInSeconds = updatePeriod;
 		setupUpdateTriggerThread();
 	}
@@ -104,14 +94,14 @@ public class DRLSchedulingAgent extends AbstractSchedulingAgent {
 
 	@Override
 	protected void updatePlacementSolution() {
-		int currentStateId = actorCriticWrapper.getStateFor(currentPlacementAction);
-		actorCriticWrapper.updateState(
+		int currentStateId = qActorCriticWrapper.getStateFor(currentPlacementAction);
+		qActorCriticWrapper.updateState(
 			getOverallThroughput(),
 			currentStateId,
 			stateId -> -1.0
 				* getTopLevelContainer().getResourceUsage(SchedulingExecutionContainer.CPU));
-		int currentAction = actorCriticWrapper.getSuggestedAction(currentStateId);
-		suggestedPlacementAction = actorCriticWrapper.getPlacementSolution(currentAction);
+		int currentAction = qActorCriticWrapper.getSuggestedAction(currentStateId);
+		suggestedPlacementAction = qActorCriticWrapper.getPlacementSolution(currentAction);
 		if (!isValidPlacementAction(suggestedPlacementAction)) {
 			throw new FlinkRuntimeException(
 				"Invalid placement action " + suggestedPlacementAction + " suggested.");
@@ -134,54 +124,4 @@ public class DRLSchedulingAgent extends AbstractSchedulingAgent {
 		}
 	}
 
-	private CompletableFuture<Collection<Acknowledge>> rescheduleEager() {
-		checkState(executionGraph.getState() == JobStatus.RUNNING, "job is not running currently");
-
-		final Iterable<ExecutionVertex> vertices = executionGraph.getAllExecutionVertices();
-		final ArrayList<CompletableFuture<Acknowledge>> allHaltFutures = new ArrayList<>();
-
-		for (ExecutionVertex ev : vertices) {
-			Execution attempt = ev.getCurrentExecutionAttempt();
-			CompletableFuture<Acknowledge> haltFuture = attempt
-				.haltExecution()
-				.whenCompleteAsync((ack, fail) -> {
-					String taskNameWithSubtaskIndex = attempt
-						.getVertex()
-						.getTaskNameWithSubtaskIndex();
-					for (int i = 0; i < numRetries; i++) {
-						if (attempt.getState() != ExecutionState.CREATED) {
-							try {
-								Thread.sleep(waitTimeout);
-							} catch (InterruptedException exception) {
-								log.warn(
-									"Thread waiting on halting of task {} was interrupted due to cause : {}",
-									taskNameWithSubtaskIndex,
-									exception);
-							}
-						} else {
-							if (log.isDebugEnabled()) {
-								log.debug("Task '" + taskNameWithSubtaskIndex
-									+ "' changed to expected state (" +
-									ExecutionState.CREATED + ") while waiting " + i + " times");
-							}
-							return;
-						}
-					}
-					log.error("Couldn't halt execution for task {}.", taskNameWithSubtaskIndex);
-					FutureUtils.completedExceptionally(new Exception(
-						"Couldn't halt execution for task " + taskNameWithSubtaskIndex));
-				});
-			allHaltFutures.add(haltFuture);
-		}
-		final FutureUtils.ConjunctFuture<Collection<Acknowledge>> allHaltsFuture = FutureUtils.combineAll(
-			allHaltFutures);
-		return allHaltsFuture.whenComplete((ack, fail) -> {
-			if (fail != null) {
-				log.error("Encountered exception when halting process.", fail);
-				throw new CompletionException("Halt process unsuccessful", fail);
-			} else {
-				schedulingStrategy.startScheduling(this);
-			}
-		});
-	}
 }

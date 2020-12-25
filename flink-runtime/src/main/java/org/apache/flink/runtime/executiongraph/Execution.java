@@ -844,7 +844,6 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 	}
 
 	public CompletableFuture<Acknowledge> haltExecution() {
-		//TODO Handle state transitions properly
 		CompletableFuture<Acknowledge> cancelFuture = sendCancelRpcCallForHalt(NUM_CANCEL_CALL_TRIES);
 		if (taskManagerLocationFuture.isDone()) {
 			taskManagerLocationFuture = new CompletableFuture<>();

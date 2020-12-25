@@ -53,7 +53,7 @@ public class SchedulingAgentUtils {
 						long waitTimeOut = Long.parseLong(configElements[1]);
 						int numRetries = Integer.parseInt(configElements[2]);
 
-						return new PeriodicSchedulingAgent(
+						return new PinnedTaskSchedulingAgent(
 							log,
 							executionGraph,
 							schedulingStrategy,
@@ -107,7 +107,7 @@ public class SchedulingAgentUtils {
 						int numRetries = Integer.parseInt(configElements[2]);
 						int updatePeriod = Integer.parseInt(configElements[3]);
 
-						return new DRLSchedulingAgent(
+						return new QActorCriticSchedulingAgent(
 							log,
 							executionGraph,
 							schedulingStrategy,
@@ -167,7 +167,7 @@ public class SchedulingAgentUtils {
 						throw new IllegalConfigurationException(
 							"Incorrect number of arguments in the scheduling agent configuration string.");
 					}
-					return new AdaptiveSchedulingAgent(
+					return new ActorCriticNNSchedulingAgent(
 						log,
 						executionGraph,
 						schedulingStrategy,

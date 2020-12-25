@@ -24,6 +24,7 @@ import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 import org.apache.flink.runtime.scheduler.DeploymentOption;
 import org.apache.flink.runtime.scheduler.ExecutionVertexDeploymentOption;
 import org.apache.flink.runtime.scheduler.SchedulerOperations;
+import org.apache.flink.util.FlinkRuntimeException;
 
 import org.jetbrains.annotations.NotNull;
 
@@ -38,7 +39,7 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
 /**
  * {@link SchedulingStrategy} instance for streaming job which will schedule all tasks at the same time.
  */
-public class DRLSchedulingStrategy implements SchedulingStrategy {
+public class ActorCriticNNSchedulingStrategy implements SchedulingStrategy {
 
 	private final SchedulerOperations schedulerOperations;
 
@@ -46,8 +47,9 @@ public class DRLSchedulingStrategy implements SchedulingStrategy {
 
 	private final DeploymentOption deploymentOption = new DeploymentOption(false);
 
+	private SchedulingExecutionContainer topLevelContainer;
 
-	public DRLSchedulingStrategy(
+	public ActorCriticNNSchedulingStrategy(
 		SchedulerOperations schedulerOperations,
 		SchedulingTopology schedulingTopology) {
 
@@ -65,11 +67,6 @@ public class DRLSchedulingStrategy implements SchedulingStrategy {
 	public void startScheduling(SchedulingRuntimeState runtimeState) {
 		allocateSlotsAndDeploy(SchedulingStrategyUtils.getAllVertexIdsFromTopology(
 			schedulingTopology), runtimeState);
-	}
-
-	@Override
-	public void setTopLevelContainer(SchedulingExecutionContainer schedulingExecutionContainer) {
-
 	}
 
 	@Override
@@ -95,7 +92,7 @@ public class DRLSchedulingStrategy implements SchedulingStrategy {
 		if (runtimeState == null) {
 			setupDefaultPlacement();
 		} else {
-			setupDRLPlacement(runtimeState);
+			setupDerivedPlacement(runtimeState);
 		}
 		final List<ExecutionVertexDeploymentOption> executionVertexDeploymentOptions =
 			SchedulingStrategyUtils.createExecutionVertexDeploymentOptionsInTopologicalOrder(
@@ -107,31 +104,43 @@ public class DRLSchedulingStrategy implements SchedulingStrategy {
 	}
 
 	private void setupDefaultPlacement() {
-		AtomicInteger currentCpuId = new AtomicInteger(2);
+		checkNotNull(topLevelContainer);
+		AtomicInteger currentCpuId = new AtomicInteger(1);
 		schedulingTopology.getVertices().forEach(schedulingExecutionVertex -> {
+			topLevelContainer.forceSchedule(schedulingExecutionVertex, currentCpuId.get());
 			schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
 				DEFAULT_TASK_MANAGER_ADDRESS,
 				currentCpuId.getAndIncrement()));
 		});
 	}
 
-	private void setupDRLPlacement(@NotNull SchedulingRuntimeState runtimeState) {
+	private void setupDerivedPlacement(@NotNull SchedulingRuntimeState runtimeState) {
 		SchedulingExecutionContainer topLevelContainer = runtimeState.getTopLevelContainer();
-		List<Integer> placementSolution = runtimeState.getPlacementSolution();
-		topLevelContainer.releaseAllExecutionVertices();
-		AtomicInteger placementIndex = new AtomicInteger(0);
-		schedulingTopology.getVertices().forEach(schedulingExecutionVertex -> {
-			topLevelContainer.forceSchedule(
-				schedulingExecutionVertex,
-				placementSolution.get(placementIndex.get()));
-			schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
-				DEFAULT_TASK_MANAGER_ADDRESS,
-				placementSolution.get(placementIndex.getAndIncrement())));
-		});
+		List<Integer> placementAction = runtimeState.getPlacementSolution();
+		if (runtimeState.isValidPlacementAction(placementAction)) {
+			topLevelContainer.releaseAllExecutionVertices();
+			AtomicInteger placementIndex = new AtomicInteger(0);
+			schedulingTopology.getVertices().forEach(schedulingExecutionVertex -> {
+				topLevelContainer.forceSchedule(
+					schedulingExecutionVertex,
+					placementAction.get(placementIndex.get()));
+				schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
+					DEFAULT_TASK_MANAGER_ADDRESS,
+					placementAction.get(placementIndex.getAndIncrement())));
+			});
+		} else {
+			throw new FlinkRuntimeException(
+				"Suggested operator placement action " + placementAction + " is invalid");
+		}
+	}
+
+	@Override
+	public void setTopLevelContainer(SchedulingExecutionContainer topLevelContainer) {
+		this.topLevelContainer = topLevelContainer;
 	}
 
 	/**
-	 * The factory for creating {@link DRLSchedulingStrategy}.
+	 * The factory for creating {@link ActorCriticNNSchedulingStrategy}.
 	 */
 	public static class Factory implements SchedulingStrategyFactory {
 
@@ -139,7 +148,7 @@ public class DRLSchedulingStrategy implements SchedulingStrategy {
 		public SchedulingStrategy createInstance(
 			SchedulerOperations schedulerOperations,
 			SchedulingTopology schedulingTopology) {
-			return new DRLSchedulingStrategy(schedulerOperations, schedulingTopology);
+			return new ActorCriticNNSchedulingStrategy(schedulerOperations, schedulingTopology);
 		}
 	}
 }

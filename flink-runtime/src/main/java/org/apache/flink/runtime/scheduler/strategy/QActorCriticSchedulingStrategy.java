@@ -25,6 +25,8 @@ import org.apache.flink.runtime.scheduler.DeploymentOption;
 import org.apache.flink.runtime.scheduler.ExecutionVertexDeploymentOption;
 import org.apache.flink.runtime.scheduler.SchedulerOperations;
 
+import org.apache.flink.util.FlinkRuntimeException;
+
 import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
@@ -38,7 +40,7 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
 /**
  * {@link SchedulingStrategy} instance for streaming job which will schedule all tasks at the same time.
  */
-public class AdaptiveSchedulingStrategy implements SchedulingStrategy {
+public class QActorCriticSchedulingStrategy implements SchedulingStrategy {
 
 	private final SchedulerOperations schedulerOperations;
 
@@ -46,9 +48,8 @@ public class AdaptiveSchedulingStrategy implements SchedulingStrategy {
 
 	private final DeploymentOption deploymentOption = new DeploymentOption(false);
 
-	private SchedulingExecutionContainer topLevelContainer;
 
-	public AdaptiveSchedulingStrategy(
+	public QActorCriticSchedulingStrategy(
 		SchedulerOperations schedulerOperations,
 		SchedulingTopology schedulingTopology) {
 
@@ -66,6 +67,11 @@ public class AdaptiveSchedulingStrategy implements SchedulingStrategy {
 	public void startScheduling(SchedulingRuntimeState runtimeState) {
 		allocateSlotsAndDeploy(SchedulingStrategyUtils.getAllVertexIdsFromTopology(
 			schedulingTopology), runtimeState);
+	}
+
+	@Override
+	public void setTopLevelContainer(SchedulingExecutionContainer schedulingExecutionContainer) {
+
 	}
 
 	@Override
@@ -91,7 +97,7 @@ public class AdaptiveSchedulingStrategy implements SchedulingStrategy {
 		if (runtimeState == null) {
 			setupDefaultPlacement();
 		} else {
-			setupAdaptivePlacement(runtimeState);
+			setupDerivedPlacement(runtimeState);
 		}
 		final List<ExecutionVertexDeploymentOption> executionVertexDeploymentOptions =
 			SchedulingStrategyUtils.createExecutionVertexDeploymentOptionsInTopologicalOrder(
@@ -105,39 +111,34 @@ public class AdaptiveSchedulingStrategy implements SchedulingStrategy {
 	private void setupDefaultPlacement() {
 		AtomicInteger currentCpuId = new AtomicInteger(2);
 		schedulingTopology.getVertices().forEach(schedulingExecutionVertex -> {
-			if (topLevelContainer != null) {
-				topLevelContainer.forceSchedule(schedulingExecutionVertex, currentCpuId.get());
-			}
 			schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
 				DEFAULT_TASK_MANAGER_ADDRESS,
 				currentCpuId.getAndIncrement()));
 		});
 	}
 
-	private void setupAdaptivePlacement(@NotNull SchedulingRuntimeState runtimeState) {
+	private void setupDerivedPlacement(@NotNull SchedulingRuntimeState runtimeState) {
 		SchedulingExecutionContainer topLevelContainer = runtimeState.getTopLevelContainer();
-		List<Integer> placementSolution = runtimeState.getPlacementSolution();
-		topLevelContainer.releaseAllExecutionVertices();
-		AtomicInteger placementIndex = new AtomicInteger(0);
-		schedulingTopology
-			.getVertices()
-			.forEach(schedulingExecutionVertex -> {
+		List<Integer> placementAction = runtimeState.getPlacementSolution();
+		if (runtimeState.isValidPlacementAction(placementAction)) {
+			topLevelContainer.releaseAllExecutionVertices();
+			AtomicInteger placementIndex = new AtomicInteger(0);
+			schedulingTopology.getVertices().forEach(schedulingExecutionVertex -> {
 				topLevelContainer.forceSchedule(
 					schedulingExecutionVertex,
-					placementSolution.get(placementIndex.get()));
+					placementAction.get(placementIndex.get()));
 				schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
 					DEFAULT_TASK_MANAGER_ADDRESS,
-					placementSolution.get(placementIndex.getAndIncrement())));
+					placementAction.get(placementIndex.getAndIncrement())));
 			});
-	}
-
-	@Override
-	public void setTopLevelContainer(SchedulingExecutionContainer topLevelContainer) {
-		this.topLevelContainer = topLevelContainer;
+		} else {
+			throw new FlinkRuntimeException(
+				"Suggested operator placement action " + placementAction + " is invalid");
+		}
 	}
 
 	/**
-	 * The factory for creating {@link AdaptiveSchedulingStrategy}.
+	 * The factory for creating {@link QActorCriticSchedulingStrategy}.
 	 */
 	public static class Factory implements SchedulingStrategyFactory {
 
@@ -145,7 +146,7 @@ public class AdaptiveSchedulingStrategy implements SchedulingStrategy {
 		public SchedulingStrategy createInstance(
 			SchedulerOperations schedulerOperations,
 			SchedulingTopology schedulingTopology) {
-			return new AdaptiveSchedulingStrategy(schedulerOperations, schedulingTopology);
+			return new QActorCriticSchedulingStrategy(schedulerOperations, schedulingTopology);
 		}
 	}
 }

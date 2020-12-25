@@ -41,7 +41,7 @@ import static org.apache.flink.util.Preconditions.checkState;
 /**
  * A scheduling agent that will run periodically to reschedule.
  */
-public class PeriodicSchedulingAgent implements SchedulingAgent {
+public class PinnedTaskSchedulingAgent implements SchedulingAgent {
 
 	private final ExecutionGraph executionGraph;
 	private final SchedulingTopology schedulingTopology;
@@ -53,7 +53,7 @@ public class PeriodicSchedulingAgent implements SchedulingAgent {
 
 	private CompletableFuture<Collection<Acknowledge>> previousRescheduleFuture;
 
-	public PeriodicSchedulingAgent(
+	public PinnedTaskSchedulingAgent(
 		Logger log, ExecutionGraph executionGraph,
 		SchedulingStrategy schedulingStrategy,
 		long triggerPeriod, long waitTimeout, int numRetries) {

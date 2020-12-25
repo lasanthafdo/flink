@@ -74,6 +74,7 @@ public class NeuralNetworksBasedActorCriticModel {
 	private Cache<INDArray, INDArray> trainingCache;
 	private boolean isTrained = false;
 	private int updatesSinceLastTraining = 0;
+	private InfluxDBTransitionsClient influxDBTransitionsClient;
 
 	public NeuralNetworksBasedActorCriticModel(
 		int nCpus,
@@ -98,6 +99,7 @@ public class NeuralNetworksBasedActorCriticModel {
 		this.maxTrainingCacheSize = neuralNetworkConfiguration.getMaxTrainingCacheSize();
 		this.scoreIterationPrintFrequency = neuralNetworkConfiguration.getNumEpochs();
 		setupNeuralNetwork();
+		setupInfluxDBConnection();
 	}
 
 	private void setupNeuralNetwork() {
@@ -112,6 +114,13 @@ public class NeuralNetworksBasedActorCriticModel {
 			.build();
 	}
 
+	private void setupInfluxDBConnection() {
+		influxDBTransitionsClient = new InfluxDBTransitionsClient(
+			"http://127.0.0.1:8086",
+			"flink-transitions", log);
+		influxDBTransitionsClient.setup();
+	}
+
 	public void updateTrainingData(
 		List<Integer> placement,
 		List<Double> cpuUsageMetrics,
@@ -119,9 +128,7 @@ public class NeuralNetworksBasedActorCriticModel {
 		Double throughput) {
 
 		updateTrainingCache(placement, cpuUsageMetrics, edgeFlowRates, throughput);
-
 		updatesSinceLastTraining++;
-
 		if (updatesSinceLastTraining >= trainTriggerThreshold) {
 			INDArray inputArray = null;
 			INDArray labelArray = null;
@@ -143,6 +150,11 @@ public class NeuralNetworksBasedActorCriticModel {
 			}
 			updatesSinceLastTraining = 0;
 		}
+		influxDBTransitionsClient.writeInputDataPoint(
+			placement.toString(),
+			cpuUsageMetrics.toString(),
+			edgeFlowRates.toString(),
+			throughput);
 	}
 
 	private void updateTrainingCache(
@@ -216,16 +228,16 @@ public class NeuralNetworksBasedActorCriticModel {
 					.orElse(0.0);
 //				if (predictedMaxThroughput > currentThroughput
 //					|| (currentThroughput - predictedMaxThroughput) < 100000.0) {
-					int argMax = predictedValues.indexOf(predictedMaxThroughput);
-					if (argMax >= 0) {
-						List<List<Integer>> suggestedActionList = new ArrayList<>(suggestedActions.keySet());
-						placementSuggestion = suggestedActionList.get(argMax);
-						log.info("Suggested actions : {}", suggestedActionList);
-						log.info("Predicted values: {}", predictedValues);
-						log.info(
-							"Suggesting action with predicted throughput of {} : {} ",
-							predictedMaxThroughput, placementSuggestion);
-						return placementSuggestion;
+				int argMax = predictedValues.indexOf(predictedMaxThroughput);
+				if (argMax >= 0) {
+					List<List<Integer>> suggestedActionList = new ArrayList<>(suggestedActions.keySet());
+					placementSuggestion = suggestedActionList.get(argMax);
+					log.info("Suggested actions : {}", suggestedActionList);
+					log.info("Predicted values: {}", predictedValues);
+					log.info(
+						"Suggesting action with predicted throughput of {} : {} ",
+						predictedMaxThroughput, placementSuggestion);
+					return placementSuggestion;
 //					}
 				}
 			}

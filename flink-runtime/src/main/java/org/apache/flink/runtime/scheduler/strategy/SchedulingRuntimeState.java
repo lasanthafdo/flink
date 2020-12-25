@@ -39,4 +39,6 @@ public interface SchedulingRuntimeState {
 	double getOverallThroughput();
 
 	List<Integer> getPlacementSolution();
+
+	boolean isValidPlacementAction(List<Integer> suggestedPlacementAction);
 }

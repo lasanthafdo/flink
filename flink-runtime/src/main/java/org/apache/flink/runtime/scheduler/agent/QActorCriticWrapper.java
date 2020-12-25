@@ -25,21 +25,18 @@ import org.paukov.combinatorics.ICombinatoricsVector;
 import org.slf4j.Logger;
 
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 
-import static org.paukov.combinatorics.CombinatoricsFactory.createCompositionGenerator;
 import static org.paukov.combinatorics.CombinatoricsFactory.createSimpleCombinationGenerator;
 
 /**
  * Wrapper class for the actor-critic training.
  */
-public class ActorCriticWrapper {
+public class QActorCriticWrapper {
 
 	private int stateCount;
 	private int actionCount;
@@ -54,7 +51,7 @@ public class ActorCriticWrapper {
 	private int currentStateId;
 	private int currentActionId;
 
-	public ActorCriticWrapper(int nCpus, int nVertices, Logger log) {
+	public QActorCriticWrapper(int nCpus, int nVertices, Logger log) {
 		stateSpaceMap = generateActionSpace(nCpus, nVertices);
 		this.stateCount = stateSpaceMap.size();
 		this.actionCount = stateSpaceMap.size();
@@ -190,11 +187,17 @@ public class ActorCriticWrapper {
 			oldStateStr.deleteCharAt(oldStateStr.length() - 1);
 			newStateStr.deleteCharAt(newStateStr.length() - 1);
 
-			influxDBTransitionsClient.writeToDB(
+			influxDBTransitionsClient.writeQLearningActionToDB(
 				actionStr.toString(),
 				oldStateStr.toString(),
 				newStateStr.toString(),
 				transition.reward);
+		}
+	}
+
+	public void shutdown() {
+		if (influxDBTransitionsClient != null) {
+			influxDBTransitionsClient.closeConnection();
 		}
 	}
 

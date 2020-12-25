@@ -18,7 +18,13 @@
 
 package org.apache.flink.runtime.scheduler.agent;
 
+import org.apache.flink.api.common.JobStatus;
+import org.apache.flink.runtime.concurrent.FutureUtils;
+import org.apache.flink.runtime.execution.ExecutionState;
+import org.apache.flink.runtime.executiongraph.Execution;
 import org.apache.flink.runtime.executiongraph.ExecutionGraph;
+import org.apache.flink.runtime.executiongraph.ExecutionVertex;
+import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.scheduler.adapter.DefaultExecutionEdge;
 import org.apache.flink.runtime.scheduler.adapter.SchedulingNode;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionContainer;
@@ -26,6 +32,7 @@ import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionEdge;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingResultPartition;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingRuntimeState;
+import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategy;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingTopology;
 import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.IterableUtils;
@@ -35,17 +42,21 @@ import net.openhft.affinity.CpuLayout;
 import org.slf4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
+import static org.apache.flink.util.Preconditions.checkState;
 
 public abstract class AbstractSchedulingAgent implements SchedulingAgent, SchedulingRuntimeState {
 
@@ -62,6 +73,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	protected final long waitTimeout;
 	protected final int numRetries;
 	protected final int nVertices;
+	protected final SchedulingStrategy schedulingStrategy;
 	protected List<SchedulingExecutionEdge> orderedEdgeList;
 	protected List<Integer> suggestedPlacementAction;
 	protected List<Integer> currentPlacementAction;
@@ -72,10 +84,12 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		Logger log,
 		long triggerPeriod,
 		ExecutionGraph executionGraph,
+		SchedulingStrategy schedulingStrategy,
 		long waitTimeout,
 		int numRetries) {
 
 		this.executionGraph = checkNotNull(executionGraph);
+		this.schedulingStrategy = checkNotNull(schedulingStrategy);
 		this.schedulingTopology = checkNotNull(executionGraph.getSchedulingTopology());
 		this.log = log;
 		this.cpuLayout = AffinityLock.cpuLayout();
@@ -95,6 +109,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		this.numRetries = numRetries;
 		this.currentPlacementAction = new ArrayList<>();
 		this.nVertices = executionGraph.getTotalNumberOfVertices();
+		this.schedulingStrategy.setTopLevelContainer(getTopLevelContainer());
 	}
 
 	protected void initializeEdgeMap() {
@@ -120,7 +135,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	}
 
 	private void logCurrentPlacement() {
-		if(log.isDebugEnabled()) {
+		if (log.isDebugEnabled()) {
 			StringBuilder currentPlacement = new StringBuilder("[");
 			schedulingTopology.getVertices().forEach(sourceVertex -> {
 				currentPlacement.append("{Vertex Name: ").append(sourceVertex.getTaskName())
@@ -300,8 +315,8 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 				.toStream(schedulingTopology.getVertices())
 				.forEachOrdered(schedulingExecutionVertex -> {
 					currentPlacementTemp.put(
-						cpuAssignmentMap.get(schedulingExecutionVertex),
-						vertexCount.getAndIncrement());
+						vertexCount.getAndIncrement(),
+						cpuAssignmentMap.get(schedulingExecutionVertex));
 				});
 		} else {
 			log.warn("Could not retrieve current CPU assignment for this job.");
@@ -312,12 +327,64 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		}
 	}
 
-	protected boolean isValidPlacementAction(List<Integer> suggestedPlacementAction) {
+	@Override
+	public boolean isValidPlacementAction(List<Integer> suggestedPlacementAction) {
 		return suggestedPlacementAction.size() == nVertices
 			&& suggestedPlacementAction
 			.stream()
 			.noneMatch(cpuId -> cpuId < 0 || cpuId > (nCpus - 1))
 			&& suggestedPlacementAction.stream().distinct().count()
 			== suggestedPlacementAction.size();
+	}
+
+	protected CompletableFuture<Collection<Acknowledge>> rescheduleEager() {
+		checkState(executionGraph.getState() == JobStatus.RUNNING, "job is not running currently");
+
+		final Iterable<ExecutionVertex> vertices = executionGraph.getAllExecutionVertices();
+		final ArrayList<CompletableFuture<Acknowledge>> allHaltFutures = new ArrayList<>();
+
+		for (ExecutionVertex ev : vertices) {
+			Execution attempt = ev.getCurrentExecutionAttempt();
+			CompletableFuture<Acknowledge> haltFuture = attempt
+				.haltExecution()
+				.whenCompleteAsync((ack, fail) -> {
+					String taskNameWithSubtaskIndex = attempt
+						.getVertex()
+						.getTaskNameWithSubtaskIndex();
+					for (int i = 0; i < numRetries; i++) {
+						if (attempt.getState() != ExecutionState.CREATED) {
+							try {
+								Thread.sleep(waitTimeout);
+							} catch (InterruptedException exception) {
+								log.warn(
+									"Thread waiting on halting of task {} was interrupted due to cause : {}",
+									taskNameWithSubtaskIndex,
+									exception);
+							}
+						} else {
+							if (log.isDebugEnabled()) {
+								log.debug("Task '" + taskNameWithSubtaskIndex
+									+ "' changed to expected state (" +
+									ExecutionState.CREATED + ") while waiting " + i + " times");
+							}
+							return;
+						}
+					}
+					log.error("Couldn't halt execution for task {}.", taskNameWithSubtaskIndex);
+					FutureUtils.completedExceptionally(new Exception(
+						"Couldn't halt execution for task " + taskNameWithSubtaskIndex));
+				});
+			allHaltFutures.add(haltFuture);
+		}
+		final FutureUtils.ConjunctFuture<Collection<Acknowledge>> allHaltsFuture = FutureUtils.combineAll(
+			allHaltFutures);
+		return allHaltsFuture.whenComplete((ack, fail) -> {
+			if (fail != null) {
+				log.error("Encountered exception when halting process.", fail);
+				throw new CompletionException("Halt process unsuccessful", fail);
+			} else {
+				schedulingStrategy.startScheduling(this);
+			}
+		});
 	}
 }

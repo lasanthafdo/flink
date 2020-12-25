@@ -24,6 +24,8 @@ import org.influxdb.dto.Query;
 import org.influxdb.dto.QueryResult;
 import org.slf4j.Logger;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -68,7 +70,10 @@ public class InfluxDBMetricsClient {
 						if (record.size() == 2) {
 							resultMap.put(
 								seriesElement.getTags().get(keyField),
-								(Double) record.get(1));
+								BigDecimal
+									.valueOf((Double) record.get(1))
+									.setScale(2, RoundingMode.HALF_UP)
+									.doubleValue());
 						} else {
 							log.warn("Size mismatch when reading metric record.");
 						}
@@ -100,7 +105,10 @@ public class InfluxDBMetricsClient {
 						List<Object> record = series.get(0).getValues().get(0);
 						resultMap.put(
 							String.valueOf(cpuId),
-							(Double) record.get(1) / 100.0);
+							BigDecimal
+								.valueOf((Double) record.get(1) / 100.0)
+								.setScale(3, RoundingMode.HALF_UP)
+								.doubleValue());
 					}
 				});
 			} catch (Exception e) {
@@ -129,7 +137,9 @@ public class InfluxDBMetricsClient {
 								seriesElement.getTags().get("operator_id") + "_" + seriesElement
 									.getTags()
 									.get("subtask_index"),
-								((Double) record.get(1)) / 1000000000.0);
+								BigDecimal.valueOf((Double) record.get(1) / 1000000000.0)
+									.setScale(3, RoundingMode.HALF_UP)
+									.doubleValue());
 						} else {
 							log.warn("Size mismatch when reading metric record.");
 						}
