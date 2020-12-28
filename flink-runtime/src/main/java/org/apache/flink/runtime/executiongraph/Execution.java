@@ -844,7 +844,7 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 	}
 
 	public CompletableFuture<Acknowledge> haltExecution() {
-		CompletableFuture<Acknowledge> cancelFuture = sendCancelRpcCallForHalt(NUM_CANCEL_CALL_TRIES);
+		CompletableFuture<Acknowledge> cancelFuture = sendCancelRpcCallForHalt();
 		if (taskManagerLocationFuture.isDone()) {
 			taskManagerLocationFuture = new CompletableFuture<>();
 		}
@@ -1327,7 +1327,6 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 			} else if (current == CANCELING || current == RUNNING || current == DEPLOYING) {
 
 				updateAccumulatorsAndMetrics(userAccumulators, metrics);
-
 				if (transitionState(current, CANCELED)) {
 					finishCancellation(releasePartitions);
 					return;
@@ -1335,8 +1334,7 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 
 				// else fall through the loop
 			} else if (current == HALTED) {
-				updateAccumulatorsAndMetrics(userAccumulators, metrics);
-
+				//updateAccumulatorsAndMetrics(userAccumulators, metrics);
 				transitionState(CREATED);
 				return;
 			} else {
@@ -1541,7 +1539,7 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 				getVertex().getExecutionGraph().getJobMasterMainThreadExecutor();
 
 			CompletableFuture<Acknowledge> cancelResultFuture = FutureUtils.retry(
-				() -> taskManagerGateway.cancelTask(attemptId, rpcTimeout),
+				() -> taskManagerGateway.cancelTask(attemptId, false, rpcTimeout),
 				numberRetries,
 				jobMasterMainThreadExecutor);
 
@@ -1559,7 +1557,7 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 	 *
 	 * <p>The sending is tried up to NUM_CANCEL_CALL_TRIES times.
 	 */
-	private CompletableFuture<Acknowledge> sendCancelRpcCallForHalt(int numberRetries) {
+	private CompletableFuture<Acknowledge> sendCancelRpcCallForHalt() {
 		final LogicalSlot slot = assignedResource;
 
 		if (slot != null) {
@@ -1568,8 +1566,8 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 				getVertex().getExecutionGraph().getJobMasterMainThreadExecutor();
 
 			CompletableFuture<Acknowledge> cancelFuture = FutureUtils.retry(
-				() -> taskManagerGateway.cancelTask(attemptId, rpcTimeout),
-				numberRetries,
+				() -> taskManagerGateway.cancelTask(attemptId, true, rpcTimeout),
+				Execution.NUM_CANCEL_CALL_TRIES,
 				jobMasterMainThreadExecutor)
 				.thenCompose(
 					ack -> {

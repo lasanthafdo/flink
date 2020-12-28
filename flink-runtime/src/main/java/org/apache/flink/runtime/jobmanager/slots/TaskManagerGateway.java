@@ -82,6 +82,7 @@ public interface TaskManagerGateway extends TaskExecutorOperatorEventGateway {
 	 */
 	CompletableFuture<Acknowledge> cancelTask(
 		ExecutionAttemptID executionAttemptID,
+		boolean toBeRescheduled,
 		Time timeout);
 
 	/**

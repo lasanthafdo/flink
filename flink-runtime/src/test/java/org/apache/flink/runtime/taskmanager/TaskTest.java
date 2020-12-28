@@ -142,7 +142,7 @@ public class TaskTest extends TestLogger {
 	@Test
 	public void testCancelRightAway() throws Exception {
 		final Task task = createTaskBuilder().build();
-		task.cancelExecution();
+		task.cancelExecution(false);
 
 		assertEquals(ExecutionState.CANCELING, task.getExecutionState());
 
@@ -326,7 +326,7 @@ public class TaskTest extends TestLogger {
 		// wait till the task is in invoke
 		awaitLatch.await();
 
-		task.cancelExecution();
+		task.cancelExecution(false);
 		assertTrue(task.getExecutionState() == ExecutionState.CANCELING ||
 			task.getExecutionState() == ExecutionState.CANCELED);
 
@@ -377,7 +377,7 @@ public class TaskTest extends TestLogger {
 		task.run();
 
 		// this should not overwrite the failure state
-		task.cancelExecution();
+		task.cancelExecution(false);
 
 		assertEquals(ExecutionState.FAILED, task.getExecutionState());
 		assertTrue(task.isCanceledOrFailed());
@@ -401,7 +401,7 @@ public class TaskTest extends TestLogger {
 		// wait till the task is in invoke
 		awaitLatch.await();
 
-		task.cancelExecution();
+		task.cancelExecution(false);
 		assertEquals(ExecutionState.CANCELING, task.getExecutionState());
 
 		// this causes an exception
@@ -713,7 +713,7 @@ public class TaskTest extends TestLogger {
 
 		awaitLatch.await();
 
-		task.cancelExecution();
+		task.cancelExecution(false);
 		task.getExecutingThread().join();
 	}
 
@@ -740,7 +740,7 @@ public class TaskTest extends TestLogger {
 
 		awaitLatch.await();
 
-		task.cancelExecution();
+		task.cancelExecution(false);
 		task.getExecutingThread().join();
 	}
 
@@ -769,7 +769,7 @@ public class TaskTest extends TestLogger {
 
 			awaitLatch.await();
 
-			task.cancelExecution();
+			task.cancelExecution(false);
 
 			// wait for the notification of notifyFatalError
 			final Throwable fatalError = fatalErrorFuture.join();
@@ -810,7 +810,7 @@ public class TaskTest extends TestLogger {
 
 			awaitLatch.await();
 
-			task.cancelExecution();
+			task.cancelExecution(false);
 
 			// wait for the notification of notifyFatalError
 			final Throwable fatalError = fatalErrorFuture.join();
@@ -885,7 +885,7 @@ public class TaskTest extends TestLogger {
 			.setTaskManagerActions(new NoOpTaskManagerActions())
 			.build();
 
-		task.cancelExecution();
+		task.cancelExecution(false);
 
 		assertFalse(task.getTerminationFuture().isDone());
 

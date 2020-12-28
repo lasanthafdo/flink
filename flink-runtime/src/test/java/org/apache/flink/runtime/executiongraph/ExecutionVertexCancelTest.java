@@ -390,7 +390,10 @@ public class ExecutionVertexCancelTest extends TestLogger {
 		}
 
 		@Override
-		public CompletableFuture<Acknowledge> cancelTask(ExecutionAttemptID executionAttemptID, Time timeout) {
+		public CompletableFuture<Acknowledge> cancelTask(
+			ExecutionAttemptID executionAttemptID,
+			boolean toBeRescheduled,
+			Time timeout) {
 			index++;
 
 			if (index >= successfulOperations) {

@@ -30,7 +30,6 @@ import org.apache.flink.runtime.scheduler.adapter.SchedulingNode;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionContainer;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionEdge;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
-import org.apache.flink.runtime.scheduler.strategy.SchedulingResultPartition;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingRuntimeState;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategy;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingTopology;
@@ -65,7 +64,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	protected final CpuLayout cpuLayout;
 	protected final int nCpus;
 	protected final Map<String, Double> edgeFlowRates;
-	protected final Map<String, SchedulingExecutionEdge<? extends SchedulingExecutionVertex, ? extends SchedulingResultPartition>> edgeMap;
+	protected final Map<String, SchedulingExecutionEdge> edgeMap;
 	protected final List<SchedulingExecutionVertex> sourceVertices = new ArrayList<>();
 	protected final ExecutionGraph executionGraph;
 	protected final long triggerPeriod;
@@ -137,13 +136,16 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	private void logCurrentPlacement() {
 		if (log.isDebugEnabled()) {
 			StringBuilder currentPlacement = new StringBuilder("[");
-			schedulingTopology.getVertices().forEach(sourceVertex -> {
-				currentPlacement.append("{Vertex Name: ").append(sourceVertex.getTaskName())
-					.append(", CPU ID: ").append(sourceVertex.getExecutionPlacement().getCpuId())
-					.append(", CPU Usage: ").append(sourceVertex.getCurrentCpuUsage())
-					.append("}, ");
-
-			});
+			schedulingTopology
+				.getVertices()
+				.forEach(sourceVertex -> currentPlacement
+					.append("{Vertex Name: ")
+					.append(sourceVertex.getTaskName())
+					.append(", CPU ID: ")
+					.append(sourceVertex.getExecutionPlacement().getCpuId())
+					.append(", CPU Usage: ")
+					.append(sourceVertex.getCurrentCpuUsage())
+					.append("}, "));
 			currentPlacement.append("]");
 			log.debug("Current scheduling placement is : {}", currentPlacement);
 		}
@@ -173,11 +175,8 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 			.collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 		edgeFlowRates.putAll(filteredFlowRates);
 		orderedEdgeList = edgeFlowRates
-			.entrySet()
-			.stream()
-			.sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
-			.map(mapEntry -> edgeMap.get(mapEntry.getKey()))
-			.collect(Collectors.toList());
+			.entrySet().stream().sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
+			.map(mapEntry -> edgeMap.get(mapEntry.getKey())).collect(Collectors.toList());
 		logCurrentPlacement();
 	}
 
@@ -197,7 +196,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	}
 
 	@Override
-	public Map<String, Double> getEdgeThroughput() {
+	public Map<String, Double> getEdgeFlowRates() {
 		return edgeFlowRates;
 	}
 
@@ -219,6 +218,11 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	@Override
 	public double getOverallThroughput() {
 		return edgeFlowRates.values().stream().mapToDouble(Double::doubleValue).sum();
+	}
+
+	@Override
+	public double getArrivalRate() {
+		return 0;
 	}
 
 	@Override
@@ -313,11 +317,9 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 			AtomicInteger vertexCount = new AtomicInteger(1);
 			IterableUtils
 				.toStream(schedulingTopology.getVertices())
-				.forEachOrdered(schedulingExecutionVertex -> {
-					currentPlacementTemp.put(
-						vertexCount.getAndIncrement(),
-						cpuAssignmentMap.get(schedulingExecutionVertex));
-				});
+				.forEachOrdered(schedulingExecutionVertex -> currentPlacementTemp.put(
+					vertexCount.getAndIncrement(),
+					cpuAssignmentMap.get(schedulingExecutionVertex)));
 		} else {
 			log.warn("Could not retrieve current CPU assignment for this job.");
 		}

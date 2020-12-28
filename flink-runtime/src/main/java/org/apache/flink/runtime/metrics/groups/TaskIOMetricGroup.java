@@ -25,8 +25,8 @@ import org.apache.flink.metrics.SimpleCounter;
 import org.apache.flink.runtime.executiongraph.IOMetrics;
 import org.apache.flink.runtime.metrics.MetricNames;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Metric group that contains shareable pre-defined IO-related metrics. The metrics registration is
@@ -57,13 +57,21 @@ public class TaskIOMetricGroup extends ProxyMetricGroup<TaskMetricGroup> {
 
 		this.numRecordsIn = counter(MetricNames.IO_NUM_RECORDS_IN, new SumCounter());
 		this.numRecordsOut = counter(MetricNames.IO_NUM_RECORDS_OUT, new SumCounter());
-		this.numRecordsInRate = meter(MetricNames.IO_NUM_RECORDS_IN_RATE, new MeterView(numRecordsIn));
-		this.numRecordsOutRate = meter(MetricNames.IO_NUM_RECORDS_OUT_RATE, new MeterView(numRecordsOut));
+		this.numRecordsInRate = meter(
+			MetricNames.IO_NUM_RECORDS_IN_RATE,
+			new MeterView(numRecordsIn));
+		this.numRecordsOutRate = meter(
+			MetricNames.IO_NUM_RECORDS_OUT_RATE,
+			new MeterView(numRecordsOut));
 
 		this.numBuffersOut = counter(MetricNames.IO_NUM_BUFFERS_OUT);
-		this.numBuffersOutRate = meter(MetricNames.IO_NUM_BUFFERS_OUT_RATE, new MeterView(numBuffersOut));
+		this.numBuffersOutRate = meter(
+			MetricNames.IO_NUM_BUFFERS_OUT_RATE,
+			new MeterView(numBuffersOut));
 
-		this.idleTimePerSecond = meter(MetricNames.TASK_IDLE_TIME, new MeterView(new SimpleCounter()));
+		this.idleTimePerSecond = meter(
+			MetricNames.TASK_IDLE_TIME,
+			new MeterView(new SimpleCounter()));
 	}
 
 	public IOMetrics createSnapshot() {
@@ -114,7 +122,7 @@ public class TaskIOMetricGroup extends ProxyMetricGroup<TaskMetricGroup> {
 	 * the sum of this counters and all contained counters.
 	 */
 	private static class SumCounter extends SimpleCounter {
-		private final List<Counter> internalCounters = new ArrayList<>();
+		private final Set<Counter> internalCounters = new HashSet<>();
 
 		SumCounter() {
 		}

@@ -138,7 +138,7 @@ public class TaskCheckpointingBehaviourTest extends TestLogger {
 
 		// cancel the task and wait. unless cancellation properly closes
 		// the streams, this will never terminate
-		task.cancelExecution();
+		task.cancelExecution(false);
 		task.getExecutingThread().join();
 
 		assertEquals(ExecutionState.CANCELED, task.getExecutionState());
@@ -153,7 +153,7 @@ public class TaskCheckpointingBehaviourTest extends TestLogger {
 
 		Assert.assertEquals(ExecutionState.RUNNING, task.getExecutionState());
 
-		task.cancelExecution();
+		task.cancelExecution(false);
 		task.getExecutingThread().join();
 	}
 

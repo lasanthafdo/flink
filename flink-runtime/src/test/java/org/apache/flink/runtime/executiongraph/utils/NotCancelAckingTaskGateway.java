@@ -27,7 +27,7 @@ import java.util.concurrent.CompletableFuture;
 public class NotCancelAckingTaskGateway extends SimpleAckingTaskManagerGateway {
 
 	@Override
-	public CompletableFuture<Acknowledge> cancelTask(ExecutionAttemptID executionAttemptID, Time timeout) {
+	public CompletableFuture<Acknowledge> cancelTask(ExecutionAttemptID executionAttemptID, boolean toBeRescheduled, Time timeout) {
 		return new CompletableFuture<>();
 	}
 }

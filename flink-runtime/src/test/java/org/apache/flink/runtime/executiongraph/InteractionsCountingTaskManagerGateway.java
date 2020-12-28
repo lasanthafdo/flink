@@ -44,7 +44,7 @@ class InteractionsCountingTaskManagerGateway extends SimpleAckingTaskManagerGate
 	}
 
 	@Override
-	public CompletableFuture<Acknowledge> cancelTask(ExecutionAttemptID executionAttemptID, Time timeout) {
+	public CompletableFuture<Acknowledge> cancelTask(ExecutionAttemptID executionAttemptID, boolean toBeRescheduled, Time timeout) {
 		cancelTaskCount.incrementAndGet();
 		return CompletableFuture.completedFuture(Acknowledge.get());
 	}

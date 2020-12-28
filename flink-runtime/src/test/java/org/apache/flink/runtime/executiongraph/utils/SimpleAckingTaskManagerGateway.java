@@ -106,7 +106,10 @@ public class SimpleAckingTaskManagerGateway implements TaskManagerGateway {
 	}
 
 	@Override
-	public CompletableFuture<Acknowledge> cancelTask(ExecutionAttemptID executionAttemptID, Time timeout) {
+	public CompletableFuture<Acknowledge> cancelTask(
+		ExecutionAttemptID executionAttemptID,
+		boolean toBeRescheduled,
+		Time timeout) {
 		cancelConsumer.accept(executionAttemptID);
 		return CompletableFuture.completedFuture(Acknowledge.get());
 	}

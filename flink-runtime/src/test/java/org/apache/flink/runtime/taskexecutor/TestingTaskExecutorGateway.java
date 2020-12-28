@@ -94,21 +94,21 @@ public class TestingTaskExecutorGateway implements TaskExecutorGateway {
 	private final Supplier<CompletableFuture<ThreadDumpInfo>> requestThreadDumpSupplier;
 
 	TestingTaskExecutorGateway(
-			String address,
-			String hostname,
-			BiConsumer<ResourceID, AllocatedSlotReport> heartbeatJobManagerConsumer,
-			BiConsumer<JobID, Throwable> disconnectJobManagerConsumer,
-			BiFunction<TaskDeploymentDescriptor, JobMasterId, CompletableFuture<Acknowledge>> submitTaskConsumer,
-			Function<Tuple6<SlotID, JobID, AllocationID, ResourceProfile, String, ResourceManagerId>, CompletableFuture<Acknowledge>> requestSlotFunction,
-			BiFunction<AllocationID, Throwable, CompletableFuture<Acknowledge>> freeSlotFunction,
-			Consumer<ResourceID> heartbeatResourceManagerConsumer,
-			Consumer<Exception> disconnectResourceManagerConsumer,
-			Function<ExecutionAttemptID, CompletableFuture<Acknowledge>> cancelTaskFunction,
-			Supplier<CompletableFuture<Boolean>> canBeReleasedSupplier,
-			TriConsumer<JobID, Set<ResultPartitionID>, Set<ResultPartitionID>> releaseOrPromotePartitionsConsumer,
-			Consumer<Collection<IntermediateDataSetID>> releaseClusterPartitionsConsumer,
-			TriFunction<ExecutionAttemptID, OperatorID, SerializedValue<OperatorEvent>, CompletableFuture<Acknowledge>> operatorEventHandler,
-			Supplier<CompletableFuture<ThreadDumpInfo>> requestThreadDumpSupplier) {
+		String address,
+		String hostname,
+		BiConsumer<ResourceID, AllocatedSlotReport> heartbeatJobManagerConsumer,
+		BiConsumer<JobID, Throwable> disconnectJobManagerConsumer,
+		BiFunction<TaskDeploymentDescriptor, JobMasterId, CompletableFuture<Acknowledge>> submitTaskConsumer,
+		Function<Tuple6<SlotID, JobID, AllocationID, ResourceProfile, String, ResourceManagerId>, CompletableFuture<Acknowledge>> requestSlotFunction,
+		BiFunction<AllocationID, Throwable, CompletableFuture<Acknowledge>> freeSlotFunction,
+		Consumer<ResourceID> heartbeatResourceManagerConsumer,
+		Consumer<Exception> disconnectResourceManagerConsumer,
+		Function<ExecutionAttemptID, CompletableFuture<Acknowledge>> cancelTaskFunction,
+		Supplier<CompletableFuture<Boolean>> canBeReleasedSupplier,
+		TriConsumer<JobID, Set<ResultPartitionID>, Set<ResultPartitionID>> releaseOrPromotePartitionsConsumer,
+		Consumer<Collection<IntermediateDataSetID>> releaseClusterPartitionsConsumer,
+		TriFunction<ExecutionAttemptID, OperatorID, SerializedValue<OperatorEvent>, CompletableFuture<Acknowledge>> operatorEventHandler,
+		Supplier<CompletableFuture<ThreadDumpInfo>> requestThreadDumpSupplier) {
 
 		this.address = Preconditions.checkNotNull(address);
 		this.hostname = Preconditions.checkNotNull(hostname);
@@ -128,58 +128,101 @@ public class TestingTaskExecutorGateway implements TaskExecutorGateway {
 	}
 
 	@Override
-	public CompletableFuture<Acknowledge> requestSlot(SlotID slotId, JobID jobId, AllocationID allocationId, ResourceProfile resourceProfile, String targetAddress, ResourceManagerId resourceManagerId, Time timeout) {
-		return requestSlotFunction.apply(Tuple6.of(slotId, jobId, allocationId, resourceProfile, targetAddress, resourceManagerId));
+	public CompletableFuture<Acknowledge> requestSlot(
+		SlotID slotId,
+		JobID jobId,
+		AllocationID allocationId,
+		ResourceProfile resourceProfile,
+		String targetAddress,
+		ResourceManagerId resourceManagerId,
+		Time timeout) {
+		return requestSlotFunction.apply(Tuple6.of(
+			slotId,
+			jobId,
+			allocationId,
+			resourceProfile,
+			targetAddress,
+			resourceManagerId));
 	}
 
 	@Override
-	public CompletableFuture<TaskBackPressureResponse> requestTaskBackPressure(ExecutionAttemptID executionAttemptId, int requestId, @RpcTimeout Time timeout) {
+	public CompletableFuture<TaskBackPressureResponse> requestTaskBackPressure(
+		ExecutionAttemptID executionAttemptId,
+		int requestId,
+		@RpcTimeout Time timeout) {
 		throw new UnsupportedOperationException();
 	}
 
 	@Override
-	public CompletableFuture<Acknowledge> submitTask(TaskDeploymentDescriptor tdd, JobMasterId jobMasterId, Time timeout) {
+	public CompletableFuture<Acknowledge> submitTask(
+		TaskDeploymentDescriptor tdd,
+		JobMasterId jobMasterId,
+		Time timeout) {
 		return submitTaskConsumer.apply(tdd, jobMasterId);
 	}
 
 	@Override
-	public CompletableFuture<Acknowledge> updatePartitions(ExecutionAttemptID executionAttemptID, Iterable<PartitionInfo> partitionInfos, Time timeout) {
+	public CompletableFuture<Acknowledge> updatePartitions(
+		ExecutionAttemptID executionAttemptID,
+		Iterable<PartitionInfo> partitionInfos,
+		Time timeout) {
 		return CompletableFuture.completedFuture(Acknowledge.get());
 	}
 
 	@Override
-	public void releaseOrPromotePartitions(JobID jobId, Set<ResultPartitionID> partitionToRelease, Set<ResultPartitionID> partitionsToPromote) {
+	public void releaseOrPromotePartitions(
+		JobID jobId,
+		Set<ResultPartitionID> partitionToRelease,
+		Set<ResultPartitionID> partitionsToPromote) {
 		releaseOrPromotePartitionsConsumer.accept(jobId, partitionToRelease, partitionsToPromote);
 	}
 
 	@Override
-	public CompletableFuture<Acknowledge> releaseClusterPartitions(Collection<IntermediateDataSetID> dataSetsToRelease, Time timeout) {
+	public CompletableFuture<Acknowledge> releaseClusterPartitions(
+		Collection<IntermediateDataSetID> dataSetsToRelease,
+		Time timeout) {
 		releaseClusterPartitionsConsumer.accept(dataSetsToRelease);
 		return CompletableFuture.completedFuture(Acknowledge.get());
 	}
 
 	@Override
-	public CompletableFuture<Acknowledge> triggerCheckpoint(ExecutionAttemptID executionAttemptID, long checkpointID, long checkpointTimestamp, CheckpointOptions checkpointOptions, boolean advanceToEndOfEventTime) {
+	public CompletableFuture<Acknowledge> triggerCheckpoint(
+		ExecutionAttemptID executionAttemptID,
+		long checkpointID,
+		long checkpointTimestamp,
+		CheckpointOptions checkpointOptions,
+		boolean advanceToEndOfEventTime) {
 		return CompletableFuture.completedFuture(Acknowledge.get());
 	}
 
 	@Override
-	public CompletableFuture<Acknowledge> confirmCheckpoint(ExecutionAttemptID executionAttemptID, long checkpointId, long checkpointTimestamp) {
+	public CompletableFuture<Acknowledge> confirmCheckpoint(
+		ExecutionAttemptID executionAttemptID,
+		long checkpointId,
+		long checkpointTimestamp) {
 		return CompletableFuture.completedFuture(Acknowledge.get());
 	}
 
 	@Override
-	public CompletableFuture<Acknowledge> abortCheckpoint(ExecutionAttemptID executionAttemptID, long checkpointId, long checkpointTimestamp) {
+	public CompletableFuture<Acknowledge> abortCheckpoint(
+		ExecutionAttemptID executionAttemptID,
+		long checkpointId,
+		long checkpointTimestamp) {
 		return CompletableFuture.completedFuture(Acknowledge.get());
 	}
 
 	@Override
-	public CompletableFuture<Acknowledge> cancelTask(ExecutionAttemptID executionAttemptID, Time timeout) {
+	public CompletableFuture<Acknowledge> cancelTask(
+		ExecutionAttemptID executionAttemptID,
+		boolean toBeRescheduled,
+		Time timeout) {
 		return cancelTaskFunction.apply(executionAttemptID);
 	}
 
 	@Override
-	public void heartbeatFromJobManager(ResourceID heartbeatOrigin, AllocatedSlotReport allocatedSlotReport) {
+	public void heartbeatFromJobManager(
+		ResourceID heartbeatOrigin,
+		AllocatedSlotReport allocatedSlotReport) {
 		heartbeatJobManagerConsumer.accept(heartbeatOrigin, allocatedSlotReport);
 	}
 
@@ -199,17 +242,24 @@ public class TestingTaskExecutorGateway implements TaskExecutorGateway {
 	}
 
 	@Override
-	public CompletableFuture<Acknowledge> freeSlot(AllocationID allocationId, Throwable cause, Time timeout) {
+	public CompletableFuture<Acknowledge> freeSlot(
+		AllocationID allocationId,
+		Throwable cause,
+		Time timeout) {
 		return freeSlotFunction.apply(allocationId, cause);
 	}
 
 	@Override
-	public CompletableFuture<TransientBlobKey> requestFileUploadByType(FileType fileType, Time timeout) {
+	public CompletableFuture<TransientBlobKey> requestFileUploadByType(
+		FileType fileType,
+		Time timeout) {
 		return FutureUtils.completedExceptionally(new UnsupportedOperationException());
 	}
 
 	@Override
-	public CompletableFuture<TransientBlobKey> requestFileUploadByName(String fileName, Time timeout) {
+	public CompletableFuture<TransientBlobKey> requestFileUploadByName(
+		String fileName,
+		Time timeout) {
 		return FutureUtils.completedExceptionally(new UnsupportedOperationException());
 	}
 
@@ -225,9 +275,9 @@ public class TestingTaskExecutorGateway implements TaskExecutorGateway {
 
 	@Override
 	public CompletableFuture<Acknowledge> sendOperatorEventToTask(
-			ExecutionAttemptID task,
-			OperatorID operator,
-			SerializedValue<OperatorEvent> evt) {
+		ExecutionAttemptID task,
+		OperatorID operator,
+		SerializedValue<OperatorEvent> evt) {
 		return operatorEventHandler.apply(task, operator, evt);
 	}
 

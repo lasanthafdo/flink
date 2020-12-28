@@ -159,7 +159,7 @@ public class InterruptSensitiveRestoreTest {
 		IN_RESTORE_LATCH.await();
 
 		// trigger cancellation and signal to continue
-		task.cancelExecution();
+		task.cancelExecution(false);
 
 		task.getExecutingThread().join(30000);
 

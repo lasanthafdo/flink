@@ -1492,6 +1492,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 				return true;
 
 			case CANCELED:
+			case HALTED:
 				// this deserialization is exception-free
 				accumulators = deserializeAccumulators(state);
 				attempt.completeCancelling(accumulators, state.getIOMetrics(), false);

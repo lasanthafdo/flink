@@ -23,6 +23,8 @@ import org.influxdb.InfluxDBFactory;
 import org.influxdb.dto.Point;
 import org.slf4j.Logger;
 
+import java.util.concurrent.TimeUnit;
+
 /**
  * InfluxDB metrics client to access scheduling metrics.
  */
@@ -42,6 +44,8 @@ public class InfluxDBTransitionsClient {
 		if (influxDB == null) {
 			influxDB = InfluxDBFactory.connect(serverURL);
 			influxDB.setDatabase(databaseName);
+			influxDB.setRetentionPolicy("two_hours");
+			influxDB.setConsistency(InfluxDB.ConsistencyLevel.ANY);
 		}
 	}
 
@@ -53,6 +57,7 @@ public class InfluxDBTransitionsClient {
 		try {
 			influxDB.write(Point
 				.measurement("state_transitions")
+				.time(System.currentTimeMillis(), TimeUnit.MILLISECONDS)
 				.tag("host", "127.0.0.1")
 				.addField("action", action)
 				.addField("oldState", oldState)
@@ -71,7 +76,8 @@ public class InfluxDBTransitionsClient {
 		Double throughput) {
 		try {
 			influxDB.write(Point
-				.measurement("state_snapshot")
+				.measurement("state_snapshots")
+				.time(System.currentTimeMillis(), TimeUnit.MILLISECONDS)
 				.tag("host", "127.0.0.1")
 				.addField("placementAction", placementAction)
 				.addField("cpuUsageMetrics", cpuUsageMetrics)
@@ -85,6 +91,5 @@ public class InfluxDBTransitionsClient {
 
 	public void closeConnection() {
 		influxDB.close();
-
 	}
 }

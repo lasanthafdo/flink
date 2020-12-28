@@ -174,7 +174,7 @@ public class AbstractUdfStreamOperatorLifecycleTest {
 			LifecycleTrackingStreamSource.runStarted.await();
 
 			// this should cancel the task even though it is blocked on runFinished
-			task.cancelExecution();
+			task.cancelExecution(false);
 
 			// wait for clean termination
 			task.getExecutingThread().join();

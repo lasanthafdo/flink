@@ -60,9 +60,9 @@ public class RpcTaskManagerGateway implements TaskManagerGateway {
 
 	@Override
 	public CompletableFuture<TaskBackPressureResponse> requestTaskBackPressure(
-			ExecutionAttemptID executionAttemptID,
-			int requestId,
-			Time timeout) {
+		ExecutionAttemptID executionAttemptID,
+		int requestId,
+		Time timeout) {
 
 		return taskExecutorGateway.requestTaskBackPressure(executionAttemptID, requestId, timeout);
 	}
@@ -73,12 +73,18 @@ public class RpcTaskManagerGateway implements TaskManagerGateway {
 	}
 
 	@Override
-	public CompletableFuture<Acknowledge> cancelTask(ExecutionAttemptID executionAttemptID, Time timeout) {
-		return taskExecutorGateway.cancelTask(executionAttemptID, timeout);
+	public CompletableFuture<Acknowledge> cancelTask(
+		ExecutionAttemptID executionAttemptID,
+		boolean toBeRescheduled,
+		Time timeout) {
+		return taskExecutorGateway.cancelTask(executionAttemptID, toBeRescheduled, timeout);
 	}
 
 	@Override
-	public CompletableFuture<Acknowledge> updatePartitions(ExecutionAttemptID executionAttemptID, Iterable<PartitionInfo> partitionInfos, Time timeout) {
+	public CompletableFuture<Acknowledge> updatePartitions(
+		ExecutionAttemptID executionAttemptID,
+		Iterable<PartitionInfo> partitionInfos,
+		Time timeout) {
 		return taskExecutorGateway.updatePartitions(executionAttemptID, partitionInfos, timeout);
 	}
 
@@ -88,17 +94,31 @@ public class RpcTaskManagerGateway implements TaskManagerGateway {
 	}
 
 	@Override
-	public void notifyCheckpointComplete(ExecutionAttemptID executionAttemptID, JobID jobId, long checkpointId, long timestamp) {
+	public void notifyCheckpointComplete(
+		ExecutionAttemptID executionAttemptID,
+		JobID jobId,
+		long checkpointId,
+		long timestamp) {
 		taskExecutorGateway.confirmCheckpoint(executionAttemptID, checkpointId, timestamp);
 	}
 
 	@Override
-	public void notifyCheckpointAborted(ExecutionAttemptID executionAttemptID, JobID jobId, long checkpointId, long timestamp) {
+	public void notifyCheckpointAborted(
+		ExecutionAttemptID executionAttemptID,
+		JobID jobId,
+		long checkpointId,
+		long timestamp) {
 		taskExecutorGateway.abortCheckpoint(executionAttemptID, checkpointId, timestamp);
 	}
 
 	@Override
-	public void triggerCheckpoint(ExecutionAttemptID executionAttemptID, JobID jobId, long checkpointId, long timestamp, CheckpointOptions checkpointOptions, boolean advanceToEndOfEventTime) {
+	public void triggerCheckpoint(
+		ExecutionAttemptID executionAttemptID,
+		JobID jobId,
+		long checkpointId,
+		long timestamp,
+		CheckpointOptions checkpointOptions,
+		boolean advanceToEndOfEventTime) {
 		taskExecutorGateway.triggerCheckpoint(
 			executionAttemptID,
 			checkpointId,
@@ -108,7 +128,10 @@ public class RpcTaskManagerGateway implements TaskManagerGateway {
 	}
 
 	@Override
-	public CompletableFuture<Acknowledge> freeSlot(AllocationID allocationId, Throwable cause, Time timeout) {
+	public CompletableFuture<Acknowledge> freeSlot(
+		AllocationID allocationId,
+		Throwable cause,
+		Time timeout) {
 		return taskExecutorGateway.freeSlot(
 			allocationId,
 			cause,

@@ -23,11 +23,11 @@ import org.apache.flink.runtime.executiongraph.ExecutionVertex;
 /**
  * Scheduling representation of {@link ExecutionVertex}.
  */
-public interface SchedulingExecutionEdge<SEV extends SchedulingExecutionVertex, SRP extends SchedulingResultPartition> {
+public interface SchedulingExecutionEdge {
 
-	SEV getSourceSchedulingExecutionVertex();
+	SchedulingExecutionVertex getSourceSchedulingExecutionVertex();
 
-	SEV getTargetSchedulingExecutionVertex();
+	SchedulingExecutionVertex getTargetSchedulingExecutionVertex();
 
-	SRP getSchedulingResultPartition();
+	SchedulingResultPartition getSchedulingResultPartition();
 }

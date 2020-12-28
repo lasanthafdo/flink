@@ -768,12 +768,13 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 	@Override
 	public CompletableFuture<Acknowledge> cancelTask(
 		ExecutionAttemptID executionAttemptID,
+		boolean toBeRescheduled,
 		Time timeout) {
 		final Task task = taskSlotTable.getTask(executionAttemptID);
 
 		if (task != null) {
 			try {
-				task.cancelExecution();
+				task.cancelExecution(toBeRescheduled);
 				return CompletableFuture.completedFuture(Acknowledge.get());
 			} catch (Throwable t) {
 				return FutureUtils.completedExceptionally(
@@ -1751,7 +1752,8 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 
 		Task task = taskSlotTable.removeTask(executionAttemptID);
 		if (task != null) {
-			if (!task.getExecutionState().isTerminal()) {
+			ExecutionState executionState = task.getExecutionState();
+			if (!(executionState.isTerminal() || executionState == ExecutionState.HALTED)) {
 				try {
 					task.failExternally(new IllegalStateException(
 						"Task is being remove from TaskManager."));
@@ -2144,7 +2146,8 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 
 		@Override
 		public void updateTaskExecutionState(final TaskExecutionState taskExecutionState) {
-			if (taskExecutionState.getExecutionState().isTerminal()) {
+			ExecutionState executionState = taskExecutionState.getExecutionState();
+			if (executionState.isTerminal() || executionState == ExecutionState.HALTED) {
 				runAsync(() -> unregisterTaskAndNotifyFinalState(
 					jobMasterGateway,
 					taskExecutionState.getID()));

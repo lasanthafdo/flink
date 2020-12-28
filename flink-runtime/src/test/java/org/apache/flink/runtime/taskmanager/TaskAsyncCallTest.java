@@ -305,7 +305,7 @@ public class TaskAsyncCallTest extends TestLogger {
 
 		@Override
 		public void close() throws Exception {
-			task.cancelExecution();
+			task.cancelExecution(false);
 			task.getExecutingThread().join(5000);
 		}
 	}

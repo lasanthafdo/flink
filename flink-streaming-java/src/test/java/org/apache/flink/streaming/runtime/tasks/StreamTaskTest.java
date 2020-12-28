@@ -283,7 +283,7 @@ public class StreamTaskTest extends TestLogger {
 
 			// send a cancel. because the operator takes a long time to deserialize, this should
 			// hit the task before the operator is deserialized
-			task.cancelExecution();
+			task.cancelExecution(false);
 
 			task.getExecutingThread().join();
 
@@ -376,7 +376,7 @@ public class StreamTaskTest extends TestLogger {
 			syncLatch.await();
 
 			// cancel the execution - this should lead to smooth shutdown
-			task.cancelExecution();
+			task.cancelExecution(false);
 			task.getExecutingThread().join();
 
 			assertEquals(ExecutionState.CANCELED, task.getExecutionState());

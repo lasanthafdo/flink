@@ -113,7 +113,7 @@ public class ActorCriticNNSchedulingAgent extends AbstractSchedulingAgent {
 				actorCriticModel.updateTrainingData(
 					currentPlacementAction,
 					new ArrayList<>(getCpuMetrics().values()),
-					new ArrayList<>(getEdgeThroughput().values()),
+					new ArrayList<>(getEdgeFlowRates().values()),
 					getOverallThroughput());
 			}
 			updatePlacementSolution();
@@ -123,11 +123,6 @@ public class ActorCriticNNSchedulingAgent extends AbstractSchedulingAgent {
 				e.getMessage(),
 				e);
 		}
-	}
-
-	@Override
-	public List<Integer> getPlacementSolution() {
-		return suggestedPlacementAction;
 	}
 
 	@Override

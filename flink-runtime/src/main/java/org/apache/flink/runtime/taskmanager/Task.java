@@ -135,7 +135,8 @@ import static org.apache.flink.util.Preconditions.checkState;
  *
  * <p>Each Task is run by one dedicated thread.
  */
-public class Task implements Runnable, TaskSlotPayload, TaskActions, PartitionProducerStateProvider, CheckpointListener, BackPressureSampleableTask {
+public class Task implements Runnable, TaskSlotPayload, TaskActions, PartitionProducerStateProvider,
+	CheckpointListener, BackPressureSampleableTask {
 
 	/**
 	 * The class logger.
@@ -665,7 +666,10 @@ public class Task implements Runnable, TaskSlotPayload, TaskActions, PartitionPr
 
 		if (pinnedToCpu) {
 			try (AffinityLock a1 = AffinityLock.acquireLock(cpuId)) {
-				LOG.info("Task {} is running on CPU {} ", taskInfo.getTaskNameWithSubtasks(), cpuId);
+				LOG.info(
+					"Task {} is running on CPU {} ",
+					taskInfo.getTaskNameWithSubtasks(),
+					cpuId);
 				doRun();
 			} finally {
 				terminationFuture.complete(executionState);
@@ -939,8 +943,9 @@ public class Task implements Runnable, TaskSlotPayload, TaskActions, PartitionPr
 						if (transitionState(current, ExecutionState.CANCELED)) {
 							break;
 						}
-					} else if (current == ExecutionState.FAILED) {
-						// in state failed already, no transition necessary any more
+					} else if (current == ExecutionState.FAILED
+						|| current == ExecutionState.HALTED) {
+						// in state failed or halted already, no transition necessary any more
 						break;
 					}
 					// unexpected state, go to failed
@@ -1000,7 +1005,9 @@ public class Task implements Runnable, TaskSlotPayload, TaskActions, PartitionPr
 			// counted as finished when this happens
 			// errors here will only be logged
 			try {
-				metrics.close();
+				if (getExecutionState() != ExecutionState.HALTED) {
+					metrics.close();
+				}
 			} catch (Throwable t) {
 				LOG.error(
 					"Error during metrics de-registration of task {} ({}).",
@@ -1095,7 +1102,7 @@ public class Task implements Runnable, TaskSlotPayload, TaskActions, PartitionPr
 	}
 
 	private void notifyFinalState() {
-		checkState(executionState.isTerminal());
+		checkState(executionState.isTerminal() || executionState == ExecutionState.HALTED);
 		taskManagerActions.updateTaskExecutionState(new TaskExecutionState(
 			jobId,
 			executionId,
@@ -1167,10 +1174,16 @@ public class Task implements Runnable, TaskSlotPayload, TaskActions, PartitionPr
 	 * starts an asynchronous thread that aborts that code.
 	 *
 	 * <p>This method never blocks.</p>
+	 *
+	 * @param toBeRescheduled whether to be rescheduled at a later time
 	 */
-	public void cancelExecution() {
+	public void cancelExecution(boolean toBeRescheduled) {
 		LOG.info("Attempting to cancel task {} ({}).", taskNameWithSubtask, executionId);
-		cancelOrFailAndCancelInvokable(ExecutionState.CANCELING, null);
+		if (toBeRescheduled) {
+			cancelOrFailAndCancelInvokable(ExecutionState.HALTED, null);
+		} else {
+			cancelOrFailAndCancelInvokable(ExecutionState.CANCELING, null);
+		}
 	}
 
 	/**
@@ -1216,7 +1229,8 @@ public class Task implements Runnable, TaskSlotPayload, TaskActions, PartitionPr
 				return;
 			}
 
-			if (current == ExecutionState.DEPLOYING || current == ExecutionState.CREATED) {
+			if (current == ExecutionState.DEPLOYING || current == ExecutionState.CREATED
+				|| current == ExecutionState.HALTED) {
 				if (transitionState(current, targetState, cause)) {
 					// if we manage this state transition, then the invokable gets never called
 					// we need not call cancel on it
@@ -1224,7 +1238,7 @@ public class Task implements Runnable, TaskSlotPayload, TaskActions, PartitionPr
 					return;
 				}
 			} else if (current == ExecutionState.RUNNING) {
-				if (transitionState(ExecutionState.RUNNING, targetState, cause)) {
+				if (transitionState(current, targetState, cause)) {
 					// we are canceling / failing out of the running state
 					// we need to cancel the invokable
 
@@ -1523,7 +1537,7 @@ public class Task implements Runnable, TaskSlotPayload, TaskActions, PartitionPr
 
 		@Override
 		public void cancelConsumption() {
-			cancelExecution();
+			cancelExecution(false);
 		}
 
 		@Override

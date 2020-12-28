@@ -165,12 +165,26 @@ public class NeuralNetworksBasedActorCriticModel {
 		INDArray cpuMetricsArr = Nd4j.createFromArray(cpuUsageMetrics.toArray(new Double[0]));
 		INDArray edgeFlowRatesArr = Nd4j.createFromArray(edgeFlowRates.toArray(new Double[0]));
 		INDArray encodedPlacement = encodePlacement(placement);
-		trainingCache.put(
-			Nd4j.hstack(
-				encodedPlacement.reshape(1, encodedPlacement.length()),
-				cpuMetricsArr.reshape(1, cpuMetricsArr.length()),
-				edgeFlowRatesArr.reshape(1, edgeFlowRatesArr.length())),
-			Nd4j.createFromArray(throughput));
+		long actualInputSize =
+			encodedPlacement.length() + cpuMetricsArr.length() + edgeFlowRatesArr.length();
+		if (actualInputSize != numInputs) {
+			log.warn(
+				"Incorrect number of input features. Expected:{}, "
+					+ "Found:{} [Encoded placement length:{}, CPU Metrics length {}, "
+					+ "Edge flow rates length {}]",
+				numInputs,
+				actualInputSize,
+				encodedPlacement.length(),
+				cpuMetricsArr.length(),
+				edgeFlowRatesArr.length());
+		} else {
+			trainingCache.put(
+				Nd4j.hstack(
+					encodedPlacement.reshape(1, encodedPlacement.length()),
+					cpuMetricsArr.reshape(1, cpuMetricsArr.length()),
+					edgeFlowRatesArr.reshape(1, edgeFlowRatesArr.length())),
+				Nd4j.createFromArray(throughput));
+		}
 	}
 
 	private void train(INDArray inputData, INDArray labels) {

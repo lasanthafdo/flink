@@ -170,10 +170,11 @@ public interface TaskExecutorGateway extends RpcGateway, TaskExecutorOperatorEve
 	 * Cancel the given task.
 	 *
 	 * @param executionAttemptID identifying the task
+	 * @param toBeRescheduled whether it is to be rescheduled later
 	 * @param timeout for the cancel operation
 	 * @return Future acknowledge if the task is successfully canceled
 	 */
-	CompletableFuture<Acknowledge> cancelTask(ExecutionAttemptID executionAttemptID, @RpcTimeout Time timeout);
+	CompletableFuture<Acknowledge> cancelTask(ExecutionAttemptID executionAttemptID, boolean toBeRescheduled, @RpcTimeout Time timeout);
 
 	/**
 	 * Heartbeat request from the job manager.

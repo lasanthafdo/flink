@@ -88,11 +88,6 @@ public class QActorCriticSchedulingAgent extends AbstractSchedulingAgent {
 	}
 
 	@Override
-	public List<Integer> getPlacementSolution() {
-		return suggestedPlacementAction;
-	}
-
-	@Override
 	protected void updatePlacementSolution() {
 		int currentStateId = qActorCriticWrapper.getStateFor(currentPlacementAction);
 		qActorCriticWrapper.updateState(
