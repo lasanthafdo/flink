@@ -18,6 +18,8 @@
 
 package org.apache.flink.runtime.scheduler.agent;
 
+import org.apache.flink.shaded.guava18.com.google.common.util.concurrent.AtomicDouble;
+
 import org.influxdb.InfluxDB;
 import org.influxdb.InfluxDBFactory;
 import org.influxdb.dto.Query;
@@ -152,6 +154,32 @@ public class InfluxDBMetricsClient {
 				e.getMessage());
 		}
 		return resultMap;
+	}
+
+	public Double getMostRecentArrivalRate(List<String> sourceVertexIDs) {
+		final AtomicDouble arrivalRate = new AtomicDouble(0.0);
+		for (String sourceVertexID : sourceVertexIDs) {
+			try {
+				QueryResult queryResult = influxDB.query(new Query(
+					"SELECT LAST(rate) FROM taskmanager_job_task_operator_numRecordsOutPerSecond "
+						+ "WHERE operator_id = '" + sourceVertexID + "'"));
+				List<QueryResult.Result> results = queryResult.getResults();
+				results.forEach(result -> {
+					List<QueryResult.Series> series = result.getSeries();
+					if (series != null && !series.isEmpty()) {
+						List<Object> record = series.get(0).getValues().get(0);
+						arrivalRate.addAndGet((Double) record.get(1));
+					}
+				});
+			} catch (Exception e) {
+				log.warn(
+					"Exception occurred when retrieving metrics for source vertex with ID {} : {}",
+					sourceVertexID,
+					e.getMessage());
+			}
+		}
+
+		return arrivalRate.get();
 	}
 
 	public void closeConnection() {

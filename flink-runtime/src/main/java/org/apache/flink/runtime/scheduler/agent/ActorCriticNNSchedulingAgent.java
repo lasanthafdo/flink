@@ -65,11 +65,10 @@ public class ActorCriticNNSchedulingAgent extends AbstractSchedulingAgent {
 
 		super(log, triggerPeriod, executionGraph, schedulingStrategy, waitTimeout, numRetries);
 
-		int nCpus = cpuLayout.cpus();
-		int numInputs = (nVertices + 1) * nCpus + edgeMap.size();
+		int numInputs = (nVertices + 1) * this.nCpus + 1;
 		neuralNetworkConfiguration.setNumInputs(numInputs);
 		this.actorCriticModel = new NeuralNetworksBasedActorCriticModel(
-			nCpus, nVertices, neuralNetworkConfiguration, log);
+			this.nCpus, nVertices, neuralNetworkConfiguration, log);
 		this.actorCriticExecutor = actorCriticExecutor;
 		this.updatePeriodInSeconds = updatePeriodInSeconds;
 		this.potentialPlacementActions = new TopKMap<>(neuralNetworkConfiguration.getNumActionSuggestions());
@@ -113,7 +112,7 @@ public class ActorCriticNNSchedulingAgent extends AbstractSchedulingAgent {
 				actorCriticModel.updateTrainingData(
 					currentPlacementAction,
 					new ArrayList<>(getCpuMetrics().values()),
-					new ArrayList<>(getEdgeFlowRates().values()),
+					getArrivalRate(),
 					getOverallThroughput());
 			}
 			updatePlacementSolution();
@@ -133,9 +132,8 @@ public class ActorCriticNNSchedulingAgent extends AbstractSchedulingAgent {
 
 		suggestedPlacementAction = actorCriticModel.selectAction(
 			potentialPlacementActions,
-			currentThroughput,
 			new ArrayList<>(getCpuMetrics().values()),
-			new ArrayList<>(edgeFlowRates.values()));
+			getArrivalRate());
 		if (suggestedPlacementAction == null || suggestedPlacementAction.isEmpty()) {
 			suggestedPlacementAction = getTrafficBasedPlacementAction();
 		}

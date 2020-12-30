@@ -27,6 +27,7 @@ import org.apache.flink.runtime.executiongraph.ExecutionVertex;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.scheduler.adapter.DefaultExecutionEdge;
 import org.apache.flink.runtime.scheduler.adapter.SchedulingNode;
+import org.apache.flink.runtime.scheduler.strategy.ExecutionVertexID;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionContainer;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionEdge;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
@@ -61,23 +62,25 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 
 	protected final SchedulingTopology schedulingTopology;
 	protected final Logger log;
-	protected final CpuLayout cpuLayout;
 	protected final int nCpus;
-	protected final Map<String, Double> edgeFlowRates;
-	protected final Map<String, SchedulingExecutionEdge> edgeMap;
-	protected final List<SchedulingExecutionVertex> sourceVertices = new ArrayList<>();
-	protected final ExecutionGraph executionGraph;
-	protected final long triggerPeriod;
-	protected final SchedulingNode schedulingNode;
-	protected final long waitTimeout;
-	protected final int numRetries;
 	protected final int nVertices;
-	protected final SchedulingStrategy schedulingStrategy;
-	protected List<SchedulingExecutionEdge> orderedEdgeList;
 	protected List<Integer> suggestedPlacementAction;
 	protected List<Integer> currentPlacementAction;
 	protected ScheduledFuture<?> updateExecutor;
+	protected final ExecutionGraph executionGraph;
+
+	private final Map<String, Double> edgeFlowRates;
+	private final Map<String, SchedulingExecutionEdge> edgeMap;
+	private final List<SchedulingExecutionVertex> sourceVertices = new ArrayList<>();
+	private final long triggerPeriod;
+	private final SchedulingNode schedulingNode;
+	private final long waitTimeout;
+	private final int numRetries;
+	private final CpuLayout cpuLayout;
+	private final SchedulingStrategy schedulingStrategy;
+	private List<SchedulingExecutionEdge> orderedEdgeList;
 	private InfluxDBMetricsClient influxDBMetricsClient;
+	private double mostRecentArrivalRate = 0d;
 
 	public AbstractSchedulingAgent(
 		Logger log,
@@ -177,6 +180,11 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		orderedEdgeList = edgeFlowRates
 			.entrySet().stream().sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
 			.map(mapEntry -> edgeMap.get(mapEntry.getKey())).collect(Collectors.toList());
+		mostRecentArrivalRate = influxDBMetricsClient.getMostRecentArrivalRate(sourceVertices
+			.stream()
+			.map(SchedulingExecutionVertex::getId)
+			.map(ExecutionVertexID::toString)
+			.collect(Collectors.toList()));
 		logCurrentPlacement();
 	}
 
@@ -222,7 +230,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 
 	@Override
 	public double getArrivalRate() {
-		return 0;
+		return mostRecentArrivalRate;
 	}
 
 	@Override

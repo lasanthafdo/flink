@@ -97,25 +97,6 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 		if (firstPreferenceTargetSocket.isPresent()) {
 			SchedulingExecutionContainer cpuSocket = firstPreferenceTargetSocket.get();
 			cpuIds.addAll(cpuSocket.tryScheduleInSameContainer(sourceVertex, targetVertex));
-/*
-		} else { // Couldn't find a socket with two available slots
-			List<SchedulingExecutionContainer> secondPreferenceTargetSockets = cpuSockets.values()
-				.stream().filter(cpuSocket -> cpuSocket.getRemainingCapacity() >= 2)
-				.sorted(Comparator.comparing(
-					sec -> sec.getResourceUsage(CPU),
-					Comparator.reverseOrder())).limit(2)
-				.collect(Collectors.toList());
-			if (secondPreferenceTargetSockets.size() > 0) {
-				cpuIds.add(secondPreferenceTargetSockets
-					.get(0)
-					.scheduleExecutionVertex(sourceVertex));
-				if (secondPreferenceTargetSockets.size() > 1) {
-					cpuIds.add(secondPreferenceTargetSockets
-						.get(1)
-						.scheduleExecutionVertex(targetVertex));
-				}
-			}
-*/
 		}
 		return cpuIds;
 	}

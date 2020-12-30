@@ -32,7 +32,7 @@ public class CpuUsageGauge implements Gauge<Long> {
 
 	private final ThreadMXBean threadMXBean;
 	private long threadId;
-	private volatile long lastUsageValue;
+	private volatile long lastUsageValue = 0;
 
 	public CpuUsageGauge() {
 		this.threadMXBean = ManagementFactory.getThreadMXBean();
@@ -51,7 +51,8 @@ public class CpuUsageGauge implements Gauge<Long> {
 			long cpuUsageSinceLast = currentUsage - lastUsageValue;
 			lastUsageValue = currentUsage;
 			return cpuUsageSinceLast;
+		} else {
+			return 0L;
 		}
-		return 0L;
 	}
 }

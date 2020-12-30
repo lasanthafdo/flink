@@ -124,10 +124,10 @@ public class NeuralNetworksBasedActorCriticModel {
 	public void updateTrainingData(
 		List<Integer> placement,
 		List<Double> cpuUsageMetrics,
-		List<Double> edgeFlowRates,
+		Double arrivalRate,
 		Double throughput) {
 
-		updateTrainingCache(placement, cpuUsageMetrics, edgeFlowRates, throughput);
+		updateTrainingCache(placement, cpuUsageMetrics, arrivalRate, throughput);
 		updatesSinceLastTraining++;
 		if (updatesSinceLastTraining >= trainTriggerThreshold) {
 			INDArray inputArray = null;
@@ -153,20 +153,20 @@ public class NeuralNetworksBasedActorCriticModel {
 		influxDBTransitionsClient.writeInputDataPoint(
 			placement.toString(),
 			cpuUsageMetrics.toString(),
-			edgeFlowRates.toString(),
+			arrivalRate,
 			throughput);
 	}
 
 	private void updateTrainingCache(
 		List<Integer> placement,
 		List<Double> cpuUsageMetrics,
-		List<Double> edgeFlowRates,
+		Double arrivalRate,
 		Double throughput) {
 		INDArray cpuMetricsArr = Nd4j.createFromArray(cpuUsageMetrics.toArray(new Double[0]));
-		INDArray edgeFlowRatesArr = Nd4j.createFromArray(edgeFlowRates.toArray(new Double[0]));
+		INDArray arrivalRateArr = Nd4j.createFromArray(arrivalRate);
 		INDArray encodedPlacement = encodePlacement(placement);
 		long actualInputSize =
-			encodedPlacement.length() + cpuMetricsArr.length() + edgeFlowRatesArr.length();
+			encodedPlacement.length() + cpuMetricsArr.length() + arrivalRateArr.length();
 		if (actualInputSize != numInputs) {
 			log.warn(
 				"Incorrect number of input features. Expected:{}, "
@@ -176,13 +176,13 @@ public class NeuralNetworksBasedActorCriticModel {
 				actualInputSize,
 				encodedPlacement.length(),
 				cpuMetricsArr.length(),
-				edgeFlowRatesArr.length());
+				arrivalRateArr.length());
 		} else {
 			trainingCache.put(
 				Nd4j.hstack(
 					encodedPlacement.reshape(1, encodedPlacement.length()),
 					cpuMetricsArr.reshape(1, cpuMetricsArr.length()),
-					edgeFlowRatesArr.reshape(1, edgeFlowRatesArr.length())),
+					arrivalRateArr.reshape(1, 1)),
 				Nd4j.createFromArray(throughput));
 		}
 	}
@@ -216,9 +216,8 @@ public class NeuralNetworksBasedActorCriticModel {
 
 	public List<Integer> selectAction(
 		Map<List<Integer>, Double> suggestedActions,
-		double currentThroughput,
 		List<Double> cpuUsageMetrics,
-		List<Double> edgeFlowRates) {
+		Double arrivalRate) {
 
 		List<Integer> placementSuggestion;
 		double epsilonGreedyScore = rand.nextDouble();
@@ -227,21 +226,19 @@ public class NeuralNetworksBasedActorCriticModel {
 				log.info("Predicting using {} suggested actions ", suggestedActions.size());
 				List<Double> predictedValues = new ArrayList<>();
 				INDArray cpuMetricsArr = Nd4j.createFromArray(cpuUsageMetrics.toArray(new Double[0]));
-				INDArray edgeFlowRatesArr = Nd4j.createFromArray(edgeFlowRates.toArray(new Double[0]));
+				INDArray arrivalRateArr = Nd4j.createFromArray(arrivalRate);
 				for (List<Integer> cpuIdList : suggestedActions.keySet()) {
 					INDArray encodedPlacementActions = encodePlacement(cpuIdList);
 					INDArray inputArray = Nd4j.hstack(
 						encodedPlacementActions.reshape(1, encodedPlacementActions.length()),
 						cpuMetricsArr.reshape(1, cpuMetricsArr.length()),
-						edgeFlowRatesArr.reshape(1, edgeFlowRatesArr.length()));
+						arrivalRateArr.reshape(1, 1));
 					predictedValues.add(predict(inputArray).toDoubleVector()[0]);
 				}
 				double predictedMaxThroughput = predictedValues
 					.stream()
 					.max(Comparator.naturalOrder())
 					.orElse(0.0);
-//				if (predictedMaxThroughput > currentThroughput
-//					|| (currentThroughput - predictedMaxThroughput) < 100000.0) {
 				int argMax = predictedValues.indexOf(predictedMaxThroughput);
 				if (argMax >= 0) {
 					List<List<Integer>> suggestedActionList = new ArrayList<>(suggestedActions.keySet());
@@ -252,7 +249,6 @@ public class NeuralNetworksBasedActorCriticModel {
 						"Suggesting action with predicted throughput of {} : {} ",
 						predictedMaxThroughput, placementSuggestion);
 					return placementSuggestion;
-//					}
 				}
 			}
 		} else {

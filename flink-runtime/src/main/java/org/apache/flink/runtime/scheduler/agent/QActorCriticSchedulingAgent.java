@@ -27,7 +27,6 @@ import org.apache.flink.util.FlinkRuntimeException;
 import org.slf4j.Logger;
 
 import java.util.Collection;
-import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -60,7 +59,7 @@ public class QActorCriticSchedulingAgent extends AbstractSchedulingAgent {
 		int nVertices = Math.toIntExact(StreamSupport.stream(executionGraph
 			.getSchedulingTopology()
 			.getVertices().spliterator(), false).count());
-		this.qActorCriticWrapper = new QActorCriticWrapper(cpuLayout.cpus(), nVertices, log);
+		this.qActorCriticWrapper = new QActorCriticWrapper(this.nCpus, nVertices, log);
 		this.executorService = checkNotNull(executorService);
 		this.updatePeriodInSeconds = updatePeriod;
 		setupUpdateTriggerThread();

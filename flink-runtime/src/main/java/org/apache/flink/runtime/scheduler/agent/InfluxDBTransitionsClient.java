@@ -72,7 +72,7 @@ public class InfluxDBTransitionsClient {
 	public void writeInputDataPoint(
 		String placementAction,
 		String cpuUsageMetrics,
-		String edgeFlowRates,
+		Double arrivalRate,
 		Double throughput) {
 		try {
 			influxDB.write(Point
@@ -81,7 +81,7 @@ public class InfluxDBTransitionsClient {
 				.tag("host", "127.0.0.1")
 				.addField("placementAction", placementAction)
 				.addField("cpuUsageMetrics", cpuUsageMetrics)
-				.addField("edgeFlowRates", edgeFlowRates)
+				.addField("arrivalRate", arrivalRate)
 				.addField("throughput", throughput)
 				.build());
 		} catch (Exception e) {
