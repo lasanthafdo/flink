@@ -30,20 +30,17 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 /**
  * Container class for SchedulingcpuSockets.
  */
 public class SchedulingNode implements SchedulingExecutionContainer {
 	private final Map<Integer, SchedulingExecutionContainer> cpuSockets;
-	private final Map<Integer, Double> cpuUsageMetrics;
 	private final Logger log;
 	private final CpuLayout cpuLayout;
 
 	public SchedulingNode(CpuLayout cpuLayout, Logger log) {
 		this.cpuSockets = new HashMap<>();
-		this.cpuUsageMetrics = new HashMap<>();
 		this.log = log;
 		this.cpuLayout = cpuLayout;
 	}
@@ -170,14 +167,9 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 
 	@Override
 	public void updateResourceUsageMetrics(String type, Map<String, Double> resourceUsageMetrics) {
-		cpuSockets.values().forEach(cpuSocket -> {
-			cpuSocket.updateResourceUsageMetrics(type, resourceUsageMetrics);
-		});
-		if (CPU.equals(type)) {
-			cpuUsageMetrics.putAll(resourceUsageMetrics.entrySet()
-				.stream().collect(Collectors.toMap(
-					entry -> Integer.parseInt(entry.getKey()), Map.Entry::getValue)));
-		}
+		cpuSockets
+			.values()
+			.forEach(cpuSocket -> cpuSocket.updateResourceUsageMetrics(type, resourceUsageMetrics));
 	}
 
 	@Override
@@ -188,9 +180,7 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 	@Override
 	public Map<SchedulingExecutionVertex, Integer> getCurrentCpuAssignment() {
 		Map<SchedulingExecutionVertex, Integer> currentlyAssignedCpus = new HashMap<>();
-		getSubContainers().forEach(subContainer -> {
-			currentlyAssignedCpus.putAll(subContainer.getCurrentCpuAssignment());
-		});
+		getSubContainers().forEach(subContainer -> currentlyAssignedCpus.putAll(subContainer.getCurrentCpuAssignment()));
 		return currentlyAssignedCpus;
 	}
 
@@ -202,9 +192,11 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 			.append(", Container CPU Usage : ").append(getResourceUsage(CPU))
 			.append(", Operator CPU Usage :").append(getResourceUsage(OPERATOR))
 			.append(", Sockets : [");
-		cpuSockets.values().forEach(cpuSocket -> {
-			currentSchedulingStateMsg.append(cpuSocket.getStatus()).append(",");
-		});
+		cpuSockets
+			.values()
+			.forEach(cpuSocket -> currentSchedulingStateMsg
+				.append(cpuSocket.getStatus())
+				.append(","));
 		currentSchedulingStateMsg.append("]}}");
 		return currentSchedulingStateMsg.toString();
 	}
