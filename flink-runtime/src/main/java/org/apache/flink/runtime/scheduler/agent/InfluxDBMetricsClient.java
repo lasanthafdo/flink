@@ -84,7 +84,7 @@ public class InfluxDBMetricsClient {
 			});
 		} catch (Exception e) {
 			log.warn(
-				"Exception occured when retrieving metric {} with key '{}' and value '{}': {}",
+				"Exception occurred when retrieving metric {} with key '{}' and value '{}': {}",
 				metricName,
 				keyField,
 				valueField,
@@ -160,9 +160,11 @@ public class InfluxDBMetricsClient {
 		final AtomicDouble arrivalRate = new AtomicDouble(0.0);
 		for (String sourceVertexID : sourceVertexIDs) {
 			try {
+				String[] sourceVertexIDComponents = sourceVertexID.split("_");
 				QueryResult queryResult = influxDB.query(new Query(
 					"SELECT LAST(rate) FROM taskmanager_job_task_operator_numRecordsOutPerSecond "
-						+ "WHERE operator_id = '" + sourceVertexID + "'"));
+						+ "WHERE operator_id = '" + sourceVertexIDComponents[0]
+						+ "' AND subtask_index = '" + sourceVertexIDComponents[1] + "'"));
 				List<QueryResult.Result> results = queryResult.getResults();
 				results.forEach(result -> {
 					List<QueryResult.Series> series = result.getSeries();

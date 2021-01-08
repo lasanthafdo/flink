@@ -32,7 +32,7 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Container class for SchedulingcpuSockets.
+ * Container class for SchedulingNodes.
  */
 public class SchedulingNode implements SchedulingExecutionContainer {
 	private final Map<Integer, SchedulingExecutionContainer> cpuSockets;

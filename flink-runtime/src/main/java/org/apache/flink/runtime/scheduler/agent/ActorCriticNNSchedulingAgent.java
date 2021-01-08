@@ -142,7 +142,7 @@ public class ActorCriticNNSchedulingAgent extends AbstractSchedulingAgent {
 				"Invalid placement action " + suggestedPlacementAction + " suggested.");
 		}
 		log.info(
-			"Suggested placement action: {}, current placement action: {}, throughput: {}",
+			"Suggested placement action: {}, Current placement action: {}, Current throughput: {}",
 			suggestedPlacementAction,
 			currentPlacementAction,
 			currentThroughput);
