@@ -48,7 +48,7 @@ public class ActorCriticNNSchedulingAgent extends AbstractSchedulingAgent {
 	private final long trainingPhaseUpdatePeriodInSeconds;
 	private int trainingPhaseUpdateCount = 0;
 	private boolean inTrainingPhase = true;
-	private final int frequentUpdatesThreshold;
+	private final int trainingPhaseThreshold;
 
 	public ActorCriticNNSchedulingAgent(
 		Logger log,
@@ -60,7 +60,7 @@ public class ActorCriticNNSchedulingAgent extends AbstractSchedulingAgent {
 		int numRetries,
 		int updatePeriodInSeconds,
 		int tpUpdatePeriod,
-		int freqUpdateThreshold,
+		int trainingPhaseThreshold,
 		NeuralNetworkConfiguration neuralNetworkConfiguration) {
 
 		super(log, triggerPeriod, executionGraph, schedulingStrategy, waitTimeout, numRetries);
@@ -73,7 +73,7 @@ public class ActorCriticNNSchedulingAgent extends AbstractSchedulingAgent {
 		this.updatePeriodInSeconds = updatePeriodInSeconds;
 		this.potentialPlacementActions = new TopKMap<>(neuralNetworkConfiguration.getNumActionSuggestions());
 		this.trainingPhaseUpdatePeriodInSeconds = tpUpdatePeriod;
-		this.frequentUpdatesThreshold = freqUpdateThreshold;
+		this.trainingPhaseThreshold = trainingPhaseThreshold;
 		setupUpdateTriggerThread();
 	}
 
@@ -82,7 +82,7 @@ public class ActorCriticNNSchedulingAgent extends AbstractSchedulingAgent {
 			updateExecutor = actorCriticExecutor.scheduleAtFixedRate(() -> {
 					executeUpdateProcess();
 					rescheduleEager();
-					if (trainingPhaseUpdateCount++ >= frequentUpdatesThreshold) {
+					if (trainingPhaseUpdateCount++ >= trainingPhaseThreshold) {
 						inTrainingPhase = false;
 						log.info(
 							"Leaving training phase. Update count is {}",

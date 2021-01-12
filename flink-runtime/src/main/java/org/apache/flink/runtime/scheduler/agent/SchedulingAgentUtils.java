@@ -134,7 +134,7 @@ public class SchedulingAgentUtils {
 					int numRetries;
 					int updatePeriod;
 					int tpUpdatePeriod = 0;
-					int freqUpdatesThreshold = 0;
+					int tpThreshold = 0;
 					NeuralNetworkConfiguration neuralNetworkConfiguration;
 					if (configElements.length == nDefaultConfigElements) {
 						triggerPeriod = Long.parseLong(configElements[0]);
@@ -157,7 +157,7 @@ public class SchedulingAgentUtils {
 						int maxTrainingCacheSize = Integer.parseInt(configElements[10]);
 						int numActionSuggestions = Integer.parseInt(configElements[11]);
 						tpUpdatePeriod = Integer.parseInt(configElements[12]);
-						freqUpdatesThreshold = Integer.parseInt(configElements[13]);
+						tpThreshold = Integer.parseInt(configElements[13]);
 
 						neuralNetworkConfiguration = new NeuralNetworkConfiguration(
 							numEpochs, seed, learningRate, epsilonGreedyThreshold,
@@ -177,7 +177,7 @@ public class SchedulingAgentUtils {
 						numRetries,
 						updatePeriod,
 						tpUpdatePeriod,
-						freqUpdatesThreshold,
+						tpThreshold,
 						neuralNetworkConfiguration);
 				} else {
 					throw new IllegalConfigurationException(
