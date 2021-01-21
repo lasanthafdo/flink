@@ -52,17 +52,20 @@ under the License.
 	<modules>
 		<!-- Dummy module to force execution of the Maven Shade plugin (see Shade plugin below) -->
 		<module>tools/force-shading</module>
-		<!--module>flink-annotations</module-->
+		<module>flink-annotations</module>
 		<module>flink-core</module>
+		<module>flink-runtime</module>
+		<module>flink-streaming-java</module>
+		<module>flink-metrics</module>
+		<!-- Section 1 -->
 		<!--module>flink-java</module>
 		<module>flink-scala</module>
-		<module>flink-filesystems</module-->
-		<module>flink-runtime</module>
+		<module>flink-filesystems</module>
 		<module>flink-runtime-web</module>
-		<!--module>flink-optimizer</module-->
-		<module>flink-streaming-java</module>
-		<!--module>flink-streaming-scala</module-->
-		<!--module>flink-connectors</module>
+		<module>flink-optimizer</module-->
+		<!-- Section 2 -->
+		<!--module>flink-streaming-scala</module>
+		<module>flink-connectors</module>
 		<module>flink-formats</module>
 		<module>flink-examples</module>
 		<module>flink-clients</module>
@@ -76,10 +79,11 @@ under the License.
 		<module>flink-table</module>
 		<module>flink-quickstart</module>
 		<module>flink-contrib</module-->
+		<!-- Flink Dist -->
 		<module>flink-dist</module>
-		<!--module>flink-mesos</module-->
-		<module>flink-metrics</module>
-		<!--module>flink-yarn</module>
+		<!-- Section 4 -->
+		<!--module>flink-mesos</module>
+		<module>flink-yarn</module>
 		<module>flink-yarn-tests</module>
 		<module>flink-fs-tests</module>
 		<module>flink-docs</module>

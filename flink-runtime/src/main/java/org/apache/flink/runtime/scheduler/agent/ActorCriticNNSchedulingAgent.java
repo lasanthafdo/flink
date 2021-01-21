@@ -61,6 +61,7 @@ public class ActorCriticNNSchedulingAgent extends AbstractSchedulingAgent {
 		int updatePeriodInSeconds,
 		int tpUpdatePeriod,
 		int trainingPhaseThreshold,
+		String retentionPolicyName,
 		NeuralNetworkConfiguration neuralNetworkConfiguration) {
 
 		super(log, triggerPeriod, executionGraph, schedulingStrategy, waitTimeout, numRetries);
@@ -68,7 +69,7 @@ public class ActorCriticNNSchedulingAgent extends AbstractSchedulingAgent {
 		int numInputs = (nVertices + 1) * this.nCpus + 1;
 		neuralNetworkConfiguration.setNumInputs(numInputs);
 		this.actorCriticModel = new NeuralNetworksBasedActorCriticModel(
-			this.nCpus, nVertices, neuralNetworkConfiguration, log);
+			this.nCpus, nVertices, retentionPolicyName, neuralNetworkConfiguration, log);
 		this.actorCriticExecutor = actorCriticExecutor;
 		this.updatePeriodInSeconds = updatePeriodInSeconds;
 		this.potentialPlacementActions = new TopKMap<>(neuralNetworkConfiguration.getNumActionSuggestions());

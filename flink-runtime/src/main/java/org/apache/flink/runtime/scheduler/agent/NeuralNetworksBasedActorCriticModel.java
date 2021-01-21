@@ -79,6 +79,7 @@ public class NeuralNetworksBasedActorCriticModel {
 	public NeuralNetworksBasedActorCriticModel(
 		int nCpus,
 		int nVertices,
+		String retentionPolicyName,
 		NeuralNetworkConfiguration neuralNetworkConfiguration,
 		Logger log) {
 
@@ -99,7 +100,7 @@ public class NeuralNetworksBasedActorCriticModel {
 		this.maxTrainingCacheSize = neuralNetworkConfiguration.getMaxTrainingCacheSize();
 		this.scoreIterationPrintFrequency = neuralNetworkConfiguration.getNumEpochs();
 		setupNeuralNetwork();
-		setupInfluxDBConnection();
+		setupInfluxDBConnection(retentionPolicyName);
 	}
 
 	private void setupNeuralNetwork() {
@@ -114,10 +115,10 @@ public class NeuralNetworksBasedActorCriticModel {
 			.build();
 	}
 
-	private void setupInfluxDBConnection() {
+	private void setupInfluxDBConnection(String retentionPolicyName) {
 		influxDBTransitionsClient = new InfluxDBTransitionsClient(
 			"http://127.0.0.1:8086",
-			"flink-transitions", log);
+			"flink-transitions", retentionPolicyName, log);
 		influxDBTransitionsClient.setup();
 	}
 

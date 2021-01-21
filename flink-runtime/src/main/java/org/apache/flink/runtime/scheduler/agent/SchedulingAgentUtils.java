@@ -128,13 +128,14 @@ public class SchedulingAgentUtils {
 				if (jobMasterConfiguration.contains(DeploymentOptions.SCHEDULING_AGENT_CONFIG_STRING)) {
 					String agentConfigString = jobMasterConfiguration.getString(
 						DeploymentOptions.SCHEDULING_AGENT_CONFIG_STRING);
-					String[] configElements = agentConfigString.split(",", 14);
+					String[] configElements = agentConfigString.split(",", 15);
 					long triggerPeriod;
 					long waitTimeOut;
 					int numRetries;
 					int updatePeriod;
 					int tpUpdatePeriod = 0;
 					int tpThreshold = 0;
+					String retentionPolicyName = "";
 					NeuralNetworkConfiguration neuralNetworkConfiguration;
 					if (configElements.length == nDefaultConfigElements) {
 						triggerPeriod = Long.parseLong(configElements[0]);
@@ -143,21 +144,22 @@ public class SchedulingAgentUtils {
 						updatePeriod = Integer.parseInt(configElements[3]);
 
 						neuralNetworkConfiguration = new NeuralNetworkConfiguration();
-					} else if (configElements.length == 14) {
+					} else if (configElements.length == 15) {
 						triggerPeriod = Long.parseLong(configElements[0]);
 						waitTimeOut = Long.parseLong(configElements[1]);
 						numRetries = Integer.parseInt(configElements[2]);
 						updatePeriod = Integer.parseInt(configElements[3]);
-						int numEpochs = Integer.parseInt(configElements[4]);
-						long seed = Long.parseLong(configElements[5]);
-						double learningRate = Double.parseDouble(configElements[6]);
-						double epsilonGreedyThreshold = Double.parseDouble(configElements[7]);
-						int numHiddenNodes = Integer.parseInt(configElements[8]);
-						int trainTriggerThreshold = Integer.parseInt(configElements[9]);
-						int maxTrainingCacheSize = Integer.parseInt(configElements[10]);
-						int numActionSuggestions = Integer.parseInt(configElements[11]);
-						tpUpdatePeriod = Integer.parseInt(configElements[12]);
-						tpThreshold = Integer.parseInt(configElements[13]);
+						retentionPolicyName = configElements[4];
+						int numEpochs = Integer.parseInt(configElements[5]);
+						long seed = Long.parseLong(configElements[6]);
+						double learningRate = Double.parseDouble(configElements[7]);
+						double epsilonGreedyThreshold = Double.parseDouble(configElements[8]);
+						int numHiddenNodes = Integer.parseInt(configElements[9]);
+						int trainTriggerThreshold = Integer.parseInt(configElements[10]);
+						int maxTrainingCacheSize = Integer.parseInt(configElements[11]);
+						int numActionSuggestions = Integer.parseInt(configElements[12]);
+						tpUpdatePeriod = Integer.parseInt(configElements[13]);
+						tpThreshold = Integer.parseInt(configElements[14]);
 
 						neuralNetworkConfiguration = new NeuralNetworkConfiguration(
 							numEpochs, seed, learningRate, epsilonGreedyThreshold,
@@ -178,6 +180,7 @@ public class SchedulingAgentUtils {
 						updatePeriod,
 						tpUpdatePeriod,
 						tpThreshold,
+						retentionPolicyName,
 						neuralNetworkConfiguration);
 				} else {
 					throw new IllegalConfigurationException(

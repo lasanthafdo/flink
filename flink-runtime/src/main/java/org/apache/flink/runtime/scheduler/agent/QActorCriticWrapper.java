@@ -50,6 +50,7 @@ public class QActorCriticWrapper {
 	private final Logger log;
 	private int currentStateId;
 	private int currentActionId;
+	private final String retentionPolicyName = "one_day";
 
 	public QActorCriticWrapper(int nCpus, int nVertices, Logger log) {
 		stateSpaceMap = generateActionSpace(nCpus, nVertices);
@@ -105,7 +106,7 @@ public class QActorCriticWrapper {
 	private void setupInfluxDBConnection() {
 		influxDBTransitionsClient = new InfluxDBTransitionsClient(
 			"http://127.0.0.1:8086",
-			"flink-transitions", log);
+			"flink-transitions", retentionPolicyName, log);
 		influxDBTransitionsClient.setup();
 	}
 

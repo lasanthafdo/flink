@@ -31,12 +31,15 @@ import java.util.concurrent.TimeUnit;
 public class InfluxDBTransitionsClient {
 	private final String serverURL;
 	private final String databaseName;
+	private final String retentionPolicy;
 	private final Logger log;
 	private InfluxDB influxDB;
 
-	public InfluxDBTransitionsClient(String serverURL, String databaseName, Logger log) {
+	public InfluxDBTransitionsClient(
+		String serverURL, String databaseName, String retentionPolicyName, Logger log) {
 		this.serverURL = serverURL;
 		this.databaseName = databaseName;
+		this.retentionPolicy = retentionPolicyName;
 		this.log = log;
 	}
 
@@ -44,7 +47,7 @@ public class InfluxDBTransitionsClient {
 		if (influxDB == null) {
 			influxDB = InfluxDBFactory.connect(serverURL);
 			influxDB.setDatabase(databaseName);
-			influxDB.setRetentionPolicy("two_hours");
+			influxDB.setRetentionPolicy(retentionPolicy);
 			influxDB.setConsistency(InfluxDB.ConsistencyLevel.ANY);
 		}
 	}
