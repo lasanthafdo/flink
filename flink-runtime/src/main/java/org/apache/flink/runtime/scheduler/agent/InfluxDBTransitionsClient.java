@@ -76,7 +76,9 @@ public class InfluxDBTransitionsClient {
 		String placementAction,
 		String cpuUsageMetrics,
 		Double arrivalRate,
-		Double throughput) {
+		Double throughput,
+		Integer placementType,
+		String proxyNumaDistances) {
 		try {
 			influxDB.write(Point
 				.measurement("state_snapshots")
@@ -86,6 +88,8 @@ public class InfluxDBTransitionsClient {
 				.addField("cpuUsageMetrics", cpuUsageMetrics)
 				.addField("arrivalRate", arrivalRate)
 				.addField("throughput", throughput)
+				.addField("placementType", placementType)
+				.addField("proxyNumaDistances", proxyNumaDistances)
 				.build());
 		} catch (Exception e) {
 			log.warn("Exception occurred when writing state snapshot to DB: {}", e.getMessage());

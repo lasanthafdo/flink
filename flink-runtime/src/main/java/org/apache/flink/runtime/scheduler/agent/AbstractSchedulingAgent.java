@@ -26,6 +26,7 @@ import org.apache.flink.runtime.executiongraph.ExecutionGraph;
 import org.apache.flink.runtime.executiongraph.ExecutionVertex;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.scheduler.adapter.DefaultExecutionEdge;
+import org.apache.flink.runtime.scheduler.adapter.PhysicalExecutionEdge;
 import org.apache.flink.runtime.scheduler.adapter.SchedulingNode;
 import org.apache.flink.runtime.scheduler.strategy.ExecutionVertexID;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionContainer;
@@ -68,8 +69,9 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	protected List<Integer> currentPlacementAction;
 	protected ScheduledFuture<?> updateExecutor;
 	protected final ExecutionGraph executionGraph;
+	protected final Map<String, Double> currentNumaProxyDistanceMap = new HashMap<>();
 
-	private final Map<String, Double> edgeFlowRates;
+	private final Map<String, Double> interOpEdgeThroughput;
 	private final Map<String, SchedulingExecutionEdge> edgeMap;
 	private final List<SchedulingExecutionVertex> sourceVertices = new ArrayList<>();
 	private final long triggerPeriod;
@@ -81,6 +83,8 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	private List<SchedulingExecutionEdge> orderedEdgeList;
 	private InfluxDBMetricsClient influxDBMetricsClient;
 	private double mostRecentArrivalRate = 0d;
+	private final Map<String, Double> maxPhysicalEdgeThroughput = new HashMap<>();
+	private final Map<String, Double> maxLogicalEdgeThroughput = new HashMap<>();
 
 	public AbstractSchedulingAgent(
 		Logger log,
@@ -96,7 +100,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		this.log = log;
 		this.cpuLayout = AffinityLock.cpuLayout();
 		this.nCpus = cpuLayout.cpus();
-		this.edgeFlowRates = new HashMap<>();
+		this.interOpEdgeThroughput = new HashMap<>();
 		this.edgeMap = new HashMap<>();
 		this.triggerPeriod = triggerPeriod;
 		this.schedulingNode = new SchedulingNode(this.cpuLayout, log);
@@ -136,7 +140,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		});
 	}
 
-	private void logCurrentPlacement() {
+	private void logCurrentStatusInformation() {
 		if (log.isDebugEnabled()) {
 			StringBuilder currentPlacement = new StringBuilder("[");
 			schedulingTopology
@@ -150,34 +154,37 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 					.append(sourceVertex.getCurrentCpuUsage())
 					.append("}, "));
 			currentPlacement.append("]");
-			log.debug("Current scheduling placement is : {}", currentPlacement);
+			log.debug("Current scheduling placement : {}", currentPlacement);
+			log.debug("Maximum logical edge throughput : {}", maxLogicalEdgeThroughput);
+			log.debug("Maximum physical edge throughput : {} ", maxPhysicalEdgeThroughput);
 		}
 	}
 
 	protected Map<String, Double> getCpuMetrics() {
-		return influxDBMetricsClient.getCpuMetrics(nCpus);
+		return influxDBMetricsClient.getCpuUsageMetrics(nCpus);
 	}
 
 	protected void updateStateInformation() {
-		Map<String, Double> currentFlowRates = influxDBMetricsClient.getRateMetricsFor(
+		Map<String, Double> currentInterOpEdgeThroughput = influxDBMetricsClient.getRateMetricsFor(
 			"taskmanager_job_task_edge_numRecordsProcessedPerSecond",
 			"edge_id",
 			"rate");
-		Map<String, Double> cpuMetrics = influxDBMetricsClient.getCpuMetrics(nCpus);
+		Map<String, Double> cpuUsageMetrics = influxDBMetricsClient.getCpuUsageMetrics(nCpus);
 		Map<String, Double> operatorUsageMetrics = influxDBMetricsClient.getOperatorUsageMetrics();
 		schedulingNode.updateResourceUsageMetrics(
 			SchedulingExecutionContainer.CPU,
-			cpuMetrics);
+			cpuUsageMetrics);
 		schedulingNode.updateResourceUsageMetrics(
 			SchedulingExecutionContainer.OPERATOR,
 			operatorUsageMetrics);
-		Map<String, Double> filteredFlowRates = currentFlowRates
+		Map<String, Double> filteredFlowRates = currentInterOpEdgeThroughput
 			.entrySet()
 			.stream()
 			.filter(mapEntry -> edgeMap.containsKey(mapEntry.getKey()))
 			.collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-		edgeFlowRates.putAll(filteredFlowRates);
-		orderedEdgeList = edgeFlowRates
+		interOpEdgeThroughput.putAll(filteredFlowRates);
+		updateMaxEdgeThroughputMatrices(interOpEdgeThroughput);
+		orderedEdgeList = interOpEdgeThroughput
 			.entrySet().stream().sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
 			.map(mapEntry -> edgeMap.get(mapEntry.getKey())).collect(Collectors.toList());
 		mostRecentArrivalRate = influxDBMetricsClient.getMostRecentArrivalRate(sourceVertices
@@ -185,7 +192,39 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 			.map(SchedulingExecutionVertex::getId)
 			.map(ExecutionVertexID::toString)
 			.collect(Collectors.toList()));
-		logCurrentPlacement();
+		logCurrentStatusInformation();
+	}
+
+	private void updateMaxEdgeThroughputMatrices(
+		Map<String, Double> currentInterOpEdgeThroughput) {
+
+		Map<SchedulingExecutionVertex, Integer> currentCpuAssignment = schedulingNode.getCurrentCpuAssignment();
+		currentInterOpEdgeThroughput.forEach((edgeId, edgeRate) -> {
+			SchedulingExecutionEdge edge = edgeMap.get(edgeId);
+			SchedulingExecutionVertex sourceEV = edge.getSourceSchedulingExecutionVertex();
+			SchedulingExecutionVertex targetEV = edge.getTargetSchedulingExecutionVertex();
+			PhysicalExecutionEdge peEdge = new PhysicalExecutionEdge(
+				sourceEV.getId().getJobVertexId().toString(),
+				targetEV.getId().getJobVertexId().toString(),
+				currentCpuAssignment.get(sourceEV),
+				currentCpuAssignment.get(targetEV));
+			Double currentMaxPhysicalEdgeThroughput = maxPhysicalEdgeThroughput.get(peEdge.getPhysicalExecutionEdgeId());
+			if (currentMaxPhysicalEdgeThroughput == null
+				|| currentMaxPhysicalEdgeThroughput < edgeRate) {
+				maxPhysicalEdgeThroughput.put(peEdge.getPhysicalExecutionEdgeId(), edgeRate);
+			}
+			String logicalEdgeId = sourceEV.getId().getJobVertexId().toString() + "@" +
+				targetEV.getId().getJobVertexId().toString();
+			Double currentLogicalEdgeThroughput = maxLogicalEdgeThroughput.get(logicalEdgeId);
+			if (currentLogicalEdgeThroughput == null || currentLogicalEdgeThroughput < edgeRate) {
+				maxLogicalEdgeThroughput.put(logicalEdgeId, edgeRate);
+			}
+
+			Double numaProxyDistance = maxPhysicalEdgeThroughput.get(peEdge.getPhysicalExecutionEdgeId()) /
+				maxLogicalEdgeThroughput.get(logicalEdgeId);
+			String cpuIdBasedEdgeId = peEdge.getSourceCpuId() + "@" + peEdge.getTargetCpuId();
+			currentNumaProxyDistanceMap.put(cpuIdBasedEdgeId, numaProxyDistance);
+		});
 	}
 
 	protected void setupInfluxDBConnection() {
@@ -204,8 +243,8 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	}
 
 	@Override
-	public Map<String, Double> getEdgeFlowRates() {
-		return edgeFlowRates;
+	public Map<String, Double> getInterOpEdgeThroughput() {
+		return interOpEdgeThroughput;
 	}
 
 	@Override
@@ -225,7 +264,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 
 	@Override
 	public double getOverallThroughput() {
-		return edgeFlowRates.values().stream().mapToDouble(Double::doubleValue).sum();
+		return interOpEdgeThroughput.values().stream().mapToDouble(Double::doubleValue).sum();
 	}
 
 	@Override
@@ -317,10 +356,11 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 				Collectors.toList());
 	}
 
-	protected void updateCurrentPlacementActionInformation() {
-		Map<Integer, Integer> currentPlacementTemp = new HashMap<>();
+	protected void updateCurrentPlacementInformation() {
 		Map<SchedulingExecutionVertex, Integer> cpuAssignmentMap = getTopLevelContainer()
 			.getCurrentCpuAssignment();
+
+		Map<Integer, Integer> currentPlacementTemp = new HashMap<>();
 		if (cpuAssignmentMap != null && cpuAssignmentMap.size() == nVertices) {
 			AtomicInteger vertexCount = new AtomicInteger(1);
 			IterableUtils

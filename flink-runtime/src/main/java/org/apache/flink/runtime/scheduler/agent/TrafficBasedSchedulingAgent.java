@@ -64,7 +64,7 @@ public class TrafficBasedSchedulingAgent extends AbstractSchedulingAgent {
 	private void executeUpdateProcess() {
 		try {
 			updateStateInformation();
-			updateCurrentPlacementActionInformation();
+			updateCurrentPlacementInformation();
 			updatePlacementSolution();
 		} catch (Exception e) {
 			log.error(

@@ -38,7 +38,7 @@ import java.util.concurrent.TimeUnit;
  */
 public class ActorCriticNNSchedulingAgent extends AbstractSchedulingAgent {
 
-	private final NeuralNetworksBasedActorCriticModel actorCriticModel;
+	private final NeuralNetworksBasedActorCriticModel actorCriticNNModel;
 
 	private CompletableFuture<Collection<Acknowledge>> previousRescheduleFuture;
 
@@ -49,6 +49,7 @@ public class ActorCriticNNSchedulingAgent extends AbstractSchedulingAgent {
 	private int trainingPhaseUpdateCount = 0;
 	private boolean inTrainingPhase = true;
 	private final int trainingPhaseThreshold;
+	private int placementType = 0;
 
 	public ActorCriticNNSchedulingAgent(
 		Logger log,
@@ -68,7 +69,7 @@ public class ActorCriticNNSchedulingAgent extends AbstractSchedulingAgent {
 
 		int numInputs = (nVertices + 1) * this.nCpus + 1;
 		neuralNetworkConfiguration.setNumInputs(numInputs);
-		this.actorCriticModel = new NeuralNetworksBasedActorCriticModel(
+		this.actorCriticNNModel = new NeuralNetworksBasedActorCriticModel(
 			this.nCpus, nVertices, retentionPolicyName, neuralNetworkConfiguration, log);
 		this.actorCriticExecutor = actorCriticExecutor;
 		this.updatePeriodInSeconds = updatePeriodInSeconds;
@@ -108,13 +109,14 @@ public class ActorCriticNNSchedulingAgent extends AbstractSchedulingAgent {
 	private void executeUpdateProcess() {
 		try {
 			updateStateInformation();
-			updateCurrentPlacementActionInformation();
+			updateCurrentPlacementInformation();
 			if (!currentPlacementAction.isEmpty()) {
-				actorCriticModel.updateTrainingData(
+				actorCriticNNModel.updateTrainingData(
 					currentPlacementAction,
 					new ArrayList<>(getCpuMetrics().values()),
 					getArrivalRate(),
-					getOverallThroughput());
+					getOverallThroughput(),
+					new ArrayList<>(currentNumaProxyDistanceMap.values()));
 			}
 			updatePlacementSolution();
 		} catch (Exception e) {
@@ -131,7 +133,7 @@ public class ActorCriticNNSchedulingAgent extends AbstractSchedulingAgent {
 		potentialPlacementActions.put(currentPlacementAction, currentThroughput);
 		potentialPlacementActions.put(getTrafficBasedPlacementAction(), currentThroughput);
 
-		suggestedPlacementAction = actorCriticModel.selectAction(
+		suggestedPlacementAction = actorCriticNNModel.selectAction(
 			potentialPlacementActions,
 			new ArrayList<>(getCpuMetrics().values()),
 			getArrivalRate());

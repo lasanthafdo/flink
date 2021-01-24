@@ -93,7 +93,7 @@ public class InfluxDBMetricsClient {
 		return resultMap;
 	}
 
-	public Map<String, Double> getCpuMetrics(int nCpus) {
+	public Map<String, Double> getCpuUsageMetrics(int nCpus) {
 		Map<String, Double> resultMap = new HashMap<>();
 		for (int i = 0; i < nCpus; i++) {
 			int cpuId = i;

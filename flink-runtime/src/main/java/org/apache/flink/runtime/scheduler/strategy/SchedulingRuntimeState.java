@@ -30,7 +30,7 @@ public interface SchedulingRuntimeState {
 
 	List<SchedulingExecutionVertex> getSourceVertices();
 
-	Map<String, Double> getEdgeFlowRates();
+	Map<String, Double> getInterOpEdgeThroughput();
 
 	List<SchedulingExecutionEdge> getOrderedEdgeList();
 

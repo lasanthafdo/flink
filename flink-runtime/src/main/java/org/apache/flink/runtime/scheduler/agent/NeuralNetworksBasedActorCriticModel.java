@@ -52,6 +52,10 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  */
 public class NeuralNetworksBasedActorCriticModel {
 
+	public static final int PLACEMENT_TYPE_PREDICTED = 1;
+	public static final double DIMINISHING_STEP_SIZE = 0.01;
+	public static final int PLACEMENT_TYPE_RANDOM = 2;
+	public static final int PLACEMENT_TYPE_NAIVE = 3;
 	private final int nVertices;
 	private final int nCpus;
 
@@ -74,6 +78,7 @@ public class NeuralNetworksBasedActorCriticModel {
 	private Cache<INDArray, INDArray> trainingCache;
 	private boolean isTrained = false;
 	private int updatesSinceLastTraining = 0;
+	private int placementType = 0;
 	private InfluxDBTransitionsClient influxDBTransitionsClient;
 
 	public NeuralNetworksBasedActorCriticModel(
@@ -126,7 +131,8 @@ public class NeuralNetworksBasedActorCriticModel {
 		List<Integer> placement,
 		List<Double> cpuUsageMetrics,
 		Double arrivalRate,
-		Double throughput) {
+		Double throughput,
+		List<Double> proxyNumaDistances) {
 
 		updateTrainingCache(placement, cpuUsageMetrics, arrivalRate, throughput);
 		updatesSinceLastTraining++;
@@ -155,7 +161,9 @@ public class NeuralNetworksBasedActorCriticModel {
 			placement.toString(),
 			cpuUsageMetrics.toString(),
 			arrivalRate,
-			throughput);
+			throughput,
+			placementType,
+			proxyNumaDistances.toString());
 	}
 
 	private void updateTrainingCache(
@@ -249,18 +257,21 @@ public class NeuralNetworksBasedActorCriticModel {
 					log.info(
 						"Suggesting action with predicted throughput of {} : {} ",
 						predictedMaxThroughput, placementSuggestion);
+					placementType = PLACEMENT_TYPE_PREDICTED;
 					return placementSuggestion;
 				}
 			}
 		} else {
 			if (diminishingGreedyThreshold > epsilonGreedyThreshold) {
-				diminishingGreedyThreshold -= 0.01;
+				diminishingGreedyThreshold -= DIMINISHING_STEP_SIZE;
 			}
 			placementSuggestion = getRandomPlacementAction();
 			log.info("Suggesting random action {}", placementSuggestion);
+			placementType = PLACEMENT_TYPE_RANDOM;
 			return placementSuggestion;
 		}
 
+		placementType = PLACEMENT_TYPE_NAIVE;
 		return suggestedActions
 			.entrySet()
 			.stream()
