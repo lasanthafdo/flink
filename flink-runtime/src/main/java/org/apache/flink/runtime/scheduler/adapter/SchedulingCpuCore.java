@@ -39,6 +39,7 @@ import static org.apache.flink.util.Preconditions.checkState;
  */
 public class SchedulingCpuCore implements SchedulingExecutionContainer {
 	private final Map<Integer, SchedulingExecutionVertex> cpuAssignmentMap;
+	private final Map<Integer, Double> cpuFreqMap;
 	private final Map<Integer, Double> cpuUsageMetrics;
 	private final int coreId;
 	private final CpuLayout cpuLayout;
@@ -46,6 +47,7 @@ public class SchedulingCpuCore implements SchedulingExecutionContainer {
 
 	public SchedulingCpuCore(int coreId, CpuLayout cpuLayout, Logger log) {
 		this.cpuAssignmentMap = new HashMap<>();
+		this.cpuFreqMap = new HashMap<>();
 		this.cpuUsageMetrics = new HashMap<>();
 		this.log = log;
 		this.cpuLayout = cpuLayout;
@@ -62,6 +64,7 @@ public class SchedulingCpuCore implements SchedulingExecutionContainer {
 		checkState(cpuLayout.coreId(cpuId) == coreId);
 		checkState(cpuAssignmentMap.size() < cpuLayout.threadsPerCore());
 		cpuAssignmentMap.putIfAbsent(cpuId, null);
+		cpuFreqMap.putIfAbsent(cpuId, 0.0);
 		cpuUsageMetrics.putIfAbsent(cpuId, 0.0);
 	}
 
@@ -147,7 +150,6 @@ public class SchedulingCpuCore implements SchedulingExecutionContainer {
 
 	@Override
 	public void releaseAllExecutionVertices() {
-
 		cpuAssignmentMap
 			.keySet()
 			.forEach(cpuAssignment -> cpuAssignmentMap.put(cpuAssignment, null));
@@ -188,6 +190,13 @@ public class SchedulingCpuCore implements SchedulingExecutionContainer {
 				.mapToDouble(Double::doubleValue)
 				.average()
 				.orElse(0d);
+		} else if (FREQ.equals(type)) {
+			return cpuFreqMap
+				.values()
+				.stream()
+				.mapToDouble(Double::doubleValue)
+				.average()
+				.orElse(0d);
 		} else if (OPERATOR.equals(type)) {
 			return cpuAssignmentMap
 				.values()
@@ -208,6 +217,12 @@ public class SchedulingCpuCore implements SchedulingExecutionContainer {
 				.forEach(cpuId -> cpuUsageMetrics.put(
 					cpuId,
 					resourceUsageMetrics.get(String.valueOf(cpuId))));
+		} else if (FREQ.equals(type)) {
+			cpuFreqMap
+				.keySet()
+				.forEach(cpuId -> cpuFreqMap.put(
+					cpuId,
+					resourceUsageMetrics.getOrDefault(String.valueOf(cpuId), 0d)));
 		} else if (OPERATOR.equals(type)) {
 			cpuAssignmentMap
 				.values().stream().filter(Objects::nonNull)
@@ -244,6 +259,7 @@ public class SchedulingCpuCore implements SchedulingExecutionContainer {
 		currentStatusMsg.append(" {Core ID : ").append(getId())
 			.append(", Available CPUs : ").append(getRemainingCapacity())
 			.append(", Container CPU Usage : ").append(getResourceUsage(CPU))
+			.append(", Container CPU Freq : ").append(getResourceUsage(FREQ))
 			.append(", Operator CPU Usage : ").append(getResourceUsage(OPERATOR))
 			.append(", Assignment : [");
 		cpuAssignmentMap.forEach((cpuId, vertex) -> {

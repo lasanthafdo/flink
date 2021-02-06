@@ -123,6 +123,34 @@ public class InfluxDBMetricsClient {
 		return resultMap;
 	}
 
+	public Map<String, Double> getCpuFrequencyMetrics(int nCpus) {
+		Map<String, Double> resultMap = new HashMap<>();
+		for (int i = 0; i < nCpus; i++) {
+			int cpuId = i;
+			try {
+				QueryResult queryResult = influxDB.query(new Query(
+					"SELECT LAST(value) FROM taskmanager_System_CPU_FreqCPU" + i));
+				List<QueryResult.Result> results = queryResult.getResults();
+				results.forEach(result -> {
+					List<QueryResult.Series> series = result.getSeries();
+					if (series != null && !series.isEmpty()) {
+						List<Object> record = series.get(0).getValues().get(0);
+						resultMap.put(
+							String.valueOf(cpuId),
+							BigDecimal.valueOf((Double) record.get(1) / 1000000.0)
+								.setScale(2, RoundingMode.HALF_UP).doubleValue());
+					}
+				});
+			} catch (Exception e) {
+				log.warn(
+					"Exception occurred when retrieving metrics for CPU {} : {}",
+					cpuId,
+					e.getMessage());
+			}
+		}
+		return resultMap;
+	}
+
 	public Map<String, Double> getOperatorUsageMetrics() {
 		Map<String, Double> resultMap = new HashMap<>();
 		try {

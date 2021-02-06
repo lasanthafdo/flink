@@ -75,6 +75,7 @@ public class InfluxDBTransitionsClient {
 	public void writeInputDataPoint(
 		String placementAction,
 		String cpuUsageMetrics,
+		String cpuFreqMetrics,
 		Double arrivalRate,
 		Double throughput,
 		Integer placementType,
@@ -86,6 +87,7 @@ public class InfluxDBTransitionsClient {
 				.tag("host", "127.0.0.1")
 				.addField("placementAction", placementAction)
 				.addField("cpuUsageMetrics", cpuUsageMetrics)
+				.addField("cpuFreqMetrics", cpuFreqMetrics)
 				.addField("arrivalRate", arrivalRate)
 				.addField("throughput", throughput)
 				.addField("placementType", placementType)

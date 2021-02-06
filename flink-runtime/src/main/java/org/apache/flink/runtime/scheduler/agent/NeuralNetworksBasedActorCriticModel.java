@@ -52,10 +52,11 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  */
 public class NeuralNetworksBasedActorCriticModel {
 
-	public static final int PLACEMENT_TYPE_PREDICTED = 1;
+	public static final int PLACEMENT_TYPE_PREDICTED_FIRST = 1;
+	public static final int PLACEMENT_TYPE_PREDICTED_OTHER = 2;
+	public static final int PLACEMENT_TYPE_RANDOM = 3;
+	public static final int PLACEMENT_TYPE_NAIVE = 4;
 	public static final double DIMINISHING_STEP_SIZE = 0.01;
-	public static final int PLACEMENT_TYPE_RANDOM = 2;
-	public static final int PLACEMENT_TYPE_NAIVE = 3;
 	private final int nVertices;
 	private final int nCpus;
 
@@ -130,6 +131,7 @@ public class NeuralNetworksBasedActorCriticModel {
 	public void updateTrainingData(
 		List<Integer> placement,
 		List<Double> cpuUsageMetrics,
+		List<Double> cpuFrequencyMetrics,
 		Double arrivalRate,
 		Double throughput,
 		List<Double> proxyNumaDistances) {
@@ -160,6 +162,7 @@ public class NeuralNetworksBasedActorCriticModel {
 		influxDBTransitionsClient.writeInputDataPoint(
 			placement.toString(),
 			cpuUsageMetrics.toString(),
+			cpuFrequencyMetrics.toString(),
 			arrivalRate,
 			throughput,
 			placementType,
@@ -257,7 +260,11 @@ public class NeuralNetworksBasedActorCriticModel {
 					log.info(
 						"Suggesting action with predicted throughput of {} : {} ",
 						predictedMaxThroughput, placementSuggestion);
-					placementType = PLACEMENT_TYPE_PREDICTED;
+					if (argMax == 0) {
+						placementType = PLACEMENT_TYPE_PREDICTED_FIRST;
+					} else {
+						placementType = PLACEMENT_TYPE_PREDICTED_OTHER;
+					}
 					return placementSuggestion;
 				}
 			}

@@ -27,6 +27,7 @@ import org.slf4j.LoggerFactory;
 import oshi.SystemInfo;
 import oshi.hardware.GlobalMemory;
 import oshi.hardware.HardwareAbstractionLayer;
+import oshi.hardware.VirtualMemory;
 
 /**
  * Utility class to initialize system resource metrics.
@@ -44,15 +45,19 @@ public class SystemResourcesMetricsInitializer {
 			SystemInfo systemInfo = new SystemInfo();
 			HardwareAbstractionLayer hardwareAbstractionLayer = systemInfo.getHardware();
 
-			instantiateMemoryMetrics(system.addGroup("Memory"), hardwareAbstractionLayer.getMemory());
-			instantiateSwapMetrics(system.addGroup("Swap"), hardwareAbstractionLayer.getMemory());
+			instantiateMemoryMetrics(
+				system.addGroup("Memory"),
+				hardwareAbstractionLayer.getMemory());
+			instantiateSwapMetrics(
+				system.addGroup("Swap"),
+				hardwareAbstractionLayer.getMemory().getVirtualMemory());
 			instantiateCPUMetrics(system.addGroup("CPU"), systemResourcesCounter);
 			instantiateNetworkMetrics(system.addGroup("Network"), systemResourcesCounter);
-		}
-		catch (NoClassDefFoundError ex) {
+		} catch (NoClassDefFoundError ex) {
 			LOG.warn(
-				"Failed to initialize system resource metrics because of missing class definitions." +
-				" Did you forget to explicitly add the oshi-core optional dependency?",
+				"Failed to initialize system resource metrics because of missing class definitions."
+					+
+					" Did you forget to explicitly add the oshi-core optional dependency?",
 				ex);
 		}
 	}
@@ -62,12 +67,14 @@ public class SystemResourcesMetricsInitializer {
 		metrics.<Long, Gauge<Long>>gauge("Total", memory::getTotal);
 	}
 
-	private static void instantiateSwapMetrics(MetricGroup metrics, GlobalMemory memory) {
+	private static void instantiateSwapMetrics(MetricGroup metrics, VirtualMemory memory) {
 		metrics.<Long, Gauge<Long>>gauge("Used", memory::getSwapUsed);
 		metrics.<Long, Gauge<Long>>gauge("Total", memory::getSwapTotal);
 	}
 
-	private static void instantiateCPUMetrics(MetricGroup metrics, SystemResourcesCounter usageCounter) {
+	private static void instantiateCPUMetrics(
+		MetricGroup metrics,
+		SystemResourcesCounter usageCounter) {
 		metrics.<Double, Gauge<Double>>gauge("Usage", usageCounter::getCpuUsage);
 		metrics.<Double, Gauge<Double>>gauge("Idle", usageCounter::getCpuIdle);
 		metrics.<Double, Gauge<Double>>gauge("Sys", usageCounter::getCpuSys);
@@ -86,16 +93,25 @@ public class SystemResourcesMetricsInitializer {
 			metrics.<Double, Gauge<Double>>gauge(
 				String.format("UsageCPU%d", processor),
 				() -> usageCounter.getCpuUsagePerProcessor(processor));
+			metrics.<Long, Gauge<Long>>gauge(
+				String.format("FreqCPU%d", processor),
+				() -> usageCounter.getCpuFreqPerProcessor(processor));
 		}
 	}
 
-	private static void instantiateNetworkMetrics(MetricGroup metrics, SystemResourcesCounter usageCounter) {
+	private static void instantiateNetworkMetrics(
+		MetricGroup metrics,
+		SystemResourcesCounter usageCounter) {
 		for (int i = 0; i < usageCounter.getNetworkInterfaceNames().length; i++) {
 			MetricGroup interfaceGroup = metrics.addGroup(usageCounter.getNetworkInterfaceNames()[i]);
 
 			final int interfaceNo = i;
-			interfaceGroup.<Long, Gauge<Long>>gauge("ReceiveRate", () -> usageCounter.getReceiveRatePerInterface(interfaceNo));
-			interfaceGroup.<Long, Gauge<Long>>gauge("SendRate", () -> usageCounter.getSendRatePerInterface(interfaceNo));
+			interfaceGroup.<Long, Gauge<Long>>gauge(
+				"ReceiveRate",
+				() -> usageCounter.getReceiveRatePerInterface(interfaceNo));
+			interfaceGroup.<Long, Gauge<Long>>gauge(
+				"SendRate",
+				() -> usageCounter.getSendRatePerInterface(interfaceNo));
 		}
 	}
 }

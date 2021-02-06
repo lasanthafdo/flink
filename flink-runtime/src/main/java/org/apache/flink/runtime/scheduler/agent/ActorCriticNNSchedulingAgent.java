@@ -113,7 +113,8 @@ public class ActorCriticNNSchedulingAgent extends AbstractSchedulingAgent {
 			if (!currentPlacementAction.isEmpty()) {
 				actorCriticNNModel.updateTrainingData(
 					currentPlacementAction,
-					new ArrayList<>(getCpuMetrics().values()),
+					new ArrayList<>(getCpuUsageMetrics().values()),
+					new ArrayList<>(getCpuFrequencyMetrics().values()),
 					getArrivalRate(),
 					getOverallThroughput(),
 					new ArrayList<>(currentNumaProxyDistanceMap.values()));
@@ -135,7 +136,7 @@ public class ActorCriticNNSchedulingAgent extends AbstractSchedulingAgent {
 
 		suggestedPlacementAction = actorCriticNNModel.selectAction(
 			potentialPlacementActions,
-			new ArrayList<>(getCpuMetrics().values()),
+			new ArrayList<>(getCpuUsageMetrics().values()),
 			getArrivalRate());
 		if (suggestedPlacementAction == null || suggestedPlacementAction.isEmpty()) {
 			suggestedPlacementAction = getTrafficBasedPlacementAction();

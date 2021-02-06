@@ -85,6 +85,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	private double mostRecentArrivalRate = 0d;
 	private final Map<String, Double> maxPhysicalEdgeThroughput = new HashMap<>();
 	private final Map<String, Double> maxLogicalEdgeThroughput = new HashMap<>();
+	private final Map<String, Integer> orderedOperatorMap = new HashMap<>();
 
 	public AbstractSchedulingAgent(
 		Logger log,
@@ -108,9 +109,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 			schedulingNode.addCpu(cpuId);
 		}
 
-		initializeEdgeMap();
-		setupInfluxDBConnection();
-		updateStateInformation();
+		init();
 		this.waitTimeout = waitTimeout;
 		this.numRetries = numRetries;
 		this.currentPlacementAction = new ArrayList<>();
@@ -118,8 +117,12 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		this.schedulingStrategy.setTopLevelContainer(getTopLevelContainer());
 	}
 
-	protected void initializeEdgeMap() {
+	protected void init() {
+		AtomicInteger operatorCount = new AtomicInteger(0);
 		schedulingTopology.getVertices().forEach(schedulingExecutionVertex -> {
+			orderedOperatorMap.put(
+				schedulingExecutionVertex.getId().toString(),
+				operatorCount.getAndIncrement());
 			AtomicInteger consumerCount = new AtomicInteger(0);
 			schedulingExecutionVertex.getConsumedResults().forEach(schedulingResultPartition -> {
 				schedulingResultPartition
@@ -138,6 +141,8 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 				sourceVertices.add(schedulingExecutionVertex);
 			}
 		});
+		setupInfluxDBConnection();
+		updateStateInformation();
 	}
 
 	private void logCurrentStatusInformation() {
@@ -155,13 +160,27 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 					.append("}, "));
 			currentPlacement.append("]");
 			log.debug("Current scheduling placement : {}", currentPlacement);
-			log.debug("Maximum logical edge throughput : {}", maxLogicalEdgeThroughput);
-			log.debug("Maximum physical edge throughput : {} ", maxPhysicalEdgeThroughput);
+			log.debug(
+				"Keeping {} maximum logical edge throughput values of {}",
+				maxLogicalEdgeThroughput.size(),
+				maxLogicalEdgeThroughput.values());
+			log.debug(
+				"Keeping {} maximum physical edge throughput values of {} ",
+				maxPhysicalEdgeThroughput.size(),
+				maxPhysicalEdgeThroughput.values());
+			log.debug(
+				"Keeping {} proxy numa distances values of {} ",
+				currentNumaProxyDistanceMap.size(),
+				currentNumaProxyDistanceMap);
 		}
 	}
 
-	protected Map<String, Double> getCpuMetrics() {
+	protected Map<String, Double> getCpuUsageMetrics() {
 		return influxDBMetricsClient.getCpuUsageMetrics(nCpus);
+	}
+
+	protected Map<String, Double> getCpuFrequencyMetrics() {
+		return influxDBMetricsClient.getCpuFrequencyMetrics(nCpus);
 	}
 
 	protected void updateStateInformation() {
@@ -170,10 +189,14 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 			"edge_id",
 			"rate");
 		Map<String, Double> cpuUsageMetrics = influxDBMetricsClient.getCpuUsageMetrics(nCpus);
+		Map<String, Double> cpuFrequencyMetrics = influxDBMetricsClient.getCpuFrequencyMetrics(nCpus);
 		Map<String, Double> operatorUsageMetrics = influxDBMetricsClient.getOperatorUsageMetrics();
 		schedulingNode.updateResourceUsageMetrics(
 			SchedulingExecutionContainer.CPU,
 			cpuUsageMetrics);
+		schedulingNode.updateResourceUsageMetrics(
+			SchedulingExecutionContainer.FREQ,
+			cpuFrequencyMetrics);
 		schedulingNode.updateResourceUsageMetrics(
 			SchedulingExecutionContainer.OPERATOR,
 			operatorUsageMetrics);
@@ -220,10 +243,13 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 				maxLogicalEdgeThroughput.put(logicalEdgeId, edgeRate);
 			}
 
-			Double numaProxyDistance = maxPhysicalEdgeThroughput.get(peEdge.getPhysicalExecutionEdgeId()) /
-				maxLogicalEdgeThroughput.get(logicalEdgeId);
-			String cpuIdBasedEdgeId = peEdge.getSourceCpuId() + "@" + peEdge.getTargetCpuId();
-			currentNumaProxyDistanceMap.put(cpuIdBasedEdgeId, numaProxyDistance);
+			Double numaProxyDistance =
+				maxPhysicalEdgeThroughput.get(peEdge.getPhysicalExecutionEdgeId()) /
+					maxLogicalEdgeThroughput.get(logicalEdgeId);
+			String operatorIdBasedEdgeId =
+				orderedOperatorMap.get(sourceEV.getId().toString()) + "@" + orderedOperatorMap.get(
+					targetEV.getId().toString());
+			currentNumaProxyDistanceMap.put(operatorIdBasedEdgeId, numaProxyDistance);
 		});
 	}
 

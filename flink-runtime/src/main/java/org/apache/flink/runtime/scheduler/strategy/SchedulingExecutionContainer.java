@@ -30,6 +30,7 @@ public interface SchedulingExecutionContainer {
 
 	String CPU = "CPU";
 	String OPERATOR = "OP";
+	String FREQ = "FREQ";
 
 	List<SchedulingExecutionContainer> getSubContainers();
 
