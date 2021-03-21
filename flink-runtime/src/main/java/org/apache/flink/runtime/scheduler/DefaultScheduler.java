@@ -39,6 +39,7 @@ import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobmanager.scheduler.NoResourceAvailableException;
 import org.apache.flink.runtime.jobmaster.LogicalSlot;
+import org.apache.flink.runtime.jobmaster.slotpool.SlotPool;
 import org.apache.flink.runtime.jobmaster.slotpool.ThrowingSlotProvider;
 import org.apache.flink.runtime.metrics.groups.JobManagerJobMetricGroup;
 import org.apache.flink.runtime.operators.coordination.OperatorCoordinator;
@@ -117,6 +118,7 @@ public class DefaultScheduler extends SchedulerBase implements SchedulerOperatio
 		final SchedulingStrategyFactory schedulingStrategyFactory,
 		final FailoverStrategy.Factory failoverStrategyFactory,
 		final RestartBackoffTimeStrategy restartBackoffTimeStrategy,
+		final SlotPool slotPool,
 		final ExecutionVertexOperations executionVertexOperations,
 		final ExecutionVertexVersioner executionVertexVersioner,
 		final ExecutionSlotAllocatorFactory executionSlotAllocatorFactory) throws Exception {
@@ -173,6 +175,7 @@ public class DefaultScheduler extends SchedulerBase implements SchedulerOperatio
 			jobGraph.getScheduleMode(),
 			this.schedulingStrategy,
 			jobMasterConfiguration,
+			slotPool,
 			getFutureExecutor());
 	}
 

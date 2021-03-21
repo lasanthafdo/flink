@@ -18,17 +18,29 @@
 
 package org.apache.flink.runtime.scheduler.agent;
 
+import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.runtime.executiongraph.ExecutionGraph;
+import org.apache.flink.runtime.jobmaster.slotpool.SlotPool;
 import org.apache.flink.runtime.messages.Acknowledge;
+import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionContainer;
+import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategy;
+import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 import org.apache.flink.util.FlinkRuntimeException;
 
 import org.slf4j.Logger;
 
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
@@ -42,11 +54,23 @@ public class TrafficBasedSchedulingAgent extends AbstractSchedulingAgent {
 	private CompletableFuture<Collection<Acknowledge>> previousRescheduleFuture;
 
 	public TrafficBasedSchedulingAgent(
-		Logger log, ExecutionGraph executionGraph,
+		Logger log,
+		ExecutionGraph executionGraph,
 		SchedulingStrategy schedulingStrategy,
+		SlotPool slotPool,
 		ScheduledExecutorService executorService,
-		long triggerPeriod, long waitTimeout, int numRetries, int updatePeriod) {
-		super(log, triggerPeriod, executionGraph, schedulingStrategy, waitTimeout, numRetries);
+		long triggerPeriod,
+		long waitTimeout,
+		int numRetries,
+		int updatePeriod) {
+		super(
+			log,
+			triggerPeriod,
+			executionGraph,
+			schedulingStrategy,
+			slotPool,
+			waitTimeout,
+			numRetries);
 
 		this.executorService = checkNotNull(executorService);
 		this.updatePeriodInSeconds = updatePeriod;
@@ -79,7 +103,7 @@ public class TrafficBasedSchedulingAgent extends AbstractSchedulingAgent {
 		if (previousRescheduleFuture == null || previousRescheduleFuture.isDone()) {
 			executeUpdateProcess();
 			try {
-				if (suggestedPlacementAction.equals(currentPlacementAction)) {
+				if (currentPlacementAction.equals(suggestedPlacementAction)) {
 					log.info(
 						"Current placement action {} is the same as the suggested placement action {}. Skipping rescheduling.",
 						currentPlacementAction,
@@ -104,5 +128,77 @@ public class TrafficBasedSchedulingAgent extends AbstractSchedulingAgent {
 			throw new FlinkRuntimeException(
 				"Invalid placement action " + suggestedPlacementAction + " suggested.");
 		}
+	}
+
+	private List<Tuple3<TaskManagerLocation, Integer, Integer>> getTrafficBasedPlacementAction() {
+		SchedulingExecutionContainer topLevelContainer = getTopLevelContainer();
+		topLevelContainer.releaseAllExecutionVertices();
+		Set<SchedulingExecutionVertex> unassignedVertices = new HashSet<>();
+		Set<SchedulingExecutionVertex> assignedVertices = new HashSet<>();
+		Map<Integer, Tuple3<TaskManagerLocation, Integer, Integer>> placementAction = new HashMap<>();
+		AtomicInteger placementIndex = new AtomicInteger(1);
+
+		orderedEdgeList.forEach(schedulingExecutionEdge -> {
+			SchedulingExecutionVertex sourceVertex = schedulingExecutionEdge.getSourceSchedulingExecutionVertex();
+			SchedulingExecutionVertex targetVertex = schedulingExecutionEdge.getTargetSchedulingExecutionVertex();
+
+			boolean sourceVertexAssigned = assignedVertices.contains(sourceVertex);
+			boolean targetVertexAssigned = assignedVertices.contains(targetVertex);
+
+			if (!sourceVertexAssigned && !targetVertexAssigned) {
+				List<Tuple3<TaskManagerLocation, Integer, Integer>> cpuIds = topLevelContainer.tryScheduleInSameContainer(
+					sourceVertex, targetVertex);
+				if (cpuIds.size() >= 2) {
+					placementAction.put(placementIndex.getAndIncrement(), cpuIds.get(0));
+					placementAction.put(placementIndex.getAndIncrement(), cpuIds.get(1));
+					assignedVertices.add(sourceVertex);
+					assignedVertices.add(targetVertex);
+					unassignedVertices.remove(sourceVertex);
+					unassignedVertices.remove(targetVertex);
+				} else {
+					unassignedVertices.add(sourceVertex);
+					unassignedVertices.add(targetVertex);
+				}
+			} else if (!targetVertexAssigned) {
+				Tuple3<TaskManagerLocation, Integer, Integer> cpuId = topLevelContainer.scheduleExecutionVertex(
+					targetVertex);
+				if (cpuId.getField(0) != null) {
+					placementAction.put(placementIndex.getAndIncrement(), cpuId);
+					assignedVertices.add(targetVertex);
+					unassignedVertices.remove(targetVertex);
+				} else {
+					unassignedVertices.add(targetVertex);
+				}
+			} else if (!sourceVertexAssigned) {
+				Tuple3<TaskManagerLocation, Integer, Integer> cpuId = topLevelContainer.scheduleExecutionVertex(
+					sourceVertex);
+				if (cpuId.getField(0) != null) {
+					placementAction.put(placementIndex.getAndIncrement(), cpuId);
+					assignedVertices.add(sourceVertex);
+					unassignedVertices.remove(sourceVertex);
+				} else {
+					unassignedVertices.add(sourceVertex);
+				}
+			}
+		});
+		unassignedVertices.forEach(schedulingExecutionVertex -> {
+			Tuple3<TaskManagerLocation, Integer, Integer> cpuId = topLevelContainer.scheduleExecutionVertex(
+				schedulingExecutionVertex);
+			if (cpuId.getField(0) == null) {
+				throw new FlinkRuntimeException(
+					"Cannot allocate a CPU for executing operator with ID "
+						+ schedulingExecutionVertex.getId());
+			} else {
+				placementAction.put(placementIndex.getAndIncrement(), cpuId);
+			}
+		});
+
+		return placementAction
+			.entrySet()
+			.stream()
+			.sorted(Map.Entry.comparingByKey())
+			.map(Map.Entry::getValue)
+			.collect(
+				Collectors.toList());
 	}
 }

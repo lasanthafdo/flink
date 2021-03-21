@@ -23,6 +23,7 @@ import org.apache.flink.configuration.DeploymentOptions;
 import org.apache.flink.configuration.IllegalConfigurationException;
 import org.apache.flink.runtime.executiongraph.ExecutionGraph;
 import org.apache.flink.runtime.jobgraph.ScheduleMode;
+import org.apache.flink.runtime.jobmaster.slotpool.SlotPool;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategy;
 
 import org.slf4j.Logger;
@@ -39,6 +40,7 @@ public class SchedulingAgentUtils {
 		ScheduleMode scheduleMode,
 		SchedulingStrategy schedulingStrategy,
 		Configuration jobMasterConfiguration,
+		SlotPool slotPool,
 		ScheduledExecutorService executorService) {
 
 		int nDefaultConfigElements = 4;
@@ -83,6 +85,7 @@ public class SchedulingAgentUtils {
 							log,
 							executionGraph,
 							schedulingStrategy,
+							slotPool,
 							executorService,
 							triggerPeriod,
 							waitTimeOut,
@@ -111,6 +114,7 @@ public class SchedulingAgentUtils {
 							log,
 							executionGraph,
 							schedulingStrategy,
+							slotPool,
 							executorService,
 							triggerPeriod,
 							waitTimeOut,
@@ -120,68 +124,6 @@ public class SchedulingAgentUtils {
 						throw new IllegalConfigurationException(
 							"Incorrect number of arguments in the scheduling agent configuration string.");
 					}
-				} else {
-					throw new IllegalConfigurationException(
-						"Unable to obtain agent configuration details");
-				}
-			case ADAPTIVE:
-				if (jobMasterConfiguration.contains(DeploymentOptions.SCHEDULING_AGENT_CONFIG_STRING)) {
-					String agentConfigString = jobMasterConfiguration.getString(
-						DeploymentOptions.SCHEDULING_AGENT_CONFIG_STRING);
-					String[] configElements = agentConfigString.split(",", 15);
-					long triggerPeriod;
-					long waitTimeOut;
-					int numRetries;
-					int updatePeriod;
-					int tpUpdatePeriod = 0;
-					int tpThreshold = 0;
-					String retentionPolicyName = "";
-					NeuralNetworkConfiguration neuralNetworkConfiguration;
-					if (configElements.length == nDefaultConfigElements) {
-						triggerPeriod = Long.parseLong(configElements[0]);
-						waitTimeOut = Long.parseLong(configElements[1]);
-						numRetries = Integer.parseInt(configElements[2]);
-						updatePeriod = Integer.parseInt(configElements[3]);
-
-						neuralNetworkConfiguration = new NeuralNetworkConfiguration();
-					} else if (configElements.length == 15) {
-						triggerPeriod = Long.parseLong(configElements[0]);
-						waitTimeOut = Long.parseLong(configElements[1]);
-						numRetries = Integer.parseInt(configElements[2]);
-						updatePeriod = Integer.parseInt(configElements[3]);
-						retentionPolicyName = configElements[4];
-						int numEpochs = Integer.parseInt(configElements[5]);
-						long seed = Long.parseLong(configElements[6]);
-						double learningRate = Double.parseDouble(configElements[7]);
-						double epsilonGreedyThreshold = Double.parseDouble(configElements[8]);
-						int numHiddenNodes = Integer.parseInt(configElements[9]);
-						int trainTriggerThreshold = Integer.parseInt(configElements[10]);
-						int maxTrainingCacheSize = Integer.parseInt(configElements[11]);
-						int numActionSuggestions = Integer.parseInt(configElements[12]);
-						tpUpdatePeriod = Integer.parseInt(configElements[13]);
-						tpThreshold = Integer.parseInt(configElements[14]);
-
-						neuralNetworkConfiguration = new NeuralNetworkConfiguration(
-							numEpochs, seed, learningRate, epsilonGreedyThreshold,
-							numHiddenNodes, trainTriggerThreshold, maxTrainingCacheSize,
-							numActionSuggestions);
-					} else {
-						throw new IllegalConfigurationException(
-							"Incorrect number of arguments in the scheduling agent configuration string.");
-					}
-					return new ActorCriticNNSchedulingAgent(
-						log,
-						executionGraph,
-						schedulingStrategy,
-						executorService,
-						triggerPeriod,
-						waitTimeOut,
-						numRetries,
-						updatePeriod,
-						tpUpdatePeriod,
-						tpThreshold,
-						retentionPolicyName,
-						neuralNetworkConfiguration);
 				} else {
 					throw new IllegalConfigurationException(
 						"Unable to obtain agent configuration details");

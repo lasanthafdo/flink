@@ -23,7 +23,7 @@ import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingResultPartition;
 
 /**
- * Default implementation of {@link SchedulingExecutionVertex}.
+ * Default implementation of {@link SchedulingExecutionEdge}.
  */
 public class DefaultExecutionEdge implements SchedulingExecutionEdge {
 

@@ -18,35 +18,42 @@
 
 package org.apache.flink.runtime.scheduler.adapter;
 
+import org.apache.flink.api.java.tuple.Tuple3;
+import org.apache.flink.runtime.jobmaster.SlotInfo;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionContainer;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
+import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 
 import net.openhft.affinity.CpuLayout;
 import org.slf4j.Logger;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
+import java.util.Objects;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
+import static org.apache.flink.util.Preconditions.checkNotNull;
 import static org.apache.flink.util.Preconditions.checkState;
 
 /**
  * Container class for SchedulingCpuCores.
  */
 public class SchedulingCpuSocket implements SchedulingExecutionContainer {
-	private final Map<Integer, SchedulingExecutionContainer> cpuCores;
 	private final Map<Integer, Double> cpuUsageMetrics;
+	private final Map<Integer, SchedulingExecutionVertex> cpuAssignmentMap;
+	private final Map<Integer, Double> cpuFreqMap;
+
 	private final Logger log;
 	private final int socketId;
 	private final CpuLayout cpuLayout;
 
 	public SchedulingCpuSocket(int socketId, CpuLayout cpuLayout, Logger log) {
-		this.cpuCores = new HashMap<>();
 		this.cpuUsageMetrics = new HashMap<>();
+		this.cpuAssignmentMap = new HashMap<>();
+		this.cpuFreqMap = new HashMap<>();
 		this.log = log;
 		this.socketId = socketId;
 		this.cpuLayout = cpuLayout;
@@ -54,162 +61,246 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 
 	@Override
 	public List<SchedulingExecutionContainer> getSubContainers() {
-		return new ArrayList<>(cpuCores.values());
+		return null;
 	}
 
 	@Override
-	public void addCpu(int cpuId) {
-		int coreId = cpuLayout.coreId(cpuId);
-		if (!cpuCores.containsKey(coreId)) {
-			checkState(cpuCores.size() < cpuLayout.coresPerSocket());
-			cpuCores.put(coreId, new SchedulingCpuCore(coreId, cpuLayout, log));
-		}
-		cpuCores.get(coreId).addCpu(cpuId);
+	public void addCpu(String cpuIdString) {
+		int cpuId = SchedulingExecutionContainer.getCpuIdFromString(cpuIdString);
+		checkState(cpuLayout.socketId(cpuId) == socketId);
+		checkState(cpuAssignmentMap.size() < cpuLayout.threadsPerCore());
+		cpuAssignmentMap.putIfAbsent(cpuId, null);
+		cpuFreqMap.putIfAbsent(cpuId, 0.0);
+		cpuUsageMetrics.putIfAbsent(cpuId, 0.0);
 	}
 
 	@Override
-	public int scheduleExecutionVertex(SchedulingExecutionVertex schedulingExecutionVertex) {
-		Optional<SchedulingExecutionContainer> targetCore = cpuCores.values()
-			.stream().filter(cpuSocket -> cpuSocket.getRemainingCapacity() >= 1)
-			.min(Comparator.comparing(sec -> sec.getResourceUsage(OPERATOR)));
-		return targetCore
-			.map(schedulingExecutionContainer -> schedulingExecutionContainer.scheduleExecutionVertex(
-				schedulingExecutionVertex))
+	public void addTaskSlot(SlotInfo slotInfo) {
+		log.debug(
+			"addTaskSlot called for {} with allocation ID {} and IP {}",
+			getClass().getCanonicalName(),
+			slotInfo.getAllocationId().toString(),
+			slotInfo.getTaskManagerLocation().address().getHostAddress());
+		// Do nothing. We are not going to keep task manager information here
+	}
+
+	@Override
+	public Tuple3<TaskManagerLocation, Integer, Integer> scheduleExecutionVertex(
+		SchedulingExecutionVertex schedulingExecutionVertex) {
+		int cpuId = cpuAssignmentMap
+			.entrySet()
+			.stream()
+			.filter(mapEntry -> mapEntry.getValue() == null)
+			.findFirst()
+			.map(Map.Entry::getKey)
 			.orElse(-1);
+		if (cpuId != -1) {
+			cpuAssignmentMap.put(cpuId, schedulingExecutionVertex);
+		}
+		return new Tuple3<>(null, cpuId, socketId);
 	}
 
 	@Override
 	public int getCpuIdForScheduling(SchedulingExecutionVertex schedulingExecutionVertex) {
-		Optional<SchedulingExecutionContainer> targetCore = cpuCores.values()
-			.stream().filter(cpuSocket -> cpuSocket.getRemainingCapacity() >= 1)
-			.min(Comparator.comparing(sec -> sec.getResourceUsage(OPERATOR)));
-		return targetCore
-			.map(schedulingExecutionContainer -> schedulingExecutionContainer.getCpuIdForScheduling(
-				schedulingExecutionVertex))
+		return cpuAssignmentMap
+			.entrySet()
+			.stream()
+			.filter(mapEntry -> mapEntry.getValue() == null)
+			.findFirst()
+			.map(Map.Entry::getKey)
 			.orElse(-1);
 	}
 
 	@Override
-	public List<Integer> tryScheduleInSameContainer(
+	public List<Tuple3<TaskManagerLocation, Integer, Integer>> tryScheduleInSameContainer(
 		SchedulingExecutionVertex sourceVertex,
 		SchedulingExecutionVertex targetVertex) {
 
-		List<Integer> cpuIds = new ArrayList<>();
-		Optional<SchedulingExecutionContainer> targetCore = cpuCores.values()
-			.stream().filter(cpuSocket -> cpuSocket.getRemainingCapacity() >= 2)
-			.min(Comparator.comparing(sec -> sec.getResourceUsage(OPERATOR)));
-		if (targetCore.isPresent()) {
-			SchedulingExecutionContainer cpuCore = targetCore.get();
-			cpuIds.addAll(cpuCore.tryScheduleInSameContainer(sourceVertex, targetVertex));
+		List<Integer> cpuIdList = cpuAssignmentMap
+			.entrySet()
+			.stream()
+			.filter(mapEntry -> mapEntry.getValue() == null)
+			.map(Map.Entry::getKey).collect(Collectors.toList());
+		if (cpuIdList.size() >= 2) {
+			int sourceCpuId = cpuIdList.get(0);
+			int targetCpuId = cpuIdList.get(1);
+			cpuAssignmentMap.put(sourceCpuId, sourceVertex);
+			cpuAssignmentMap.put(targetCpuId, targetVertex);
+
+			cpuIdList.removeIf(id -> id != sourceCpuId && id != targetCpuId);
 		}
-		return cpuIds;
+		List<Tuple3<TaskManagerLocation, Integer, Integer>> tmLocCpuIdPairList = new ArrayList<>(
+			cpuIdList.size());
+		cpuIdList.forEach(cpuId -> tmLocCpuIdPairList.add(new Tuple3<>(null, cpuId, socketId)));
+		return tmLocCpuIdPairList;
 	}
 
 	@Override
 	public List<Integer> getCpuIdsInSameContainer(
 		SchedulingExecutionVertex sourceVertex,
 		SchedulingExecutionVertex targetVertex) {
-		List<Integer> cpuIds = new ArrayList<>();
-		Optional<SchedulingExecutionContainer> targetCore = cpuCores.values()
-			.stream().filter(cpuSocket -> cpuSocket.getRemainingCapacity() >= 2)
-			.min(Comparator.comparing(sec -> sec.getResourceUsage(OPERATOR)));
-		if (targetCore.isPresent()) {
-			SchedulingExecutionContainer cpuCore = targetCore.get();
-			cpuIds.addAll(cpuCore.getCpuIdsInSameContainer(sourceVertex, targetVertex));
+		List<Integer> cpuIdList = cpuAssignmentMap
+			.entrySet()
+			.stream()
+			.filter(mapEntry -> mapEntry.getValue() == null)
+			.map(Map.Entry::getKey).collect(Collectors.toList());
+		if (cpuIdList.size() > 2) {
+			cpuIdList = cpuIdList.subList(0, 2);
 		}
-		return cpuIds;
+		return cpuIdList;
 	}
 
 	@Override
 	public int releaseExecutionVertex(SchedulingExecutionVertex schedulingExecutionVertex) {
-		return -1;
+		checkNotNull(schedulingExecutionVertex);
+		int cpuId = cpuAssignmentMap
+			.entrySet()
+			.stream()
+			.filter(entry -> schedulingExecutionVertex.equals(entry.getValue()))
+			.findFirst()
+			.map(Map.Entry::getKey)
+			.orElse(-1);
+		if (cpuId != -1) {
+			cpuAssignmentMap.put(cpuId, null);
+		}
+
+		return cpuId;
 	}
 
 	@Override
 	public void releaseAllExecutionVertices() {
-		cpuCores.values().forEach(SchedulingExecutionContainer::releaseAllExecutionVertices);
+		cpuAssignmentMap
+			.keySet()
+			.forEach(cpuAssignment -> cpuAssignmentMap.put(cpuAssignment, null));
 	}
 
 	@Override
 	public boolean isAssignedToContainer(SchedulingExecutionVertex schedulingExecutionVertex) {
-		for (SchedulingExecutionContainer cpuCore : cpuCores.values()) {
-			if (cpuCore.isAssignedToContainer(schedulingExecutionVertex)) {
-				return true;
-			}
-		}
-
-		return false;
+		return cpuAssignmentMap.containsValue(schedulingExecutionVertex);
 	}
 
 	@Override
-	public boolean forceSchedule(SchedulingExecutionVertex schedulingExecutionVertex, int cpuId) {
-		for (SchedulingExecutionContainer subContainer : getSubContainers()) {
-			if (subContainer.forceSchedule(schedulingExecutionVertex, cpuId)) {
-				return true;
-			}
+	public boolean forceSchedule(
+		SchedulingExecutionVertex schedulingExecutionVertex,
+		Tuple3<TaskManagerLocation, Integer, Integer> cpuId) {
+		if (cpuAssignmentMap.containsKey(cpuId.f1)) {
+			cpuAssignmentMap.put(cpuId.f1, schedulingExecutionVertex);
+			return true;
+		} else {
+			return false;
 		}
-		return false;
 	}
 
 	@Override
 	public int getRemainingCapacity() {
-		int capacity = 0;
-		for (SchedulingExecutionContainer schedulingExecutionContainer : cpuCores.values()) {
-			capacity += schedulingExecutionContainer.getRemainingCapacity();
-		}
-		return capacity;
+		AtomicInteger integerCount = new AtomicInteger();
+		cpuAssignmentMap
+			.entrySet()
+			.stream()
+			.filter(entry -> entry.getValue() == null)
+			.forEach(mapEntry -> integerCount.getAndIncrement());
+		return integerCount.get();
 	}
 
 	@Override
 	public double getResourceUsage(String type) {
-		return cpuCores.values()
-			.stream()
-			.mapToDouble(cpuCore -> cpuCore.getResourceUsage(type))
-			.average()
-			.orElse(0d);
-	}
-
-	@Override
-	public void updateResourceUsageMetrics(String type, Map<String, Double> resourceUsageMetrics) {
-		cpuCores.values().forEach(cpuCore -> {
-			cpuCore.updateResourceUsageMetrics(type, resourceUsageMetrics);
-		});
 		if (CPU.equals(type)) {
-			cpuUsageMetrics.putAll(resourceUsageMetrics
-				.entrySet()
+			return cpuUsageMetrics
+				.values()
 				.stream()
-				.collect(Collectors.toMap(
-					entry -> Integer.parseInt(entry.getKey()),
-					Map.Entry::getValue)));
+				.mapToDouble(Double::doubleValue)
+				.average()
+				.orElse(0d);
+		} else if (FREQ.equals(type)) {
+			return cpuFreqMap
+				.values()
+				.stream()
+				.mapToDouble(Double::doubleValue)
+				.average()
+				.orElse(0d);
+		} else if (OPERATOR.equals(type)) {
+			return cpuAssignmentMap
+				.values()
+				.stream()
+				.filter(Objects::nonNull)
+				.mapToDouble(SchedulingExecutionVertex::getCurrentCpuUsage)
+				.sum();
+		} else {
+			return 0d;
 		}
 	}
 
 	@Override
-	public int getId() {
-		return socketId;
+	public void updateResourceUsageMetrics(String type, Map<String, Double> resourceUsageMetrics) {
+		if (CPU.equals(type)) {
+			cpuAssignmentMap
+				.keySet()
+				.forEach(cpuId -> cpuUsageMetrics.put(
+					cpuId,
+					resourceUsageMetrics.get(String.valueOf(cpuId))));
+		} else if (FREQ.equals(type)) {
+			cpuFreqMap
+				.keySet()
+				.forEach(cpuId -> cpuFreqMap.put(
+					cpuId,
+					resourceUsageMetrics.getOrDefault(String.valueOf(cpuId), 0d)));
+		} else if (OPERATOR.equals(type)) {
+			cpuAssignmentMap
+				.values().stream().filter(Objects::nonNull)
+				.forEach(schedulingExecutionVertex -> {
+					Double operatorCpuUsage = resourceUsageMetrics.get(schedulingExecutionVertex
+						.getId()
+						.toString());
+					if (operatorCpuUsage != null) {
+						schedulingExecutionVertex.setCurrentCpuUsage(operatorCpuUsage);
+					} else {
+						schedulingExecutionVertex.setCurrentCpuUsage(0d);
+					}
+				});
+		}
 	}
 
 	@Override
-	public Map<SchedulingExecutionVertex, Integer> getCurrentCpuAssignment() {
-		Map<SchedulingExecutionVertex, Integer> currentlyAssignedCpus = new HashMap<>();
-		getSubContainers().forEach(subContainer -> {
-			currentlyAssignedCpus.putAll(subContainer.getCurrentCpuAssignment());
-		});
-		return currentlyAssignedCpus;
+	public String getId() {
+		return String.valueOf(socketId);
+	}
+
+	@Override
+	public Map<SchedulingExecutionVertex, Tuple3<TaskManagerLocation, Integer, Integer>> getCurrentCpuAssignment() {
+		return cpuAssignmentMap
+			.entrySet()
+			.stream()
+			.filter(entry -> entry.getValue() != null)
+			.collect(Collectors.toMap(
+				Map.Entry::getValue,
+				entry -> new Tuple3<>(null, entry.getKey(), socketId)));
 	}
 
 	@Override
 	public String getStatus() {
-		StringBuilder currentSchedulingStateMsg = new StringBuilder();
-		currentSchedulingStateMsg
-			.append(" {SocketID : ").append(socketId)
+		StringBuilder currentStatusMsg = new StringBuilder();
+		currentStatusMsg.append(" {Socket ID : ").append(getId())
 			.append(", Available CPUs : ").append(getRemainingCapacity())
 			.append(", Container CPU Usage : ").append(getResourceUsage(CPU))
+			.append(", Container CPU Freq : ").append(getResourceUsage(FREQ))
 			.append(", Operator CPU Usage : ").append(getResourceUsage(OPERATOR))
-			.append(", Cores: [");
-		cpuCores.values().forEach(cpuCore -> {
-			currentSchedulingStateMsg.append(cpuCore.getStatus()).append(",");
+			.append(", Assignment : [");
+		cpuAssignmentMap.forEach((cpuId, vertex) -> {
+			currentStatusMsg
+				.append("{CPU ID : ").append(cpuId)
+				.append(", Vertex ID : ");
+			if (vertex != null) {
+				currentStatusMsg
+					.append(vertex.getId())
+					.append(", Task Name : ")
+					.append(vertex.getTaskName())
+					.append("},");
+			} else {
+				currentStatusMsg.append("Unassigned},");
+			}
 		});
-		return currentSchedulingStateMsg.append("]}").toString();
+		currentStatusMsg.append("]}");
+
+		return currentStatusMsg.toString();
 	}
 }

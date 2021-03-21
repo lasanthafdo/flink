@@ -19,15 +19,18 @@
 package org.apache.flink.runtime.scheduler.agent;
 
 import org.apache.flink.api.common.JobStatus;
+import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.runtime.concurrent.FutureUtils;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.executiongraph.Execution;
 import org.apache.flink.runtime.executiongraph.ExecutionGraph;
 import org.apache.flink.runtime.executiongraph.ExecutionVertex;
+import org.apache.flink.runtime.jobmaster.slotpool.SlotInfoWithUtilization;
+import org.apache.flink.runtime.jobmaster.slotpool.SlotPool;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.scheduler.adapter.DefaultExecutionEdge;
 import org.apache.flink.runtime.scheduler.adapter.PhysicalExecutionEdge;
-import org.apache.flink.runtime.scheduler.adapter.SchedulingNode;
+import org.apache.flink.runtime.scheduler.adapter.SchedulingCluster;
 import org.apache.flink.runtime.scheduler.strategy.ExecutionVertexID;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionContainer;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionEdge;
@@ -35,21 +38,20 @@ import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingRuntimeState;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategy;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingTopology;
-import org.apache.flink.util.FlinkRuntimeException;
+import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 import org.apache.flink.util.IterableUtils;
 
 import net.openhft.affinity.AffinityLock;
 import net.openhft.affinity.CpuLayout;
 import org.slf4j.Logger;
 
+import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ScheduledFuture;
@@ -65,24 +67,25 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	protected final Logger log;
 	protected final int nCpus;
 	protected final int nVertices;
-	protected List<Integer> suggestedPlacementAction;
-	protected List<Integer> currentPlacementAction;
+	protected List<Tuple3<TaskManagerLocation, Integer, Integer>> suggestedPlacementAction;
+	protected List<Tuple3<TaskManagerLocation, Integer, Integer>> currentPlacementAction;
 	protected ScheduledFuture<?> updateExecutor;
 	protected final ExecutionGraph executionGraph;
-	protected final Map<String, Double> currentNumaProxyDistanceMap = new HashMap<>();
+	protected List<SchedulingExecutionEdge> orderedEdgeList;
 
 	private final Map<String, Double> interOpEdgeThroughput;
 	private final Map<String, SchedulingExecutionEdge> edgeMap;
 	private final List<SchedulingExecutionVertex> sourceVertices = new ArrayList<>();
 	private final long triggerPeriod;
-	private final SchedulingNode schedulingNode;
+	private final SchedulingCluster schedulingCluster;
 	private final long waitTimeout;
 	private final int numRetries;
 	private final CpuLayout cpuLayout;
 	private final SchedulingStrategy schedulingStrategy;
-	private List<SchedulingExecutionEdge> orderedEdgeList;
+	private final SlotPool slotPool;
 	private InfluxDBMetricsClient influxDBMetricsClient;
 	private double mostRecentArrivalRate = 0d;
+	private Map<String, TaskManagerLocation> taskManagerLocationMap;
 	private final Map<String, Double> maxPhysicalEdgeThroughput = new HashMap<>();
 	private final Map<String, Double> maxLogicalEdgeThroughput = new HashMap<>();
 	private final Map<String, Integer> orderedOperatorMap = new HashMap<>();
@@ -92,11 +95,13 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		long triggerPeriod,
 		ExecutionGraph executionGraph,
 		SchedulingStrategy schedulingStrategy,
+		SlotPool slotPool,
 		long waitTimeout,
 		int numRetries) {
 
 		this.executionGraph = checkNotNull(executionGraph);
 		this.schedulingStrategy = checkNotNull(schedulingStrategy);
+		this.slotPool = checkNotNull(slotPool);
 		this.schedulingTopology = checkNotNull(executionGraph.getSchedulingTopology());
 		this.log = log;
 		this.cpuLayout = AffinityLock.cpuLayout();
@@ -104,10 +109,13 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		this.interOpEdgeThroughput = new HashMap<>();
 		this.edgeMap = new HashMap<>();
 		this.triggerPeriod = triggerPeriod;
-		this.schedulingNode = new SchedulingNode(this.cpuLayout, log);
-		for (int cpuId = 0; cpuId < nCpus; cpuId++) {
-			schedulingNode.addCpu(cpuId);
-		}
+
+		//TODO Currently using the same CPU layout across the cluster, which is wrong!
+		populateResourceInfo();
+		this.schedulingCluster = new SchedulingCluster(
+			this.taskManagerLocationMap.values(),
+			this.cpuLayout,
+			log);
 
 		init();
 		this.waitTimeout = waitTimeout;
@@ -115,6 +123,32 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		this.currentPlacementAction = new ArrayList<>();
 		this.nVertices = executionGraph.getTotalNumberOfVertices();
 		this.schedulingStrategy.setTopLevelContainer(getTopLevelContainer());
+	}
+
+	private void populateResourceInfo() {
+		slotPool.getAvailableSlotsInformation().forEach(schedulingCluster::addTaskSlot);
+		this.taskManagerLocationMap = slotPool
+			.getAvailableSlotsInformation()
+			.stream()
+			.collect(Collectors.toMap(
+				info -> info.getTaskManagerLocation().getResourceID().getResourceIdString(),
+				SlotInfoWithUtilization::getTaskManagerLocation));
+		taskManagerLocationMap.forEach((tmLocResourceId, tmLoc) -> log.info(
+			"TaskManager with ID {} available at {} using data port {}",
+			tmLocResourceId,
+			tmLoc.address().getHostAddress(),
+			tmLoc.dataPort()));
+		taskManagerLocationMap
+			.values()
+			.stream()
+			.map(TaskManagerLocation::address)
+			.map(InetAddress::getHostAddress)
+			.forEach(tmAddress -> {
+				for (int cpuId = 0; cpuId < nCpus; cpuId++) {
+					String cpuIdString = tmAddress + ":" + cpuLayout.socketId(cpuId) + ":" + cpuId;
+					schedulingCluster.addCpu(cpuIdString);
+				}
+			});
 	}
 
 	protected void init() {
@@ -168,10 +202,6 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 				"Keeping {} maximum physical edge throughput values of {} ",
 				maxPhysicalEdgeThroughput.size(),
 				maxPhysicalEdgeThroughput.values());
-			log.debug(
-				"Keeping {} proxy numa distances values of {} ",
-				currentNumaProxyDistanceMap.size(),
-				currentNumaProxyDistanceMap);
 		}
 	}
 
@@ -191,13 +221,13 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		Map<String, Double> cpuUsageMetrics = influxDBMetricsClient.getCpuUsageMetrics(nCpus);
 		Map<String, Double> cpuFrequencyMetrics = influxDBMetricsClient.getCpuFrequencyMetrics(nCpus);
 		Map<String, Double> operatorUsageMetrics = influxDBMetricsClient.getOperatorUsageMetrics();
-		schedulingNode.updateResourceUsageMetrics(
+		schedulingCluster.updateResourceUsageMetrics(
 			SchedulingExecutionContainer.CPU,
 			cpuUsageMetrics);
-		schedulingNode.updateResourceUsageMetrics(
+		schedulingCluster.updateResourceUsageMetrics(
 			SchedulingExecutionContainer.FREQ,
 			cpuFrequencyMetrics);
-		schedulingNode.updateResourceUsageMetrics(
+		schedulingCluster.updateResourceUsageMetrics(
 			SchedulingExecutionContainer.OPERATOR,
 			operatorUsageMetrics);
 		Map<String, Double> filteredFlowRates = currentInterOpEdgeThroughput
@@ -218,10 +248,16 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		logCurrentStatusInformation();
 	}
 
+	private String getCpuIdAsString(Tuple3<TaskManagerLocation, Integer, Integer> cpuIdTuple) {
+		return cpuIdTuple.f0 + SchedulingExecutionContainer.CPU_ID_DELIMITER + cpuIdTuple.f2
+			+ SchedulingExecutionContainer.CPU_ID_DELIMITER + cpuIdTuple.f1;
+	}
+
 	private void updateMaxEdgeThroughputMatrices(
 		Map<String, Double> currentInterOpEdgeThroughput) {
 
-		Map<SchedulingExecutionVertex, Integer> currentCpuAssignment = schedulingNode.getCurrentCpuAssignment();
+		Map<SchedulingExecutionVertex, Tuple3<TaskManagerLocation, Integer, Integer>> currentCpuAssignment = schedulingCluster
+			.getCurrentCpuAssignment();
 		currentInterOpEdgeThroughput.forEach((edgeId, edgeRate) -> {
 			SchedulingExecutionEdge edge = edgeMap.get(edgeId);
 			SchedulingExecutionVertex sourceEV = edge.getSourceSchedulingExecutionVertex();
@@ -229,8 +265,8 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 			PhysicalExecutionEdge peEdge = new PhysicalExecutionEdge(
 				sourceEV.getId().getJobVertexId().toString(),
 				targetEV.getId().getJobVertexId().toString(),
-				currentCpuAssignment.get(sourceEV),
-				currentCpuAssignment.get(targetEV));
+				getCpuIdAsString(currentCpuAssignment.get(sourceEV)),
+				getCpuIdAsString(currentCpuAssignment.get(targetEV)));
 			Double currentMaxPhysicalEdgeThroughput = maxPhysicalEdgeThroughput.get(peEdge.getPhysicalExecutionEdgeId());
 			if (currentMaxPhysicalEdgeThroughput == null
 				|| currentMaxPhysicalEdgeThroughput < edgeRate) {
@@ -242,14 +278,6 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 			if (currentLogicalEdgeThroughput == null || currentLogicalEdgeThroughput < edgeRate) {
 				maxLogicalEdgeThroughput.put(logicalEdgeId, edgeRate);
 			}
-
-			Double numaProxyDistance =
-				maxPhysicalEdgeThroughput.get(peEdge.getPhysicalExecutionEdgeId()) /
-					maxLogicalEdgeThroughput.get(logicalEdgeId);
-			String operatorIdBasedEdgeId =
-				orderedOperatorMap.get(sourceEV.getId().toString()) + "@" + orderedOperatorMap.get(
-					targetEV.getId().toString());
-			currentNumaProxyDistanceMap.put(operatorIdBasedEdgeId, numaProxyDistance);
 		});
 	}
 
@@ -280,11 +308,11 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 
 	@Override
 	public SchedulingExecutionContainer getTopLevelContainer() {
-		return schedulingNode;
+		return schedulingCluster;
 	}
 
 	@Override
-	public List<Integer> getPlacementSolution() {
+	public List<Tuple3<TaskManagerLocation, Integer, Integer>> getPlacementSolution() {
 		return suggestedPlacementAction;
 	}
 
@@ -311,82 +339,11 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 
 	protected abstract void updatePlacementSolution();
 
-	protected List<Integer> getTrafficBasedPlacementAction() {
-		SchedulingExecutionContainer topLevelContainer = getTopLevelContainer();
-		topLevelContainer.releaseAllExecutionVertices();
-		Set<SchedulingExecutionVertex> unassignedVertices = new HashSet<>();
-		Set<SchedulingExecutionVertex> assignedVertices = new HashSet<>();
-		Map<Integer, Integer> placementAction = new HashMap<>();
-		AtomicInteger placementIndex = new AtomicInteger(1);
-		orderedEdgeList.forEach(schedulingExecutionEdge -> {
-			SchedulingExecutionVertex sourceVertex = schedulingExecutionEdge.getSourceSchedulingExecutionVertex();
-			SchedulingExecutionVertex targetVertex = schedulingExecutionEdge.getTargetSchedulingExecutionVertex();
-
-			boolean sourceVertexAssigned = assignedVertices.contains(sourceVertex);
-			boolean targetVertexAssigned = assignedVertices.contains(targetVertex);
-
-			if (!sourceVertexAssigned && !targetVertexAssigned) {
-				List<Integer> cpuIds = topLevelContainer.tryScheduleInSameContainer(
-					sourceVertex, targetVertex);
-				if (cpuIds.size() >= 2) {
-					placementAction.put(placementIndex.getAndIncrement(), cpuIds.get(0));
-					placementAction.put(placementIndex.getAndIncrement(), cpuIds.get(1));
-					assignedVertices.add(sourceVertex);
-					assignedVertices.add(targetVertex);
-					unassignedVertices.remove(sourceVertex);
-					unassignedVertices.remove(targetVertex);
-				} else {
-					unassignedVertices.add(sourceVertex);
-					unassignedVertices.add(targetVertex);
-				}
-			} else if (!targetVertexAssigned) {
-				int cpuId = topLevelContainer.scheduleExecutionVertex(
-					targetVertex);
-				if (cpuId != -1) {
-					placementAction.put(placementIndex.getAndIncrement(), cpuId);
-					assignedVertices.add(targetVertex);
-					unassignedVertices.remove(targetVertex);
-				} else {
-					unassignedVertices.add(targetVertex);
-				}
-			} else if (!sourceVertexAssigned) {
-				int cpuId = topLevelContainer.scheduleExecutionVertex(
-					sourceVertex);
-				if (cpuId != -1) {
-					placementAction.put(placementIndex.getAndIncrement(), cpuId);
-					assignedVertices.add(sourceVertex);
-					unassignedVertices.remove(sourceVertex);
-				} else {
-					unassignedVertices.add(sourceVertex);
-				}
-			}
-		});
-		unassignedVertices.forEach(schedulingExecutionVertex -> {
-			int cpuId = topLevelContainer.scheduleExecutionVertex(
-				schedulingExecutionVertex);
-			if (cpuId == -1) {
-				throw new FlinkRuntimeException(
-					"Cannot allocate a CPU for executing operator with ID "
-						+ schedulingExecutionVertex.getId());
-			} else {
-				placementAction.put(placementIndex.getAndIncrement(), cpuId);
-			}
-		});
-
-		return placementAction
-			.entrySet()
-			.stream()
-			.sorted(Map.Entry.comparingByKey())
-			.map(Map.Entry::getValue)
-			.collect(
-				Collectors.toList());
-	}
-
 	protected void updateCurrentPlacementInformation() {
-		Map<SchedulingExecutionVertex, Integer> cpuAssignmentMap = getTopLevelContainer()
+		Map<SchedulingExecutionVertex, Tuple3<TaskManagerLocation, Integer, Integer>> cpuAssignmentMap = getTopLevelContainer()
 			.getCurrentCpuAssignment();
 
-		Map<Integer, Integer> currentPlacementTemp = new HashMap<>();
+		Map<Integer, Tuple3<TaskManagerLocation, Integer, Integer>> currentPlacementTemp = new HashMap<>();
 		if (cpuAssignmentMap != null && cpuAssignmentMap.size() == nVertices) {
 			AtomicInteger vertexCount = new AtomicInteger(1);
 			IterableUtils
@@ -404,9 +361,13 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	}
 
 	@Override
-	public boolean isValidPlacementAction(List<Integer> suggestedPlacementAction) {
-		return suggestedPlacementAction.size() == nVertices
-			&& suggestedPlacementAction
+	public boolean isValidPlacementAction(List<Tuple3<TaskManagerLocation, Integer, Integer>> suggestedPlacementAction) {
+		List<Integer> suggestedCpuIds = suggestedPlacementAction
+			.stream()
+			.map(tuple -> (Integer) tuple.getField(1))
+			.collect(Collectors.toList());
+		return suggestedCpuIds.size() == nVertices
+			&& suggestedCpuIds
 			.stream()
 			.noneMatch(cpuId -> cpuId < 0 || cpuId > (nCpus - 1))
 			&& suggestedPlacementAction.stream().distinct().count()

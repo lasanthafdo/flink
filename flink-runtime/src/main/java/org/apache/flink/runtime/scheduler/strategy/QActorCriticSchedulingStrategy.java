@@ -18,13 +18,14 @@
 
 package org.apache.flink.runtime.scheduler.strategy;
 
+import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.runtime.execution.ExecutionPlacement;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 import org.apache.flink.runtime.scheduler.DeploymentOption;
 import org.apache.flink.runtime.scheduler.ExecutionVertexDeploymentOption;
 import org.apache.flink.runtime.scheduler.SchedulerOperations;
-
+import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 import org.apache.flink.util.FlinkRuntimeException;
 
 import org.jetbrains.annotations.NotNull;
@@ -112,24 +113,24 @@ public class QActorCriticSchedulingStrategy implements SchedulingStrategy {
 		AtomicInteger currentCpuId = new AtomicInteger(2);
 		schedulingTopology.getVertices().forEach(schedulingExecutionVertex -> {
 			schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
-				DEFAULT_TASK_MANAGER_ADDRESS,
+				DEFAULT_TASK_MANAGER_ADDRESS, null,
 				currentCpuId.getAndIncrement()));
 		});
 	}
 
 	private void setupDerivedPlacement(@NotNull SchedulingRuntimeState runtimeState) {
 		SchedulingExecutionContainer topLevelContainer = runtimeState.getTopLevelContainer();
-		List<Integer> placementAction = runtimeState.getPlacementSolution();
+		List<Tuple3<TaskManagerLocation, Integer, Integer>> placementAction = runtimeState.getPlacementSolution();
 		if (runtimeState.isValidPlacementAction(placementAction)) {
 			topLevelContainer.releaseAllExecutionVertices();
 			AtomicInteger placementIndex = new AtomicInteger(0);
 			schedulingTopology.getVertices().forEach(schedulingExecutionVertex -> {
 				topLevelContainer.forceSchedule(
 					schedulingExecutionVertex,
-					placementAction.get(placementIndex.get()));
+					placementAction.get(placementIndex.get()).getField(1));
 				schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
-					DEFAULT_TASK_MANAGER_ADDRESS,
-					placementAction.get(placementIndex.getAndIncrement())));
+					DEFAULT_TASK_MANAGER_ADDRESS, null,
+					placementAction.get(placementIndex.getAndIncrement()).getField(1)));
 			});
 		} else {
 			throw new FlinkRuntimeException(

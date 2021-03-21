@@ -19,10 +19,9 @@
 package org.apache.flink.runtime.scheduler.agent;
 
 import org.apache.flink.runtime.executiongraph.ExecutionGraph;
+import org.apache.flink.runtime.jobmaster.slotpool.SlotPool;
 import org.apache.flink.runtime.messages.Acknowledge;
-import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionContainer;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategy;
-import org.apache.flink.util.FlinkRuntimeException;
 
 import org.slf4j.Logger;
 
@@ -48,13 +47,21 @@ public class QActorCriticSchedulingAgent extends AbstractSchedulingAgent {
 		Logger log,
 		ExecutionGraph executionGraph,
 		SchedulingStrategy schedulingStrategy,
+		SlotPool slotPool,
 		ScheduledExecutorService executorService,
 		long triggerPeriod,
 		long waitTimeout,
 		int numRetries,
 		int updatePeriod) {
 
-		super(log, triggerPeriod, executionGraph, schedulingStrategy, waitTimeout, numRetries);
+		super(
+			log,
+			triggerPeriod,
+			executionGraph,
+			schedulingStrategy,
+			slotPool,
+			waitTimeout,
+			numRetries);
 
 		int nVertices = Math.toIntExact(StreamSupport.stream(executionGraph
 			.getSchedulingTopology()
@@ -88,7 +95,8 @@ public class QActorCriticSchedulingAgent extends AbstractSchedulingAgent {
 
 	@Override
 	protected void updatePlacementSolution() {
-		int currentStateId = qActorCriticWrapper.getStateFor(currentPlacementAction);
+/*
+		Tuple2<TaskManagerLocation, Integer> currentStateId = qActorCriticWrapper.getStateFor(currentPlacementAction);
 		qActorCriticWrapper.updateState(
 			getOverallThroughput(),
 			currentStateId,
@@ -100,6 +108,7 @@ public class QActorCriticSchedulingAgent extends AbstractSchedulingAgent {
 			throw new FlinkRuntimeException(
 				"Invalid placement action " + suggestedPlacementAction + " suggested.");
 		}
+*/
 	}
 
 	@Override

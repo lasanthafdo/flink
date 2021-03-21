@@ -19,7 +19,6 @@
 package org.apache.flink.runtime.scheduler.adapter;
 
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
-import org.apache.flink.runtime.scheduler.strategy.SchedulingResultPartition;
 
 /**
  * Default implementation of {@link SchedulingExecutionVertex}.
@@ -28,14 +27,14 @@ public class PhysicalExecutionEdge {
 
 	private final String sourceVertexId;
 	private final String targetVertexId;
-	private final Integer sourceCpuId;
-	private final Integer targetCpuId;
+	private final String sourceCpuId;
+	private final String targetCpuId;
 
 	public PhysicalExecutionEdge(
 		String sourceVertexId,
 		String targetVertexId,
-		Integer sourceCpuId,
-		Integer targetCpuId) {
+		String sourceCpuId,
+		String targetCpuId) {
 
 		this.sourceVertexId = sourceVertexId;
 		this.targetVertexId = targetVertexId;
@@ -56,11 +55,11 @@ public class PhysicalExecutionEdge {
 		return targetVertexId;
 	}
 
-	public Integer getSourceCpuId() {
+	public String getSourceCpuId() {
 		return sourceCpuId;
 	}
 
-	public Integer getTargetCpuId() {
+	public String getTargetCpuId() {
 		return targetCpuId;
 	}
 }

@@ -54,6 +54,8 @@ import org.apache.flink.runtime.jobgraph.ScheduleMode;
 import org.apache.flink.runtime.jobgraph.tasks.CheckpointCoordinatorConfiguration;
 import org.apache.flink.runtime.jobgraph.tasks.JobCheckpointingSettings;
 import org.apache.flink.runtime.jobmanager.slots.TaskManagerGateway;
+import org.apache.flink.runtime.jobmaster.slotpool.DefaultSlotPoolFactory;
+import org.apache.flink.runtime.jobmaster.slotpool.SlotPool;
 import org.apache.flink.runtime.jobmaster.slotpool.SlotProvider;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.messages.checkpoint.AcknowledgeCheckpoint;
@@ -384,6 +386,9 @@ public class SchedulerTestingUtils {
 		private JobMasterPartitionTracker partitionTracker = NoOpJobMasterPartitionTracker.INSTANCE;
 		private FailoverStrategy.Factory failoverStrategyFactory = new RestartPipelinedRegionFailoverStrategy.Factory();
 		private RestartBackoffTimeStrategy restartBackoffTimeStrategy = NoRestartBackoffTimeStrategy.INSTANCE;
+		private SlotPool slotPool = DefaultSlotPoolFactory
+			.fromConfiguration(jobMasterConfiguration)
+			.createSlotPool(new JobID());
 		private ExecutionVertexOperations executionVertexOperations = new DefaultExecutionVertexOperations();
 		private ExecutionVertexVersioner executionVertexVersioner = new ExecutionVertexVersioner();
 		private ExecutionSlotAllocatorFactory executionSlotAllocatorFactory = new TestExecutionSlotAllocatorFactory();
@@ -392,7 +397,8 @@ public class SchedulerTestingUtils {
 			this.jobGraph = jobGraph;
 
 			// scheduling strategy is by default set according to the scheduleMode. It can be re-assigned later.
-			this.schedulingStrategyFactory = DefaultSchedulerFactory.createSchedulingStrategyFactory(jobGraph.getScheduleMode());
+			this.schedulingStrategyFactory = DefaultSchedulerFactory.createSchedulingStrategyFactory(
+				jobGraph.getScheduleMode());
 		}
 
 		public DefaultSchedulerBuilder setLogger(final Logger log) {
@@ -509,6 +515,7 @@ public class SchedulerTestingUtils {
 				schedulingStrategyFactory,
 				failoverStrategyFactory,
 				restartBackoffTimeStrategy,
+				slotPool,
 				executionVertexOperations,
 				executionVertexVersioner,
 				executionSlotAllocatorFactory);

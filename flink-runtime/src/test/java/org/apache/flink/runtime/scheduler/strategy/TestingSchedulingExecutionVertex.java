@@ -86,7 +86,7 @@ public class TestingSchedulingExecutionVertex implements SchedulingExecutionVert
 
 	@Override
 	public ExecutionPlacement getExecutionPlacement() {
-		return new ExecutionPlacement("localhost:8081", 0);
+		return new ExecutionPlacement("localhost:8081", null, 0);
 	}
 
 	@Override

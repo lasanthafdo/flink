@@ -524,8 +524,26 @@ public class ExecutionVertex implements AccessExecutionVertex, Archiveable<Archi
 	 * @see #getPreferredLocationsBasedOnInputs()
 	 */
 	public Collection<CompletableFuture<TaskManagerLocation>> getPreferredLocations() {
+		Collection<CompletableFuture<TaskManagerLocation>> basedOnSchedule = getPreferredLocationsBasedOnSchedule();
 		Collection<CompletableFuture<TaskManagerLocation>> basedOnState = getPreferredLocationsBasedOnState();
-		return basedOnState != null ? basedOnState : getPreferredLocationsBasedOnInputs();
+		return basedOnSchedule != null ? basedOnSchedule : (
+			basedOnState != null ? basedOnState : getPreferredLocationsBasedOnInputs());
+	}
+
+	/**
+	 * Gets the preferred location to execute the current task execution attempt, based on the
+	 * execution placement given by the scheduler
+	 *
+	 * @return A size-one collection with the location preference, or null, if there is no
+	 * 	location preference based on the schedule.
+	 */
+	public Collection<CompletableFuture<TaskManagerLocation>> getPreferredLocationsBasedOnSchedule() {
+		TaskManagerLocation scheduledLocation = getExecutionPlacement().getTaskManagerLocation();
+		if (scheduledLocation != null) {
+			return Collections.singleton(CompletableFuture.completedFuture(scheduledLocation));
+		} else {
+			return null;
+		}
 	}
 
 	/**

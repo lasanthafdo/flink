@@ -31,7 +31,10 @@ import org.apache.flink.runtime.topology.Vertex;
 public interface SchedulingExecutionVertex
 	extends Vertex<ExecutionVertexID, IntermediateResultPartitionID, SchedulingExecutionVertex, SchedulingResultPartition> {
 
-	ExecutionPlacement DEFAULT_EXECUTION_PLACEMENT = new ExecutionPlacement("localhost:0", -1);
+	ExecutionPlacement DEFAULT_EXECUTION_PLACEMENT = new ExecutionPlacement(
+		"localhost:0",
+		null,
+		-1);
 
 	String getTaskName();
 
@@ -70,7 +73,17 @@ public interface SchedulingExecutionVertex
 	 */
 	InputDependencyConstraint getInputDependencyConstraint();
 
+	/**
+	 * Get the current cpu usage of this vertex
+	 *
+	 * @return current cpu usage as a double
+	 */
 	double getCurrentCpuUsage();
 
+	/**
+	 * Sets the current cpu usage as a double value
+	 *
+	 * @param cpuUsage the cpu usage to set
+	 */
 	void setCurrentCpuUsage(double cpuUsage);
 }

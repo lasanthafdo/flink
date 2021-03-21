@@ -31,14 +31,14 @@ import org.apache.flink.runtime.executiongraph.failover.flip1.RestartBackoffTime
 import org.apache.flink.runtime.io.network.partition.JobMasterPartitionTracker;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.ScheduleMode;
+import org.apache.flink.runtime.jobmaster.slotpool.SlotPool;
 import org.apache.flink.runtime.jobmaster.slotpool.SlotProvider;
 import org.apache.flink.runtime.metrics.groups.JobManagerJobMetricGroup;
 import org.apache.flink.runtime.rest.handler.legacy.backpressure.BackPressureStatsTracker;
-import org.apache.flink.runtime.scheduler.strategy.ActorCriticNNSchedulingStrategy;
-import org.apache.flink.runtime.scheduler.strategy.QActorCriticSchedulingStrategy;
 import org.apache.flink.runtime.scheduler.strategy.EagerSchedulingStrategy;
 import org.apache.flink.runtime.scheduler.strategy.LazyFromSourcesSchedulingStrategy;
 import org.apache.flink.runtime.scheduler.strategy.PinnedSchedulingStrategy;
+import org.apache.flink.runtime.scheduler.strategy.QActorCriticSchedulingStrategy;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategyFactory;
 import org.apache.flink.runtime.scheduler.strategy.TrafficBasedSchedulingStrategy;
 import org.apache.flink.runtime.shuffle.ShuffleMaster;
@@ -61,6 +61,7 @@ public class DefaultSchedulerFactory implements SchedulerNGFactory {
 		final Executor ioExecutor,
 		final Configuration jobMasterConfiguration,
 		final SlotProvider slotProvider,
+		final SlotPool slotPool,
 		final ScheduledExecutorService futureExecutor,
 		final ClassLoader userCodeLoader,
 		final CheckpointRecoveryFactory checkpointRecoveryFactory,
@@ -111,6 +112,7 @@ public class DefaultSchedulerFactory implements SchedulerNGFactory {
 			schedulingStrategyFactory,
 			FailoverStrategyFactoryLoader.loadFailoverStrategyFactory(jobMasterConfiguration),
 			restartBackoffTimeStrategy,
+			slotPool,
 			new DefaultExecutionVertexOperations(),
 			new ExecutionVertexVersioner(),
 			new DefaultExecutionSlotAllocatorFactory(slotProviderStrategy));
@@ -126,8 +128,6 @@ public class DefaultSchedulerFactory implements SchedulerNGFactory {
 				return new TrafficBasedSchedulingStrategy.Factory();
 			case DRL:
 				return new QActorCriticSchedulingStrategy.Factory();
-			case ADAPTIVE:
-				return new ActorCriticNNSchedulingStrategy.Factory();
 			case LAZY_FROM_SOURCES_WITH_BATCH_SLOT_REQUEST:
 			case LAZY_FROM_SOURCES:
 				return new LazyFromSourcesSchedulingStrategy.Factory();

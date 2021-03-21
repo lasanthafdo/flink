@@ -45,6 +45,7 @@ import static org.apache.flink.util.Preconditions.checkState;
  * This class contains scheduling logic for EAGER and LAZY_FROM_SOURCES.
  * It is used for normal scheduling and legacy failover strategy re-scheduling.
  */
+@Deprecated
 public class SchedulingUtils {
 
 	public static CompletableFuture<Void> schedule(

@@ -288,6 +288,7 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId> implements JobMast
 			scheduledExecutorService,
 			jobMasterConfiguration.getConfiguration(),
 			scheduler,
+			slotPool,
 			scheduledExecutorService,
 			userCodeLoader,
 			highAvailabilityServices.getCheckpointRecoveryFactory(),

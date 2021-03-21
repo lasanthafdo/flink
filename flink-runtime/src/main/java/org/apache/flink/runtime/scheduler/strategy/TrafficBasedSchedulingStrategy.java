@@ -18,12 +18,14 @@
 
 package org.apache.flink.runtime.scheduler.strategy;
 
+import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.runtime.execution.ExecutionPlacement;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 import org.apache.flink.runtime.scheduler.DeploymentOption;
 import org.apache.flink.runtime.scheduler.ExecutionVertexDeploymentOption;
 import org.apache.flink.runtime.scheduler.SchedulerOperations;
+import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 import org.apache.flink.util.FlinkRuntimeException;
 
 import java.util.List;
@@ -86,43 +88,48 @@ public class TrafficBasedSchedulingStrategy implements SchedulingStrategy {
 	private void allocateSlotsAndDeploy(
 		final Set<ExecutionVertexID> verticesToDeploy,
 		SchedulingRuntimeState runtimeState) {
+		final List<ExecutionVertexDeploymentOption> executionVertexDeploymentOptions;
 		if (runtimeState == null) {
-			setupDefaultPlacement();
+			executionVertexDeploymentOptions =
+				SchedulingStrategyUtils.createExecutionVertexDeploymentOptionsInTopologicalOrder(
+					schedulingTopology,
+					verticesToDeploy,
+					id -> deploymentOption);
 		} else {
 			setupDerivedPlacement(runtimeState);
+			executionVertexDeploymentOptions =
+				SchedulingStrategyUtils.createExecutionVertexDeploymentOptionsInTopologicalOrder(
+					schedulingTopology,
+					verticesToDeploy,
+					id -> deploymentOption,
+					id -> schedulingTopology.getVertex(id).getExecutionPlacement());
 		}
-
-		final List<ExecutionVertexDeploymentOption> executionVertexDeploymentOptions =
-			SchedulingStrategyUtils.createExecutionVertexDeploymentOptionsInTopologicalOrder(
-				schedulingTopology,
-				verticesToDeploy,
-				id -> deploymentOption,
-				id -> schedulingTopology.getVertex(id).getExecutionPlacement());
 		schedulerOperations.allocateSlotsAndDeploy(executionVertexDeploymentOptions);
 	}
 
 	private void setupDefaultPlacement() {
 		AtomicInteger currentCpuId = new AtomicInteger(1);
-		schedulingTopology.getVertices().forEach(schedulingExecutionVertex -> {
-			schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
-				DEFAULT_TASK_MANAGER_ADDRESS,
+		// TODO Doesn't work for the distributed case
+		for (SchedulingExecutionVertex sev : schedulingTopology.getVertices()) {
+			sev.setExecutionPlacement(new ExecutionPlacement(
+				DEFAULT_TASK_MANAGER_ADDRESS, null,
 				currentCpuId.getAndIncrement()));
-		});
+		}
 	}
 
 	private void setupDerivedPlacement(SchedulingRuntimeState runtimeState) {
 		SchedulingExecutionContainer topLevelContainer = runtimeState.getTopLevelContainer();
-		List<Integer> placementAction = runtimeState.getPlacementSolution();
+		List<Tuple3<TaskManagerLocation, Integer, Integer>> placementAction = runtimeState.getPlacementSolution();
 		if (runtimeState.isValidPlacementAction(placementAction)) {
 			topLevelContainer.releaseAllExecutionVertices();
 			AtomicInteger placementIndex = new AtomicInteger(0);
 			schedulingTopology.getVertices().forEach(schedulingExecutionVertex -> {
 				topLevelContainer.forceSchedule(
 					schedulingExecutionVertex,
-					placementAction.get(placementIndex.get()));
+					placementAction.get(placementIndex.get()).getField(1));
 				schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
-					DEFAULT_TASK_MANAGER_ADDRESS,
-					placementAction.get(placementIndex.getAndIncrement())));
+					DEFAULT_TASK_MANAGER_ADDRESS, null,
+					placementAction.get(placementIndex.getAndIncrement()).getField(1)));
 			});
 		} else {
 			throw new FlinkRuntimeException(

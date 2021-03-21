@@ -18,6 +18,9 @@
 
 package org.apache.flink.runtime.scheduler.agent;
 
+import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
+
 import com.github.chen0040.rl.learning.actorcritic.ActorCriticLearner;
 import org.paukov.combinatorics.CombinatoricsVector;
 import org.paukov.combinatorics.Generator;
@@ -76,7 +79,7 @@ public class QActorCriticWrapper {
 		return actionMap;
 	}
 
-	public int getStateFor(List<Integer> cpuAssignment) {
+	public int getStateFor(List<Tuple2<TaskManagerLocation, Integer>> cpuAssignment) {
 		return stateSpaceMap
 			.entrySet()
 			.stream()

@@ -664,7 +664,7 @@ public class Task implements Runnable, TaskSlotPayload, TaskActions, PartitionPr
 		CpuUsageGauge cpuUsageGauge = (CpuUsageGauge) operatorIOMetricGroup.getCurrentCpuUsageGauge();
 		cpuUsageGauge.setThreadId(Thread.currentThread().getId());
 
-		if (pinnedToCpu) {
+		if (pinnedToCpu && cpuId >= 0) {
 			try (AffinityLock a1 = AffinityLock.acquireLock(cpuId)) {
 				LOG.info(
 					"Task {} is running on CPU {} ",

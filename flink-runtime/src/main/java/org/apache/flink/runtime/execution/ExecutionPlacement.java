@@ -18,6 +18,8 @@
 
 package org.apache.flink.runtime.execution;
 
+import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
+
 import java.io.Serializable;
 
 /**
@@ -28,17 +30,24 @@ public class ExecutionPlacement implements Serializable {
 	private static final long serialVersionUID = -786800431659013391L;
 
 	private final String taskManagerAddress;
+	private final TaskManagerLocation taskManagerLocation;
 	private final int cpuId;
 
 	public ExecutionPlacement(
 		String taskManagerAddress,
+		TaskManagerLocation taskManagerLocation,
 		int cpuId) {
 		this.taskManagerAddress = taskManagerAddress;
+		this.taskManagerLocation = taskManagerLocation;
 		this.cpuId = cpuId;
 	}
 
 	public String getTaskManagerAddress() {
 		return taskManagerAddress;
+	}
+
+	public TaskManagerLocation getTaskManagerLocation() {
+		return taskManagerLocation;
 	}
 
 	public int getCpuId() {
