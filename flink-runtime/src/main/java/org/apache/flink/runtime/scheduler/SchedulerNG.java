@@ -46,6 +46,7 @@ import org.apache.flink.runtime.operators.coordination.OperatorCoordinator;
 import org.apache.flink.runtime.operators.coordination.OperatorEvent;
 import org.apache.flink.runtime.query.KvStateLocation;
 import org.apache.flink.runtime.query.UnknownKvStateLocation;
+import org.apache.flink.runtime.resourcemanager.ResourceManagerGateway;
 import org.apache.flink.runtime.rest.handler.legacy.backpressure.OperatorBackPressureStats;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.taskmanager.TaskExecutionState;
@@ -156,8 +157,18 @@ public interface SchedulerNG {
 	 * and returns the coordinator's response.
 	 *
 	 * @return A future containing the response.
+	 *
 	 * @throws FlinkException Thrown, if the task is not running, or no operator/coordinator exists
-	 *                        for the given ID, or the coordinator cannot handle client events.
+	 * 	for the given ID, or the coordinator cannot handle client events.
 	 */
-	CompletableFuture<CoordinationResponse> deliverCoordinationRequestToCoordinator(OperatorID operator, CoordinationRequest request) throws FlinkException;
+	CompletableFuture<CoordinationResponse> deliverCoordinationRequestToCoordinator(
+		OperatorID operator,
+		CoordinationRequest request) throws FlinkException;
+
+	/**
+	 * Sets the resource manager gateway for the scheduler to access
+	 *
+	 * @param resourceManagerGateway the RPC gateway for the resource manager
+	 */
+	void connectToResourceManager(ResourceManagerGateway resourceManagerGateway);
 }

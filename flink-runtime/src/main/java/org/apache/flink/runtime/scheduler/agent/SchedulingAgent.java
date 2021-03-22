@@ -18,6 +18,8 @@
 
 package org.apache.flink.runtime.scheduler.agent;
 
+import org.apache.flink.runtime.resourcemanager.ResourceManagerGateway;
+
 /**
  * The scheduling agent interface used for dynamic oeprator placement.
  */
@@ -30,4 +32,6 @@ public interface SchedulingAgent extends Runnable {
 	long getTriggerPeriod();
 
 	void shutdownAgent();
+
+	void connectToResourceManager(ResourceManagerGateway resourceManagerGateway);
 }

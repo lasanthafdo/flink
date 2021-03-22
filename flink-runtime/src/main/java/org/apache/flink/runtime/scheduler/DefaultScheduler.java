@@ -43,6 +43,7 @@ import org.apache.flink.runtime.jobmaster.slotpool.SlotPool;
 import org.apache.flink.runtime.jobmaster.slotpool.ThrowingSlotProvider;
 import org.apache.flink.runtime.metrics.groups.JobManagerJobMetricGroup;
 import org.apache.flink.runtime.operators.coordination.OperatorCoordinator;
+import org.apache.flink.runtime.resourcemanager.ResourceManagerGateway;
 import org.apache.flink.runtime.rest.handler.legacy.backpressure.BackPressureStatsTracker;
 import org.apache.flink.runtime.scheduler.agent.SchedulingAgent;
 import org.apache.flink.runtime.scheduler.agent.SchedulingAgentUtils;
@@ -258,6 +259,11 @@ public class DefaultScheduler extends SchedulerBase implements SchedulerOperatio
 		final FailureHandlingResult failureHandlingResult = executionFailureHandler.getGlobalFailureHandlingResult(
 			error);
 		maybeRestartTasks(failureHandlingResult);
+	}
+
+	@Override
+	public void connectToResourceManager(ResourceManagerGateway resourceManagerGateway) {
+		schedulingAgent.connectToResourceManager(resourceManagerGateway);
 	}
 
 	private void maybeRestartTasks(final FailureHandlingResult failureHandlingResult) {

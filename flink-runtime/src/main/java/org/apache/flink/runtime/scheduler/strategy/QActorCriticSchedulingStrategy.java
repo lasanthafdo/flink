@@ -113,7 +113,7 @@ public class QActorCriticSchedulingStrategy implements SchedulingStrategy {
 		AtomicInteger currentCpuId = new AtomicInteger(2);
 		schedulingTopology.getVertices().forEach(schedulingExecutionVertex -> {
 			schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
-				DEFAULT_TASK_MANAGER_ADDRESS, null,
+				null,
 				currentCpuId.getAndIncrement()));
 		});
 	}
@@ -129,7 +129,7 @@ public class QActorCriticSchedulingStrategy implements SchedulingStrategy {
 					schedulingExecutionVertex,
 					placementAction.get(placementIndex.get()).getField(1));
 				schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
-					DEFAULT_TASK_MANAGER_ADDRESS, null,
+					null,
 					placementAction.get(placementIndex.getAndIncrement()).getField(1)));
 			});
 		} else {

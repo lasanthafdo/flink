@@ -191,6 +191,7 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 			log.debug("Node status: {}", getStatus());
 		}
 		cpuSockets.values().forEach(SchedulingExecutionContainer::releaseAllExecutionVertices);
+		slotAssignmentMap.keySet().forEach(key -> slotAssignmentMap.put(key, null));
 	}
 
 	@Override

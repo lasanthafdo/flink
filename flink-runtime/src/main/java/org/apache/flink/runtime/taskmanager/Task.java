@@ -664,15 +664,29 @@ public class Task implements Runnable, TaskSlotPayload, TaskActions, PartitionPr
 		CpuUsageGauge cpuUsageGauge = (CpuUsageGauge) operatorIOMetricGroup.getCurrentCpuUsageGauge();
 		cpuUsageGauge.setThreadId(Thread.currentThread().getId());
 
-		if (pinnedToCpu && cpuId >= 0) {
-			try (AffinityLock a1 = AffinityLock.acquireLock(cpuId)) {
-				LOG.info(
-					"Task {} is running on CPU {} ",
-					taskInfo.getTaskNameWithSubtasks(),
-					cpuId);
-				doRun();
-			} finally {
-				terminationFuture.complete(executionState);
+		if (pinnedToCpu) {
+			if (cpuId >= 0) {
+				try (AffinityLock a1 = AffinityLock.acquireLock(cpuId)) {
+					LOG.info(
+						"Task {} was scheduled to run on CPU {} and bound value is '{}'",
+						taskInfo.getTaskNameWithSubtasks(),
+						cpuId, a1.isBound());
+					doRun();
+				} finally {
+					terminationFuture.complete(executionState);
+				}
+			} else {
+				try (AffinityLock a1 = AffinityLock.acquireLock()) {
+					cpuId = a1.cpuId();
+					LOG.info(
+						"Task {} is running on CPU {} ",
+						taskInfo.getTaskNameWithSubtasks(),
+						cpuId);
+					doRun();
+				} finally {
+					terminationFuture.complete(executionState);
+				}
+
 			}
 		} else {
 			try {

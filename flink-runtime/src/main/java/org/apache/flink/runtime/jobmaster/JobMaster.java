@@ -1015,16 +1015,19 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId> implements JobMast
 				resourceManagerResourceId);
 
 			slotPool.connectToResourceManager(resourceManagerGateway);
+			schedulerNG.connectToResourceManager(resourceManagerGateway);
 
-			resourceManagerHeartbeatManager.monitorTarget(resourceManagerResourceId, new HeartbeatTarget<Void>() {
-				@Override
-				public void receiveHeartbeat(ResourceID resourceID, Void payload) {
-					resourceManagerGateway.heartbeatFromJobManager(resourceID);
-				}
+			resourceManagerHeartbeatManager.monitorTarget(
+				resourceManagerResourceId,
+				new HeartbeatTarget<Void>() {
+					@Override
+					public void receiveHeartbeat(ResourceID resourceID, Void payload) {
+						resourceManagerGateway.heartbeatFromJobManager(resourceID);
+					}
 
-				@Override
-				public void requestHeartbeat(ResourceID resourceID, Void payload) {
-					// request heartbeat will never be called on the job manager side
+					@Override
+					public void requestHeartbeat(ResourceID resourceID, Void payload) {
+						// request heartbeat will never be called on the job manager side
 				}
 			});
 		} else {

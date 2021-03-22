@@ -68,7 +68,9 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 	public void addCpu(String cpuIdString) {
 		int cpuId = SchedulingExecutionContainer.getCpuIdFromString(cpuIdString);
 		checkState(cpuLayout.socketId(cpuId) == socketId);
-		checkState(cpuAssignmentMap.size() < cpuLayout.threadsPerCore());
+		checkState(
+			cpuAssignmentMap.size() < cpuLayout.threadsPerCore() * cpuLayout.coresPerSocket(),
+			"Number of CPUs exceed number supported by socket");
 		cpuAssignmentMap.putIfAbsent(cpuId, null);
 		cpuFreqMap.putIfAbsent(cpuId, 0.0);
 		cpuUsageMetrics.putIfAbsent(cpuId, 0.0);

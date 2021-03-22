@@ -19,15 +19,21 @@
 package org.apache.flink.runtime.scheduler.agent;
 
 import org.apache.flink.api.common.JobStatus;
+import org.apache.flink.api.common.time.Time;
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
+import org.apache.flink.runtime.clusterframework.types.AllocationID;
+import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
 import org.apache.flink.runtime.concurrent.FutureUtils;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.executiongraph.Execution;
 import org.apache.flink.runtime.executiongraph.ExecutionGraph;
 import org.apache.flink.runtime.executiongraph.ExecutionVertex;
-import org.apache.flink.runtime.jobmaster.slotpool.SlotInfoWithUtilization;
+import org.apache.flink.runtime.jobmaster.SlotInfo;
 import org.apache.flink.runtime.jobmaster.slotpool.SlotPool;
 import org.apache.flink.runtime.messages.Acknowledge;
+import org.apache.flink.runtime.resourcemanager.ResourceManagerGateway;
+import org.apache.flink.runtime.rest.messages.taskmanager.TaskManagerInfo;
 import org.apache.flink.runtime.scheduler.adapter.DefaultExecutionEdge;
 import org.apache.flink.runtime.scheduler.adapter.PhysicalExecutionEdge;
 import org.apache.flink.runtime.scheduler.adapter.SchedulingCluster;
@@ -39,13 +45,14 @@ import org.apache.flink.runtime.scheduler.strategy.SchedulingRuntimeState;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategy;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingTopology;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
+import org.apache.flink.runtime.taskmanager.UnresolvedTaskManagerLocation;
 import org.apache.flink.util.IterableUtils;
 
 import net.openhft.affinity.AffinityLock;
 import net.openhft.affinity.CpuLayout;
 import org.slf4j.Logger;
 
-import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -75,20 +82,23 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 
 	private final Map<String, Double> interOpEdgeThroughput;
 	private final Map<String, SchedulingExecutionEdge> edgeMap;
+	private final Map<String, Integer> orderedOperatorMap = new HashMap<>();
+	private final Map<String, Tuple2<TaskManagerLocation, Integer>> taskManagerLocationMap = new HashMap<>();
+	private final Map<String, Double> maxPhysicalEdgeThroughput = new HashMap<>();
+	private final Map<String, Double> maxLogicalEdgeThroughput = new HashMap<>();
 	private final List<SchedulingExecutionVertex> sourceVertices = new ArrayList<>();
 	private final long triggerPeriod;
-	private final SchedulingCluster schedulingCluster;
 	private final long waitTimeout;
 	private final int numRetries;
 	private final CpuLayout cpuLayout;
 	private final SchedulingStrategy schedulingStrategy;
 	private final SlotPool slotPool;
+	protected CompletableFuture<Collection<Acknowledge>> previousRescheduleFuture;
+	private SchedulingCluster schedulingCluster;
+	private ResourceManagerGateway resourceManagerGateway;
 	private InfluxDBMetricsClient influxDBMetricsClient;
 	private double mostRecentArrivalRate = 0d;
-	private Map<String, TaskManagerLocation> taskManagerLocationMap;
-	private final Map<String, Double> maxPhysicalEdgeThroughput = new HashMap<>();
-	private final Map<String, Double> maxLogicalEdgeThroughput = new HashMap<>();
-	private final Map<String, Integer> orderedOperatorMap = new HashMap<>();
+	private boolean waitingForResourceManager = true;
 
 	public AbstractSchedulingAgent(
 		Logger log,
@@ -110,14 +120,8 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		this.edgeMap = new HashMap<>();
 		this.triggerPeriod = triggerPeriod;
 
-		//TODO Currently using the same CPU layout across the cluster, which is wrong!
-		populateResourceInfo();
-		this.schedulingCluster = new SchedulingCluster(
-			this.taskManagerLocationMap.values(),
-			this.cpuLayout,
-			log);
-
 		init();
+
 		this.waitTimeout = waitTimeout;
 		this.numRetries = numRetries;
 		this.currentPlacementAction = new ArrayList<>();
@@ -125,30 +129,76 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		this.schedulingStrategy.setTopLevelContainer(getTopLevelContainer());
 	}
 
-	private void populateResourceInfo() {
-		slotPool.getAvailableSlotsInformation().forEach(schedulingCluster::addTaskSlot);
-		this.taskManagerLocationMap = slotPool
-			.getAvailableSlotsInformation()
-			.stream()
-			.collect(Collectors.toMap(
-				info -> info.getTaskManagerLocation().getResourceID().getResourceIdString(),
-				SlotInfoWithUtilization::getTaskManagerLocation));
-		taskManagerLocationMap.forEach((tmLocResourceId, tmLoc) -> log.info(
+	public void connectToResourceManager(ResourceManagerGateway resourceManagerGateway) {
+		checkNotNull(resourceManagerGateway);
+		this.resourceManagerGateway = resourceManagerGateway;
+		populateResourceInformation(resourceManagerGateway);
+		waitingForResourceManager = false;
+	}
+
+	private void populateResourceInformation(ResourceManagerGateway resourceManagerGateway) {
+		CompletableFuture<Collection<TaskManagerInfo>> tmInfoFuture = resourceManagerGateway.requestTaskManagerInfo(
+			Time.seconds(10));
+		tmInfoFuture.thenAccept(tmInfos -> {
+			tmInfos.forEach(tmInfo -> {
+				for (int i = 0; i < tmInfo.getNumberSlots(); i++) {
+					TaskManagerLocation tmLoc = null;
+					try {
+						String externalAddress = tmInfo.getAddress().split("@")[1].split(":")[0];
+						tmLoc = TaskManagerLocation.fromUnresolvedLocation(new UnresolvedTaskManagerLocation(
+							tmInfo.getResourceId(),
+							externalAddress,
+							tmInfo.getDataPort()));
+					} catch (UnknownHostException e) {
+						log.error(
+							"Error when deriving TaskManagerLocation : {} ",
+							e.getMessage(),
+							e);
+					}
+					taskManagerLocationMap.put(
+						tmInfo.getResourceId().getResourceIdString(),
+						new Tuple2<>(tmLoc, tmInfo.getNumberSlots()));
+				}
+			});
+		}).thenRun(this::initSchedulingCluster);
+	}
+
+	private void initSchedulingCluster() {
+		taskManagerLocationMap.forEach((tmLocResourceId, tuple) -> log.info(
 			"TaskManager with ID {} available at {} using data port {}",
 			tmLocResourceId,
-			tmLoc.address().getHostAddress(),
-			tmLoc.dataPort()));
+			tuple.f0.address().getHostAddress(),
+			tuple.f0.dataPort()));
+
+		//TODO Currently using the same CPU layout across the cluster, which is wrong!
+		List<TaskManagerLocation> tmList = taskManagerLocationMap
+			.values()
+			.stream()
+			.map(tuple -> tuple.f0)
+			.collect(Collectors.toList());
+		this.schedulingCluster = new SchedulingCluster(
+			tmList,
+			this.cpuLayout,
+			log);
+		//TODO Scaling factor is arbitrary. Please fix
+		int scalingFactor = 2;
+		taskManagerLocationMap.values().forEach(tuple -> {
+			TaskManagerLocation tmLoc = tuple.f0;
+			for (int i = 0; i < tuple.f1 * scalingFactor; i++) {
+				schedulingCluster.addTaskSlot(new SimpleSlotInfo(tmLoc, i));
+			}
+		});
 		taskManagerLocationMap
 			.values()
 			.stream()
-			.map(TaskManagerLocation::address)
-			.map(InetAddress::getHostAddress)
+			.map(tuple -> tuple.f0.address().getHostAddress())
 			.forEach(tmAddress -> {
 				for (int cpuId = 0; cpuId < nCpus; cpuId++) {
 					String cpuIdString = tmAddress + ":" + cpuLayout.socketId(cpuId) + ":" + cpuId;
 					schedulingCluster.addCpu(cpuIdString);
 				}
 			});
+		// TODO Do we need to force schedule the first time?
 	}
 
 	protected void init() {
@@ -221,22 +271,26 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		Map<String, Double> cpuUsageMetrics = influxDBMetricsClient.getCpuUsageMetrics(nCpus);
 		Map<String, Double> cpuFrequencyMetrics = influxDBMetricsClient.getCpuFrequencyMetrics(nCpus);
 		Map<String, Double> operatorUsageMetrics = influxDBMetricsClient.getOperatorUsageMetrics();
-		schedulingCluster.updateResourceUsageMetrics(
-			SchedulingExecutionContainer.CPU,
-			cpuUsageMetrics);
-		schedulingCluster.updateResourceUsageMetrics(
-			SchedulingExecutionContainer.FREQ,
-			cpuFrequencyMetrics);
-		schedulingCluster.updateResourceUsageMetrics(
-			SchedulingExecutionContainer.OPERATOR,
-			operatorUsageMetrics);
+		if (!waitingForResourceManager) {
+			schedulingCluster.updateResourceUsageMetrics(
+				SchedulingExecutionContainer.CPU,
+				cpuUsageMetrics);
+			schedulingCluster.updateResourceUsageMetrics(
+				SchedulingExecutionContainer.FREQ,
+				cpuFrequencyMetrics);
+			schedulingCluster.updateResourceUsageMetrics(
+				SchedulingExecutionContainer.OPERATOR,
+				operatorUsageMetrics);
+		}
 		Map<String, Double> filteredFlowRates = currentInterOpEdgeThroughput
 			.entrySet()
 			.stream()
 			.filter(mapEntry -> edgeMap.containsKey(mapEntry.getKey()))
 			.collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 		interOpEdgeThroughput.putAll(filteredFlowRates);
-		updateMaxEdgeThroughputMatrices(interOpEdgeThroughput);
+		if (previousRescheduleFuture != null) {
+			updateMaxEdgeThroughputMatrices(interOpEdgeThroughput);
+		}
 		orderedEdgeList = interOpEdgeThroughput
 			.entrySet().stream().sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
 			.map(mapEntry -> edgeMap.get(mapEntry.getKey())).collect(Collectors.toList());
@@ -420,8 +474,44 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 				log.error("Encountered exception when halting process.", fail);
 				throw new CompletionException("Halt process unsuccessful", fail);
 			} else {
-				schedulingStrategy.startScheduling(this);
+				try {
+					schedulingStrategy.startScheduling(this);
+				} catch (Exception e) {
+					log.error("Unexpected error : {}", e.getMessage(), e);
+				}
 			}
 		});
+	}
+
+	private class SimpleSlotInfo implements SlotInfo {
+		private final AllocationID allocationID;
+		private final TaskManagerLocation taskManagerLocation;
+		private final int physicalSlotNumber;
+
+		SimpleSlotInfo(TaskManagerLocation taskManagerLocation, int physicalSlotNumber) {
+			this.allocationID = new AllocationID();
+			this.taskManagerLocation = taskManagerLocation;
+			this.physicalSlotNumber = physicalSlotNumber;
+		}
+
+		@Override
+		public AllocationID getAllocationId() {
+			return allocationID;
+		}
+
+		@Override
+		public TaskManagerLocation getTaskManagerLocation() {
+			return taskManagerLocation;
+		}
+
+		@Override
+		public int getPhysicalSlotNumber() {
+			return physicalSlotNumber;
+		}
+
+		@Override
+		public ResourceProfile getResourceProfile() {
+			return null;
+		}
 	}
 }

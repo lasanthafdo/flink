@@ -25,6 +25,7 @@ import org.apache.flink.runtime.executiongraph.Execution;
 import org.apache.flink.runtime.executiongraph.ExecutionGraph;
 import org.apache.flink.runtime.executiongraph.ExecutionVertex;
 import org.apache.flink.runtime.messages.Acknowledge;
+import org.apache.flink.runtime.resourcemanager.ResourceManagerGateway;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategy;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingTopology;
 
@@ -75,6 +76,14 @@ public class PinnedTaskSchedulingAgent implements SchedulingAgent {
 	@Override
 	public void shutdownAgent() {
 
+	}
+
+	@Override
+	public void connectToResourceManager(ResourceManagerGateway resourceManagerGateway) {
+		log.info(
+			"Resource manager gateway at {} with {} task managers available",
+			resourceManagerGateway.getAddress(),
+			resourceManagerGateway.getNumberOfRegisteredTaskManagers());
 	}
 
 	@Override

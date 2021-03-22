@@ -24,7 +24,6 @@ import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionContainer;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 import org.apache.flink.util.FlinkRuntimeException;
-import org.apache.flink.util.Preconditions;
 
 import net.openhft.affinity.CpuLayout;
 import org.slf4j.Logger;
@@ -36,6 +35,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+
+import static org.apache.flink.util.Preconditions.checkArgument;
 
 /**
  * Container class for SchedulingNodes.
@@ -80,7 +81,7 @@ public class SchedulingCluster implements SchedulingExecutionContainer {
 
 	@Override
 	public void addTaskSlot(SlotInfo slotInfo) {
-		Preconditions.checkArgument(
+		checkArgument(
 			taskManagerLocations.contains(slotInfo.getTaskManagerLocation()),
 			"Slot should belong to one of the registered task managers for the job");
 		String nodeIp = slotInfo.getTaskManagerLocation().address().getHostAddress();

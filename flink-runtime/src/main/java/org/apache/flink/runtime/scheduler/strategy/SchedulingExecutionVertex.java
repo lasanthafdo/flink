@@ -32,7 +32,6 @@ public interface SchedulingExecutionVertex
 	extends Vertex<ExecutionVertexID, IntermediateResultPartitionID, SchedulingExecutionVertex, SchedulingResultPartition> {
 
 	ExecutionPlacement DEFAULT_EXECUTION_PLACEMENT = new ExecutionPlacement(
-		"localhost:0",
 		null,
 		-1);
 

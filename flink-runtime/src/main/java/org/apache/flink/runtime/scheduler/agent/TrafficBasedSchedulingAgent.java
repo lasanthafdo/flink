@@ -21,7 +21,6 @@ package org.apache.flink.runtime.scheduler.agent;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.runtime.executiongraph.ExecutionGraph;
 import org.apache.flink.runtime.jobmaster.slotpool.SlotPool;
-import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionContainer;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategy;
@@ -30,13 +29,11 @@ import org.apache.flink.util.FlinkRuntimeException;
 
 import org.slf4j.Logger;
 
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -51,7 +48,6 @@ public class TrafficBasedSchedulingAgent extends AbstractSchedulingAgent {
 
 	private final ScheduledExecutorService executorService;
 	private final long updatePeriodInSeconds;
-	private CompletableFuture<Collection<Acknowledge>> previousRescheduleFuture;
 
 	public TrafficBasedSchedulingAgent(
 		Logger log,
