@@ -43,7 +43,7 @@ public class SchedulingAgentUtils {
 		SlotPool slotPool,
 		ScheduledExecutorService executorService) {
 
-		int nDefaultConfigElements = 4;
+		int nDefaultConfigElements = 5;
 		switch (scheduleMode) {
 			case PINNED:
 				if (jobMasterConfiguration.contains(DeploymentOptions.SCHEDULING_AGENT_CONFIG_STRING)) {
@@ -80,6 +80,7 @@ public class SchedulingAgentUtils {
 						long waitTimeOut = Long.parseLong(configElements[1]);
 						int numRetries = Integer.parseInt(configElements[2]);
 						int updatePeriod = Integer.parseInt(configElements[3]);
+						int scalingFactor = Integer.parseInt(configElements[4]);
 
 						return new TrafficBasedSchedulingAgent(
 							log,
@@ -90,7 +91,7 @@ public class SchedulingAgentUtils {
 							triggerPeriod,
 							waitTimeOut,
 							numRetries,
-							updatePeriod);
+							updatePeriod, scalingFactor);
 					} else {
 						throw new IllegalConfigurationException(
 							"Incorrect number of arguments in the scheduling agent configuration string.");

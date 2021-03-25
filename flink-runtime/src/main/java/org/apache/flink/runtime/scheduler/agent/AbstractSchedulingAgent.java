@@ -70,6 +70,7 @@ import static org.apache.flink.util.Preconditions.checkState;
 
 public abstract class AbstractSchedulingAgent implements SchedulingAgent, SchedulingRuntimeState {
 
+	public static final String NULL_CPU_ID = "127.0.0.1:-1:-1";
 	protected final SchedulingTopology schedulingTopology;
 	protected final Logger log;
 	protected final int nCpus;
@@ -90,6 +91,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	private final long triggerPeriod;
 	private final long waitTimeout;
 	private final int numRetries;
+	private final int scalingFactor;
 	private final CpuLayout cpuLayout;
 	private final SchedulingStrategy schedulingStrategy;
 	private final SlotPool slotPool;
@@ -107,7 +109,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		SchedulingStrategy schedulingStrategy,
 		SlotPool slotPool,
 		long waitTimeout,
-		int numRetries) {
+		int numRetries, int scalingFactor) {
 
 		this.executionGraph = checkNotNull(executionGraph);
 		this.schedulingStrategy = checkNotNull(schedulingStrategy);
@@ -124,6 +126,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 
 		this.waitTimeout = waitTimeout;
 		this.numRetries = numRetries;
+		this.scalingFactor = scalingFactor;
 		this.currentPlacementAction = new ArrayList<>();
 		this.nVertices = executionGraph.getTotalNumberOfVertices();
 		this.schedulingStrategy.setTopLevelContainer(getTopLevelContainer());
@@ -180,8 +183,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 			tmList,
 			this.cpuLayout,
 			log);
-		//TODO Scaling factor is arbitrary. Please fix
-		int scalingFactor = 2;
+		//TODO Scaling factor is user specified. Please fix
 		taskManagerLocationMap.values().forEach(tuple -> {
 			TaskManagerLocation tmLoc = tuple.f0;
 			for (int i = 0; i < tuple.f1 * scalingFactor; i++) {
@@ -303,8 +305,16 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	}
 
 	private String getCpuIdAsString(Tuple3<TaskManagerLocation, Integer, Integer> cpuIdTuple) {
-		return cpuIdTuple.f0 + SchedulingExecutionContainer.CPU_ID_DELIMITER + cpuIdTuple.f2
-			+ SchedulingExecutionContainer.CPU_ID_DELIMITER + cpuIdTuple.f1;
+		if (cpuIdTuple != null) {
+			String tmAddress = "127.0.0.1";
+			if (cpuIdTuple.f0 != null) {
+				tmAddress = cpuIdTuple.f0.getHostname();
+			}
+			return tmAddress + SchedulingExecutionContainer.CPU_ID_DELIMITER + cpuIdTuple.f2
+				+ SchedulingExecutionContainer.CPU_ID_DELIMITER + cpuIdTuple.f1;
+
+		}
+		return NULL_CPU_ID;
 	}
 
 	private void updateMaxEdgeThroughputMatrices(
@@ -398,7 +408,8 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 			.getCurrentCpuAssignment();
 
 		Map<Integer, Tuple3<TaskManagerLocation, Integer, Integer>> currentPlacementTemp = new HashMap<>();
-		if (cpuAssignmentMap != null && cpuAssignmentMap.size() == nVertices) {
+		if (cpuAssignmentMap != null && !cpuAssignmentMap.isEmpty()) {
+			log.info("nVertices : {}, CPU Assignment map {}", nVertices, cpuAssignmentMap);
 			AtomicInteger vertexCount = new AtomicInteger(1);
 			IterableUtils
 				.toStream(schedulingTopology.getVertices())

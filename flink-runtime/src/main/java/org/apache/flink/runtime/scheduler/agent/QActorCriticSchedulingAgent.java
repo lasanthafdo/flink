@@ -61,7 +61,7 @@ public class QActorCriticSchedulingAgent extends AbstractSchedulingAgent {
 			schedulingStrategy,
 			slotPool,
 			waitTimeout,
-			numRetries);
+			numRetries, 4);
 
 		int nVertices = Math.toIntExact(StreamSupport.stream(executionGraph
 			.getSchedulingTopology()

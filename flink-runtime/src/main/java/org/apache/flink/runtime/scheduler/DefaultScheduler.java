@@ -263,7 +263,9 @@ public class DefaultScheduler extends SchedulerBase implements SchedulerOperatio
 
 	@Override
 	public void connectToResourceManager(ResourceManagerGateway resourceManagerGateway) {
-		schedulingAgent.connectToResourceManager(resourceManagerGateway);
+		if (schedulingAgent != null) {
+			schedulingAgent.connectToResourceManager(resourceManagerGateway);
+		}
 	}
 
 	private void maybeRestartTasks(final FailureHandlingResult failureHandlingResult) {

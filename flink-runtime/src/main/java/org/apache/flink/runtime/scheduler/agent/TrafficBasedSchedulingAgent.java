@@ -58,7 +58,8 @@ public class TrafficBasedSchedulingAgent extends AbstractSchedulingAgent {
 		long triggerPeriod,
 		long waitTimeout,
 		int numRetries,
-		int updatePeriod) {
+		int updatePeriod,
+		int scalingFactor) {
 		super(
 			log,
 			triggerPeriod,
@@ -66,7 +67,7 @@ public class TrafficBasedSchedulingAgent extends AbstractSchedulingAgent {
 			schedulingStrategy,
 			slotPool,
 			waitTimeout,
-			numRetries);
+			numRetries, scalingFactor);
 
 		this.executorService = checkNotNull(executorService);
 		this.updatePeriodInSeconds = updatePeriod;

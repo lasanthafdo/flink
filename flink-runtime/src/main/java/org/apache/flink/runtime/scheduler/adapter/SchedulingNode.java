@@ -258,17 +258,17 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 	public Map<SchedulingExecutionVertex, Tuple3<TaskManagerLocation, Integer, Integer>> getCurrentCpuAssignment() {
 		Map<SchedulingExecutionVertex, Tuple3<TaskManagerLocation, Integer, Integer>> currentlyAssignedCpus = new HashMap<>();
 		getSubContainers().forEach(subContainer -> {
-			Map<SchedulingExecutionVertex, Tuple3<TaskManagerLocation, Integer, Integer>> subConAssignment = subContainer
+			Map<SchedulingExecutionVertex, Tuple3<TaskManagerLocation, Integer, Integer>> socketAssignment = subContainer
 				.getCurrentCpuAssignment();
-			subConAssignment.forEach((sev, cpuIdTuple) -> slotAssignmentMap
+			socketAssignment.forEach((sev, cpuIdTuple) -> slotAssignmentMap
 				.entrySet()
 				.stream()
 				.filter(entry -> sev.equals(entry.getValue()))
 				.findFirst().ifPresent(slotAssignmentEntry -> {
 					cpuIdTuple.setField(slotAssignmentEntry.getKey().getTaskManagerLocation(), 0);
-					subConAssignment.put(sev, cpuIdTuple);
+					socketAssignment.put(sev, cpuIdTuple);
 				}));
-			currentlyAssignedCpus.putAll(subContainer.getCurrentCpuAssignment());
+			currentlyAssignedCpus.putAll(socketAssignment);
 		});
 		return currentlyAssignedCpus;
 	}
