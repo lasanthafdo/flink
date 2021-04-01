@@ -59,7 +59,6 @@ public class QActorCriticSchedulingAgent extends AbstractSchedulingAgent {
 			triggerPeriod,
 			executionGraph,
 			schedulingStrategy,
-			slotPool,
 			waitTimeout,
 			numRetries, 4);
 

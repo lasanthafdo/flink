@@ -65,7 +65,6 @@ public class TrafficBasedSchedulingAgent extends AbstractSchedulingAgent {
 			triggerPeriod,
 			executionGraph,
 			schedulingStrategy,
-			slotPool,
 			waitTimeout,
 			numRetries, scalingFactor);
 
@@ -159,7 +158,7 @@ public class TrafficBasedSchedulingAgent extends AbstractSchedulingAgent {
 			} else if (!targetVertexAssigned) {
 				Tuple3<TaskManagerLocation, Integer, Integer> cpuId = topLevelContainer.scheduleExecutionVertex(
 					targetVertex);
-				if (cpuId.getField(0) != null) {
+				if (cpuId.f0 != null) {
 					placementAction.put(placementIndex.getAndIncrement(), cpuId);
 					assignedVertices.add(targetVertex);
 					unassignedVertices.remove(targetVertex);
@@ -169,7 +168,7 @@ public class TrafficBasedSchedulingAgent extends AbstractSchedulingAgent {
 			} else if (!sourceVertexAssigned) {
 				Tuple3<TaskManagerLocation, Integer, Integer> cpuId = topLevelContainer.scheduleExecutionVertex(
 					sourceVertex);
-				if (cpuId.getField(0) != null) {
+				if (cpuId.f0 != null) {
 					placementAction.put(placementIndex.getAndIncrement(), cpuId);
 					assignedVertices.add(sourceVertex);
 					unassignedVertices.remove(sourceVertex);
@@ -181,7 +180,7 @@ public class TrafficBasedSchedulingAgent extends AbstractSchedulingAgent {
 		unassignedVertices.forEach(schedulingExecutionVertex -> {
 			Tuple3<TaskManagerLocation, Integer, Integer> cpuId = topLevelContainer.scheduleExecutionVertex(
 				schedulingExecutionVertex);
-			if (cpuId.getField(0) == null) {
+			if (cpuId.f0 == null) {
 				throw new FlinkRuntimeException(
 					"Cannot allocate a CPU for executing operator with ID "
 						+ schedulingExecutionVertex.getId());

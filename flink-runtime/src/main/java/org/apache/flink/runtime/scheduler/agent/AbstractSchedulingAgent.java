@@ -30,7 +30,6 @@ import org.apache.flink.runtime.executiongraph.Execution;
 import org.apache.flink.runtime.executiongraph.ExecutionGraph;
 import org.apache.flink.runtime.executiongraph.ExecutionVertex;
 import org.apache.flink.runtime.jobmaster.SlotInfo;
-import org.apache.flink.runtime.jobmaster.slotpool.SlotPool;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.resourcemanager.ResourceManagerGateway;
 import org.apache.flink.runtime.rest.messages.taskmanager.TaskManagerInfo;
@@ -94,7 +93,6 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	private final int scalingFactor;
 	private final CpuLayout cpuLayout;
 	private final SchedulingStrategy schedulingStrategy;
-	private final SlotPool slotPool;
 	protected CompletableFuture<Collection<Acknowledge>> previousRescheduleFuture;
 	private SchedulingCluster schedulingCluster;
 	private ResourceManagerGateway resourceManagerGateway;
@@ -107,17 +105,15 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		long triggerPeriod,
 		ExecutionGraph executionGraph,
 		SchedulingStrategy schedulingStrategy,
-		SlotPool slotPool,
 		long waitTimeout,
 		int numRetries, int scalingFactor) {
 
 		this.executionGraph = checkNotNull(executionGraph);
 		this.schedulingStrategy = checkNotNull(schedulingStrategy);
-		this.slotPool = checkNotNull(slotPool);
 		this.schedulingTopology = checkNotNull(executionGraph.getSchedulingTopology());
 		this.log = log;
 		this.cpuLayout = AffinityLock.cpuLayout();
-		this.nCpus = cpuLayout.cpus();
+		this.nCpus = cpuLayout.cpus() / 2;
 		this.interOpEdgeThroughput = new HashMap<>();
 		this.edgeMap = new HashMap<>();
 		this.triggerPeriod = triggerPeriod;
@@ -130,40 +126,40 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		this.currentPlacementAction = new ArrayList<>();
 		this.nVertices = executionGraph.getTotalNumberOfVertices();
 		this.schedulingStrategy.setTopLevelContainer(getTopLevelContainer());
+
+		this.suggestedPlacementAction = new ArrayList<>();
 	}
 
 	public void connectToResourceManager(ResourceManagerGateway resourceManagerGateway) {
 		checkNotNull(resourceManagerGateway);
 		this.resourceManagerGateway = resourceManagerGateway;
-		populateResourceInformation(resourceManagerGateway);
+		populateResourceInformation(this.resourceManagerGateway);
 		waitingForResourceManager = false;
 	}
 
 	private void populateResourceInformation(ResourceManagerGateway resourceManagerGateway) {
 		CompletableFuture<Collection<TaskManagerInfo>> tmInfoFuture = resourceManagerGateway.requestTaskManagerInfo(
 			Time.seconds(10));
-		tmInfoFuture.thenAccept(tmInfos -> {
-			tmInfos.forEach(tmInfo -> {
-				for (int i = 0; i < tmInfo.getNumberSlots(); i++) {
-					TaskManagerLocation tmLoc = null;
-					try {
-						String externalAddress = tmInfo.getAddress().split("@")[1].split(":")[0];
-						tmLoc = TaskManagerLocation.fromUnresolvedLocation(new UnresolvedTaskManagerLocation(
-							tmInfo.getResourceId(),
-							externalAddress,
-							tmInfo.getDataPort()));
-					} catch (UnknownHostException e) {
-						log.error(
-							"Error when deriving TaskManagerLocation : {} ",
-							e.getMessage(),
-							e);
-					}
-					taskManagerLocationMap.put(
-						tmInfo.getResourceId().getResourceIdString(),
-						new Tuple2<>(tmLoc, tmInfo.getNumberSlots()));
+		tmInfoFuture.thenAccept(tmInfos -> tmInfos.forEach(tmInfo -> {
+			for (int i = 0; i < tmInfo.getNumberSlots(); i++) {
+				TaskManagerLocation tmLoc = null;
+				try {
+					String externalAddress = tmInfo.getAddress().split("@")[1].split(":")[0];
+					tmLoc = TaskManagerLocation.fromUnresolvedLocation(new UnresolvedTaskManagerLocation(
+						tmInfo.getResourceId(),
+						externalAddress,
+						tmInfo.getDataPort()));
+				} catch (UnknownHostException e) {
+					log.error(
+						"Error when deriving TaskManagerLocation : {} ",
+						e.getMessage(),
+						e);
 				}
-			});
-		}).thenRun(this::initSchedulingCluster);
+				taskManagerLocationMap.put(
+					tmInfo.getResourceId().getResourceIdString(),
+					new Tuple2<>(tmLoc, tmInfo.getNumberSlots()));
+			}
+		})).thenRun(this::initSchedulingCluster);
 	}
 
 	private void initSchedulingCluster() {
@@ -200,7 +196,6 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 					schedulingCluster.addCpu(cpuIdString);
 				}
 			});
-		// TODO Do we need to force schedule the first time?
 	}
 
 	protected void init() {
@@ -218,7 +213,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 							schedulingResultPartition.getProducer(),
 							consumer,
 							schedulingResultPartition);
-						log.info("Execution ID: " + dee.getExecutionEdgeId());
+						log.debug("Created ExecutionEdge with ID: " + dee.getExecutionEdgeId());
 						edgeMap.put(dee.getExecutionEdgeId(), dee);
 					});
 				consumerCount.getAndIncrement();
@@ -409,7 +404,17 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 
 		Map<Integer, Tuple3<TaskManagerLocation, Integer, Integer>> currentPlacementTemp = new HashMap<>();
 		if (cpuAssignmentMap != null && !cpuAssignmentMap.isEmpty()) {
-			log.info("nVertices : {}, CPU Assignment map {}", nVertices, cpuAssignmentMap);
+			log.info(
+				"nVertices : {}, CPU Assignment map size {}",
+				nVertices,
+				cpuAssignmentMap.size());
+			cpuAssignmentMap.forEach((executionVertex, assignment) ->
+				log.info(
+					"Execution Vertex {} assigned to cpu {} [socket {}] at {}",
+					executionVertex.getTaskName() + ":" + executionVertex.getSubTaskIndex(),
+					assignment.f1,
+					assignment.f2,
+					assignment.f0.address().getHostAddress()));
 			AtomicInteger vertexCount = new AtomicInteger(1);
 			IterableUtils
 				.toStream(schedulingTopology.getVertices())
@@ -494,7 +499,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		});
 	}
 
-	private class SimpleSlotInfo implements SlotInfo {
+	private static class SimpleSlotInfo implements SlotInfo {
 		private final AllocationID allocationID;
 		private final TaskManagerLocation taskManagerLocation;
 		private final int physicalSlotNumber;
