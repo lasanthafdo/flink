@@ -41,16 +41,18 @@ import static org.apache.flink.util.Preconditions.checkArgument;
  */
 public class SchedulingNode implements SchedulingExecutionContainer {
 	private final Map<Integer, SchedulingExecutionContainer> cpuSockets;
-	private final Map<SlotInfo, SchedulingExecutionVertex> slotAssignmentMap;
-	private final Logger log;
-	private final CpuLayout cpuLayout;
+	private final Map<SlotInfo, List<SchedulingExecutionVertex>> slotAssignmentMap;
 	private final String nodeIp;
+	private final CpuLayout cpuLayout;
+	private final Integer maxParallelism;
+	private final Logger log;
 
-	public SchedulingNode(String nodeIp, CpuLayout cpuLayout, Logger log) {
+	public SchedulingNode(String nodeIp, CpuLayout cpuLayout, Integer maxParallelism, Logger log) {
 		this.cpuSockets = new HashMap<>();
 		this.slotAssignmentMap = new HashMap<>();
 		this.nodeIp = nodeIp;
 		this.cpuLayout = cpuLayout;
+		this.maxParallelism = maxParallelism;
 		this.log = log;
 	}
 
@@ -61,7 +63,7 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 
 	@Override
 	public void addCpu(String cpuIdString) {
-		int cpuId = SchedulingExecutionContainer.getCpuIdFromString(cpuIdString);
+		int cpuId = SchedulingExecutionContainer.getCpuIdFromFQN(cpuIdString);
 		int socketId = cpuLayout.socketId(cpuId);
 		if (!cpuSockets.containsKey(socketId)) {
 			cpuSockets.put(socketId, new SchedulingCpuSocket(socketId, cpuLayout, log));
@@ -72,16 +74,17 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 	@Override
 	public void addTaskSlot(SlotInfo slotInfo) {
 		checkArgument(slotInfo.getTaskManagerLocation().address().getHostAddress().equals(nodeIp));
-		slotAssignmentMap.putIfAbsent(slotInfo, null);
+		slotAssignmentMap.putIfAbsent(slotInfo, new ArrayList<>(maxParallelism));
 	}
 
 	@Override
 	public Tuple3<TaskManagerLocation, Integer, Integer> scheduleExecutionVertex(
 		SchedulingExecutionVertex schedulingExecutionVertex) {
+		// TODO Find an optimal slot
 		SlotInfo candidateSlot = slotAssignmentMap
 			.entrySet()
 			.stream()
-			.filter(entry -> entry.getValue() == null)
+			.filter(entry -> entry.getValue().size() < maxParallelism)    // Find a free slot
 			.map(
 				Map.Entry::getKey)
 			.findAny().orElse(null);
@@ -98,7 +101,20 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 				})
 				.orElse(new Tuple3<>(null, -1, -1));
 			if (scheduledCpuInfo.getField(0) != null) {
-				slotAssignmentMap.put(candidateSlot, schedulingExecutionVertex);
+				List<SchedulingExecutionVertex> assignedVertexList = slotAssignmentMap.get(
+					candidateSlot);
+				if (assignedVertexList != null && assignedVertexList.size() < maxParallelism) {
+					slotAssignmentMap.get(candidateSlot).add(schedulingExecutionVertex);
+				} else {
+					log.warn(
+						"Attempt to assign execution vertex {} to non-existent slot {} "
+							+ "or slot already contains the maximum allowed {} tasks",
+						schedulingExecutionVertex.getTaskName() + ":"
+							+ schedulingExecutionVertex.getSubTaskIndex(),
+						candidateSlot.getTaskManagerLocation().address().getHostAddress() + ":"
+							+ candidateSlot.getPhysicalSlotNumber(),
+						maxParallelism);
+				}
 			}
 		} else {
 			scheduledCpuInfo = new Tuple3<>(null, -1, -1);
@@ -142,10 +158,11 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 					-1,
 					-1);
 				int cpuIdIndex = i;
+				//TODO Find an optimal slot
 				slotAssignmentMap
 					.entrySet()
 					.stream()
-					.filter(entry -> entry.getValue() == null)
+					.filter(entry -> entry.getValue().size() < maxParallelism)
 					.map(
 						Map.Entry::getKey)
 					.findAny()
@@ -153,10 +170,23 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 						tmLocCpuIdPair.setFields(
 							targetSlot.getTaskManagerLocation(),
 							cpuId, socketId);
-						if (cpuIdIndex == 0) {
-							slotAssignmentMap.put(targetSlot, sourceVertex);
+						SchedulingExecutionVertex selectedVertex = sourceVertex;
+						if (cpuIdIndex != 0) {
+							selectedVertex = targetVertex;
+						}
+						List<SchedulingExecutionVertex> targetSlotList = slotAssignmentMap.get(
+							targetSlot);
+						if (targetSlotList != null && targetSlotList.size() < maxParallelism) {
+							targetSlotList.add(selectedVertex);
 						} else {
-							slotAssignmentMap.put(targetSlot, targetVertex);
+							log.warn(
+								"Attempt to assign execution vertex {} to non-existent slot {} "
+									+ "or slot already contains the maximum allowed {} tasks",
+								selectedVertex.getTaskName() + ":"
+									+ selectedVertex.getSubTaskIndex(),
+								targetSlot.getTaskManagerLocation().address().getHostAddress() + ":"
+									+ targetSlot.getPhysicalSlotNumber(),
+								maxParallelism);
 						}
 					});
 				tmLocCpuIdList.add(tmLocCpuIdPair);
@@ -191,7 +221,7 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 			log.debug("Node status: {}", getStatus());
 		}
 		cpuSockets.values().forEach(SchedulingExecutionContainer::releaseAllExecutionVertices);
-		slotAssignmentMap.keySet().forEach(key -> slotAssignmentMap.put(key, null));
+		slotAssignmentMap.values().forEach(List::clear);
 	}
 
 	@Override
@@ -205,17 +235,37 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 		return false;
 	}
 
+	private boolean verifyEqual(TaskManagerLocation tm1, TaskManagerLocation tm2) {
+		if (tm1 == null && tm2 == null) {
+			return true;
+		}
+		if (tm1 == null || tm2 == null) {
+			return false;
+		}
+		return tm1.address().getHostAddress().equals(tm2.address().getHostAddress())
+			&& tm1.dataPort() == tm2.dataPort();
+	}
+
 	@Override
 	public boolean forceSchedule(
 		SchedulingExecutionVertex schedulingExecutionVertex,
 		Tuple3<TaskManagerLocation, Integer, Integer> cpuId) {
 		for (SchedulingExecutionContainer subContainer : getSubContainers()) {
 			if (subContainer.forceSchedule(schedulingExecutionVertex, cpuId)) {
-				for (Map.Entry<SlotInfo, SchedulingExecutionVertex> entry : slotAssignmentMap
+				for (Map.Entry<SlotInfo, List<SchedulingExecutionVertex>> entry : slotAssignmentMap
 					.entrySet()) {
-					if (entry.getValue() == null) {
-						slotAssignmentMap.put(entry.getKey(), schedulingExecutionVertex);
-						return true;
+					if (verifyEqual(entry.getKey().getTaskManagerLocation(), cpuId.f0)) {
+						if (entry.getValue() == null) {
+							List<SchedulingExecutionVertex> assignedExecutionVertices = new ArrayList<>(
+								maxParallelism);
+							assignedExecutionVertices.add(schedulingExecutionVertex);
+							slotAssignmentMap.put(
+								entry.getKey(), assignedExecutionVertices);
+							return true;
+						} else if (entry.getValue().size() < maxParallelism) {
+							entry.getValue().add(schedulingExecutionVertex);
+							return true;
+						}
 					}
 				}
 				subContainer.releaseExecutionVertex(schedulingExecutionVertex);
@@ -263,9 +313,9 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 			socketAssignment.forEach((sev, cpuIdTuple) -> slotAssignmentMap
 				.entrySet()
 				.stream()
-				.filter(entry -> sev.equals(entry.getValue()))
+				.filter(entry -> entry.getValue().contains(sev))
 				.findFirst().ifPresent(slotAssignmentEntry -> {
-					cpuIdTuple.setField(slotAssignmentEntry.getKey().getTaskManagerLocation(), 0);
+					cpuIdTuple.f0 = slotAssignmentEntry.getKey().getTaskManagerLocation();
 					socketAssignment.put(sev, cpuIdTuple);
 				}));
 			currentlyAssignedCpus.putAll(socketAssignment);

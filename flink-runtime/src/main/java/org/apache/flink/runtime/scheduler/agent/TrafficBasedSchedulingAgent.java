@@ -20,7 +20,6 @@ package org.apache.flink.runtime.scheduler.agent;
 
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.runtime.executiongraph.ExecutionGraph;
-import org.apache.flink.runtime.jobmaster.slotpool.SlotPool;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionContainer;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategy;
@@ -53,20 +52,19 @@ public class TrafficBasedSchedulingAgent extends AbstractSchedulingAgent {
 		Logger log,
 		ExecutionGraph executionGraph,
 		SchedulingStrategy schedulingStrategy,
-		SlotPool slotPool,
 		ScheduledExecutorService executorService,
 		long triggerPeriod,
 		long waitTimeout,
 		int numRetries,
 		int updatePeriod,
-		int scalingFactor) {
+		int maxParallelism) {
 		super(
 			log,
 			triggerPeriod,
 			executionGraph,
 			schedulingStrategy,
 			waitTimeout,
-			numRetries, scalingFactor);
+			numRetries, maxParallelism);
 
 		this.executorService = checkNotNull(executorService);
 		this.updatePeriodInSeconds = updatePeriod;

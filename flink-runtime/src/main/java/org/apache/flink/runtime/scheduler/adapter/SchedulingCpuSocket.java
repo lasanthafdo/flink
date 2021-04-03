@@ -66,7 +66,7 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 
 	@Override
 	public void addCpu(String cpuIdString) {
-		int cpuId = SchedulingExecutionContainer.getCpuIdFromString(cpuIdString);
+		int cpuId = SchedulingExecutionContainer.getCpuIdFromFQN(cpuIdString);
 		checkState(cpuLayout.socketId(cpuId) == socketId);
 		checkState(
 			cpuAssignmentMap.size() < cpuLayout.threadsPerCore() * cpuLayout.coresPerSocket(),
@@ -186,6 +186,17 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 		SchedulingExecutionVertex schedulingExecutionVertex,
 		Tuple3<TaskManagerLocation, Integer, Integer> cpuId) {
 		if (cpuAssignmentMap.containsKey(cpuId.f1)) {
+			SchedulingExecutionVertex currentlyAssignedVertex = cpuAssignmentMap.get(cpuId.f1);
+			if (currentlyAssignedVertex != null) {
+				log.warn(
+					"Evicting currently scheduled execution vertex {} at CPU {} of {} to schedule {}",
+					currentlyAssignedVertex.getTaskName() + ":"
+						+ currentlyAssignedVertex.getSubTaskIndex(),
+					cpuId.f1,
+					cpuId.f0.address().getHostAddress(),
+					schedulingExecutionVertex.getTaskName() + ":"
+						+ schedulingExecutionVertex.getSubTaskIndex());
+			}
 			cpuAssignmentMap.put(cpuId.f1, schedulingExecutionVertex);
 			return true;
 		} else {

@@ -22,6 +22,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.DeploymentOptions;
 import org.apache.flink.configuration.IllegalConfigurationException;
 import org.apache.flink.runtime.executiongraph.ExecutionGraph;
+import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.ScheduleMode;
 import org.apache.flink.runtime.jobmaster.slotpool.SlotPool;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategy;
@@ -37,13 +38,14 @@ public class SchedulingAgentUtils {
 	public static SchedulingAgent buildSchedulingAgent(
 		Logger log,
 		ExecutionGraph executionGraph,
-		ScheduleMode scheduleMode,
+		JobGraph jobGraph,
 		SchedulingStrategy schedulingStrategy,
 		Configuration jobMasterConfiguration,
 		SlotPool slotPool,
 		ScheduledExecutorService executorService) {
 
-		int nDefaultConfigElements = 5;
+		int nDefaultConfigElements = 4;
+		ScheduleMode scheduleMode = jobGraph.getScheduleMode();
 		switch (scheduleMode) {
 			case PINNED:
 				if (jobMasterConfiguration.contains(DeploymentOptions.SCHEDULING_AGENT_CONFIG_STRING)) {
@@ -80,18 +82,16 @@ public class SchedulingAgentUtils {
 						long waitTimeOut = Long.parseLong(configElements[1]);
 						int numRetries = Integer.parseInt(configElements[2]);
 						int updatePeriod = Integer.parseInt(configElements[3]);
-						int scalingFactor = Integer.parseInt(configElements[4]);
 
 						return new TrafficBasedSchedulingAgent(
 							log,
 							executionGraph,
 							schedulingStrategy,
-							slotPool,
 							executorService,
 							triggerPeriod,
 							waitTimeOut,
 							numRetries,
-							updatePeriod, scalingFactor);
+							updatePeriod, jobGraph.getMaximumParallelism());
 					} else {
 						throw new IllegalConfigurationException(
 							"Incorrect number of arguments in the scheduling agent configuration string.");

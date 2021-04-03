@@ -47,16 +47,19 @@ public class SchedulingCluster implements SchedulingExecutionContainer {
 	private final Map<String, SchedulingExecutionContainer> nodes;
 	private final List<TaskManagerLocation> taskManagerLocations;
 	private final CpuLayout cpuLayout;
+	private final Integer maxParallelism;
 	private final Logger log;
 
 	public SchedulingCluster(
 		Collection<TaskManagerLocation> taskManagerLocations,
 		CpuLayout cpuLayout,
+		Integer maxParallelism,
 		Logger log) {
 		this.nodes = new HashMap<>();
 		this.taskManagerLocations = new ArrayList<>();
 		this.taskManagerLocations.addAll(taskManagerLocations);
 		this.cpuLayout = cpuLayout;
+		this.maxParallelism = maxParallelism;
 		this.log = log;
 	}
 
@@ -74,7 +77,7 @@ public class SchedulingCluster implements SchedulingExecutionContainer {
 		}
 		String nodeIp = cpuIdParts[0];
 		if (!nodes.containsKey(nodeIp)) {
-			nodes.put(nodeIp, new SchedulingNode(nodeIp, cpuLayout, log));
+			nodes.put(nodeIp, new SchedulingNode(nodeIp, cpuLayout, maxParallelism, log));
 		}
 		nodes.get(nodeIp).addCpu(cpuIdString);
 	}
@@ -86,7 +89,7 @@ public class SchedulingCluster implements SchedulingExecutionContainer {
 			"Slot should belong to one of the registered task managers for the job");
 		String nodeIp = slotInfo.getTaskManagerLocation().address().getHostAddress();
 		if (!nodes.containsKey(nodeIp)) {
-			nodes.put(nodeIp, new SchedulingNode(nodeIp, cpuLayout, log));
+			nodes.put(nodeIp, new SchedulingNode(nodeIp, cpuLayout, maxParallelism, log));
 		}
 		nodes.get(nodeIp).addTaskSlot(slotInfo);
 	}

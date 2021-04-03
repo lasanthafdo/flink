@@ -50,40 +50,41 @@ public interface SchedulingExecutionContainer {
 	void addCpu(String cpuIdString);
 
 	/**
-	 * @param slotInfo
+	 * @param slotInfo slot information that includes task manager location
 	 */
 	void addTaskSlot(SlotInfo slotInfo);
 
 	/**
-	 * @param schedulingExecutionVertex
+	 * @param schedulingExecutionVertex the execution vertex to be scheduled
 	 *
-	 * @return
+	 * @return a {@link Tuple3} consisting of the TaskManagerLocation, CPU ID, and socket ID
 	 */
 	Tuple3<TaskManagerLocation, Integer, Integer> scheduleExecutionVertex(SchedulingExecutionVertex schedulingExecutionVertex);
 
 	/**
-	 * @param schedulingExecutionVertex
+	 * @param schedulingExecutionVertex the execution vertex for which the cpu ID is needed
 	 *
-	 * @return
+	 * @return the CPU ID for the given execution vertex
 	 */
 	@Deprecated
 	int getCpuIdForScheduling(SchedulingExecutionVertex schedulingExecutionVertex);
 
 	/**
-	 * @param sourceVertex
-	 * @param targetVertex
+	 * @param sourceVertex execution vertex that acts as the source of a stream edge
+	 * @param targetVertex execution vertex that acts as the target/sink of the considered stream edge
 	 *
-	 * @return
+	 * @return a list of {@link Tuple3} objects that include the task manager location, CPU ID,
+	 * and socket ID in the case of a successful schedule
 	 */
 	List<Tuple3<TaskManagerLocation, Integer, Integer>> tryScheduleInSameContainer(
 		SchedulingExecutionVertex sourceVertex,
 		SchedulingExecutionVertex targetVertex);
 
 	/**
-	 * @param sourceVertex
-	 * @param targetVertex
+	 * @param sourceVertex execution vertex that acts as the source of a stream edge
+	 * @param targetVertex execution vertex that acts as the target of a stream edge
 	 *
-	 * @return
+	 * @return a list of CPU IDs as integers for the given execution vertices
 	 */
 	@Deprecated
 	List<Integer> getCpuIdsInSameContainer(
@@ -91,9 +92,9 @@ public interface SchedulingExecutionContainer {
 		SchedulingExecutionVertex targetVertex);
 
 	/**
-	 * @param schedulingExecutionVertex
+	 * @param schedulingExecutionVertex execution vertex to be released
 	 *
-	 * @return
+	 * @return 0 on success and -1 on failure
 	 */
 	int releaseExecutionVertex(SchedulingExecutionVertex schedulingExecutionVertex);
 
@@ -120,8 +121,8 @@ public interface SchedulingExecutionContainer {
 
 	String getStatus();
 
-	static int getCpuIdFromString(String cpuId) {
-		String[] idParts = cpuId.split(CPU_ID_DELIMITER);
+	static int getCpuIdFromFQN(String cpuIdFQN) {
+		String[] idParts = cpuIdFQN.split(CPU_ID_DELIMITER);
 		if (idParts.length == 3) {
 			return Integer.parseInt(idParts[2]);
 		}

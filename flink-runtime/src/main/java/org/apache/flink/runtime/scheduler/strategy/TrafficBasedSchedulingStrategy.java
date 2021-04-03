@@ -107,16 +107,6 @@ public class TrafficBasedSchedulingStrategy implements SchedulingStrategy {
 		schedulerOperations.allocateSlotsAndDeploy(executionVertexDeploymentOptions);
 	}
 
-	private void setupDefaultPlacement() {
-		AtomicInteger currentCpuId = new AtomicInteger(1);
-		// TODO Doesn't work for the distributed case
-		for (SchedulingExecutionVertex sev : schedulingTopology.getVertices()) {
-			sev.setExecutionPlacement(new ExecutionPlacement(
-				null,
-				currentCpuId.getAndIncrement()));
-		}
-	}
-
 	private void setupDerivedPlacement(SchedulingRuntimeState runtimeState) {
 		SchedulingExecutionContainer topLevelContainer = runtimeState.getTopLevelContainer();
 		List<Tuple3<TaskManagerLocation, Integer, Integer>> placementAction = runtimeState.getPlacementSolution();

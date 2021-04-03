@@ -58,6 +58,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ScheduledFuture;
@@ -90,7 +91,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	private final long triggerPeriod;
 	private final long waitTimeout;
 	private final int numRetries;
-	private final int scalingFactor;
+	private final int maxParallelism;
 	private final CpuLayout cpuLayout;
 	private final SchedulingStrategy schedulingStrategy;
 	protected CompletableFuture<Collection<Acknowledge>> previousRescheduleFuture;
@@ -106,7 +107,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		ExecutionGraph executionGraph,
 		SchedulingStrategy schedulingStrategy,
 		long waitTimeout,
-		int numRetries, int scalingFactor) {
+		int numRetries, int maxParallelism) {
 
 		this.executionGraph = checkNotNull(executionGraph);
 		this.schedulingStrategy = checkNotNull(schedulingStrategy);
@@ -122,7 +123,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 
 		this.waitTimeout = waitTimeout;
 		this.numRetries = numRetries;
-		this.scalingFactor = scalingFactor;
+		this.maxParallelism = maxParallelism;
 		this.currentPlacementAction = new ArrayList<>();
 		this.nVertices = executionGraph.getTotalNumberOfVertices();
 		this.schedulingStrategy.setTopLevelContainer(getTopLevelContainer());
@@ -163,11 +164,11 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	}
 
 	private void initSchedulingCluster() {
-		taskManagerLocationMap.forEach((tmLocResourceId, tuple) -> log.info(
+		taskManagerLocationMap.forEach((tmLocResourceId, tmLocNumSlotsTuple) -> log.info(
 			"TaskManager with ID {} available at {} using data port {}",
 			tmLocResourceId,
-			tuple.f0.address().getHostAddress(),
-			tuple.f0.dataPort()));
+			tmLocNumSlotsTuple.f0.address().getHostAddress(),
+			tmLocNumSlotsTuple.f0.dataPort()));
 
 		//TODO Currently using the same CPU layout across the cluster, which is wrong!
 		List<TaskManagerLocation> tmList = taskManagerLocationMap
@@ -175,15 +176,16 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 			.stream()
 			.map(tuple -> tuple.f0)
 			.collect(Collectors.toList());
+
 		this.schedulingCluster = new SchedulingCluster(
 			tmList,
 			this.cpuLayout,
+			this.maxParallelism,
 			log);
-		//TODO Scaling factor is user specified. Please fix
-		taskManagerLocationMap.values().forEach(tuple -> {
-			TaskManagerLocation tmLoc = tuple.f0;
-			for (int i = 0; i < tuple.f1 * scalingFactor; i++) {
-				schedulingCluster.addTaskSlot(new SimpleSlotInfo(tmLoc, i));
+		taskManagerLocationMap.forEach((tmResourceId, tmLocNumSlotsTuple) -> {
+			TaskManagerLocation tmLoc = tmLocNumSlotsTuple.f0;
+			for (int i = 0; i < tmLocNumSlotsTuple.f1; i++) {
+				schedulingCluster.addTaskSlot(new SimpleSlotInfo(tmResourceId, tmLoc, i));
 			}
 		});
 		taskManagerLocationMap
@@ -414,7 +416,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 					executionVertex.getTaskName() + ":" + executionVertex.getSubTaskIndex(),
 					assignment.f1,
 					assignment.f2,
-					assignment.f0.address().getHostAddress()));
+					assignment.f0 == null ? "null" : assignment.f0.address().getHostAddress()));
 			AtomicInteger vertexCount = new AtomicInteger(1);
 			IterableUtils
 				.toStream(schedulingTopology.getVertices())
@@ -501,11 +503,16 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 
 	private static class SimpleSlotInfo implements SlotInfo {
 		private final AllocationID allocationID;
+		private final String taskManagerResourceId;
 		private final TaskManagerLocation taskManagerLocation;
 		private final int physicalSlotNumber;
 
-		SimpleSlotInfo(TaskManagerLocation taskManagerLocation, int physicalSlotNumber) {
+		SimpleSlotInfo(
+			String taskManagerResourceId,
+			TaskManagerLocation taskManagerLocation,
+			int physicalSlotNumber) {
 			this.allocationID = new AllocationID();
+			this.taskManagerResourceId = taskManagerResourceId;
 			this.taskManagerLocation = taskManagerLocation;
 			this.physicalSlotNumber = physicalSlotNumber;
 		}
@@ -528,6 +535,20 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		@Override
 		public ResourceProfile getResourceProfile() {
 			return null;
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) return true;
+			if (o == null || getClass() != o.getClass()) return false;
+			SimpleSlotInfo that = (SimpleSlotInfo) o;
+			return physicalSlotNumber == that.physicalSlotNumber && taskManagerResourceId.equals(
+				that.taskManagerResourceId) && taskManagerLocation.equals(that.taskManagerLocation);
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(taskManagerResourceId, taskManagerLocation, physicalSlotNumber);
 		}
 	}
 }

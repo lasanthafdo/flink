@@ -173,7 +173,7 @@ public class DefaultScheduler extends SchedulerBase implements SchedulerOperatio
 		this.schedulingAgent = SchedulingAgentUtils.buildSchedulingAgent(
 			log,
 			getExecutionGraph(),
-			jobGraph.getScheduleMode(),
+			jobGraph,
 			this.schedulingStrategy,
 			jobMasterConfiguration,
 			slotPool,
