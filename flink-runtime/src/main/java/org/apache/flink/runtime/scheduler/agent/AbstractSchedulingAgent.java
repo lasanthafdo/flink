@@ -25,6 +25,7 @@ import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
 import org.apache.flink.runtime.concurrent.FutureUtils;
+import org.apache.flink.runtime.execution.ExecutionPlacement;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.executiongraph.Execution;
 import org.apache.flink.runtime.executiongraph.ExecutionGraph;
@@ -71,7 +72,8 @@ import static org.apache.flink.util.Preconditions.checkState;
 public abstract class AbstractSchedulingAgent implements SchedulingAgent, SchedulingRuntimeState {
 
 	public static final String NULL_CPU_ID = "127.0.0.1:-1:-1";
-	public static final int SCALING_FACTOR = 2;
+	public static final double INTER_NODE_TRAFFIC_SCALING_FACTOR = 2.0;
+	public static final double INTER_SOCKET_TRAFFIC_SCALING_FACTOR = 1.25;
 	protected final SchedulingTopology schedulingTopology;
 	protected final Logger log;
 	protected final int nCpus;
@@ -115,7 +117,8 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		this.schedulingTopology = checkNotNull(executionGraph.getSchedulingTopology());
 		this.log = log;
 		this.cpuLayout = AffinityLock.cpuLayout();
-		this.nCpus = cpuLayout.cpus() / 2;
+		//TODO Make nCpus user-configurable
+		this.nCpus = cpuLayout.cpus();
 		this.interOpEdgeThroughput = new HashMap<>();
 		this.edgeMap = new HashMap<>();
 		this.triggerPeriod = triggerPeriod;
@@ -300,22 +303,32 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 			.entrySet()
 			.stream()
 			.collect(Collectors.toMap(Map.Entry::getKey, entry -> {
-				// Fingers crossed the following won't throw NPEs :-)
-				TaskManagerLocation srcTmLoc = entry
+				ExecutionPlacement srcExecPlacement = entry
 					.getKey()
 					.getSourceSchedulingExecutionVertex()
-					.getExecutionPlacement()
-					.getTaskManagerLocation();
-				TaskManagerLocation destTmLoc = entry
+					.getExecutionPlacement();
+				ExecutionPlacement destExecPlacement = entry
 					.getKey()
 					.getTargetSchedulingExecutionVertex()
-					.getExecutionPlacement()
-					.getTaskManagerLocation();
-				if (srcTmLoc != null && destTmLoc != null) {
-					String sourceIp = srcTmLoc.address().getHostAddress();
-					String targetIp = destTmLoc.address().getHostAddress();
-					if (!sourceIp.equals(targetIp)) {
-						return entry.getValue() * SCALING_FACTOR;
+					.getExecutionPlacement();
+				if (srcExecPlacement.getTaskManagerLocation() != null
+					&& destExecPlacement.getTaskManagerLocation() != null) {
+					String srcIp = srcExecPlacement
+						.getTaskManagerLocation()
+						.address()
+						.getHostAddress();
+					String destIp = destExecPlacement
+						.getTaskManagerLocation()
+						.address()
+						.getHostAddress();
+					if (!srcIp.equals(destIp)) {
+						return entry.getValue() * INTER_NODE_TRAFFIC_SCALING_FACTOR;
+					} else {
+						int srcSocket = srcExecPlacement.getSocketId();
+						int destSocket = destExecPlacement.getSocketId();
+						if (srcSocket != destSocket) {
+							return entry.getValue() * INTER_SOCKET_TRAFFIC_SCALING_FACTOR;
+						}
 					}
 				}
 				return entry.getValue();

@@ -31,12 +31,14 @@ public class ExecutionPlacement implements Serializable {
 
 	private final TaskManagerLocation taskManagerLocation;
 	private final int cpuId;
+	private final int socketId;
 
 	public ExecutionPlacement(
 		TaskManagerLocation taskManagerLocation,
-		int cpuId) {
+		int cpuId, int socketId) {
 		this.taskManagerLocation = taskManagerLocation;
 		this.cpuId = cpuId;
+		this.socketId = socketId;
 	}
 
 	public TaskManagerLocation getTaskManagerLocation() {
@@ -45,5 +47,9 @@ public class ExecutionPlacement implements Serializable {
 
 	public int getCpuId() {
 		return cpuId;
+	}
+
+	public int getSocketId() {
+		return socketId;
 	}
 }

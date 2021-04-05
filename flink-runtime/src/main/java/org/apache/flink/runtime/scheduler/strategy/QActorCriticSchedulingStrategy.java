@@ -95,17 +95,22 @@ public class QActorCriticSchedulingStrategy implements SchedulingStrategy {
 	private void allocateSlotsAndDeploy(
 		final Set<ExecutionVertexID> verticesToDeploy,
 		@Nullable SchedulingRuntimeState runtimeState) {
-		if (runtimeState == null) {
-			setupDefaultPlacement();
+		final List<ExecutionVertexDeploymentOption> executionVertexDeploymentOptions;
+		if (runtimeState == null || runtimeState.getPlacementSolution().isEmpty()) {
+			executionVertexDeploymentOptions =
+				SchedulingStrategyUtils.createExecutionVertexDeploymentOptionsInTopologicalOrder(
+					schedulingTopology,
+					verticesToDeploy,
+					id -> deploymentOption);
 		} else {
 			setupDerivedPlacement(runtimeState);
+			executionVertexDeploymentOptions =
+				SchedulingStrategyUtils.createExecutionVertexDeploymentOptionsInTopologicalOrder(
+					schedulingTopology,
+					verticesToDeploy,
+					id -> deploymentOption,
+					id -> schedulingTopology.getVertex(id).getExecutionPlacement());
 		}
-		final List<ExecutionVertexDeploymentOption> executionVertexDeploymentOptions =
-			SchedulingStrategyUtils.createExecutionVertexDeploymentOptionsInTopologicalOrder(
-				schedulingTopology,
-				verticesToDeploy,
-				id -> deploymentOption,
-				id -> schedulingTopology.getVertex(id).getExecutionPlacement());
 		schedulerOperations.allocateSlotsAndDeploy(executionVertexDeploymentOptions);
 	}
 
@@ -113,8 +118,7 @@ public class QActorCriticSchedulingStrategy implements SchedulingStrategy {
 		AtomicInteger currentCpuId = new AtomicInteger(2);
 		schedulingTopology.getVertices().forEach(schedulingExecutionVertex -> {
 			schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
-				null,
-				currentCpuId.getAndIncrement()));
+				null, currentCpuId.getAndIncrement(), 0));
 		});
 	}
 
@@ -128,9 +132,10 @@ public class QActorCriticSchedulingStrategy implements SchedulingStrategy {
 				topLevelContainer.forceSchedule(
 					schedulingExecutionVertex,
 					placementAction.get(placementIndex.get()).getField(1));
+				Tuple3<TaskManagerLocation, Integer, Integer> placementInfoTuple = placementAction.get(
+					placementIndex.getAndIncrement());
 				schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
-					null,
-					placementAction.get(placementIndex.getAndIncrement()).getField(1)));
+					placementInfoTuple.f0, placementInfoTuple.f1, placementInfoTuple.f2));
 			});
 		} else {
 			throw new FlinkRuntimeException(

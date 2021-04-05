@@ -120,8 +120,7 @@ public class TrafficBasedSchedulingStrategy implements SchedulingStrategy {
 				Tuple3<TaskManagerLocation, Integer, Integer> placementInfoTuple = placementAction.get(
 					placementIndex.getAndIncrement());
 				schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
-					placementInfoTuple.f0,
-					placementInfoTuple.f1));
+					placementInfoTuple.f0, placementInfoTuple.f1, placementInfoTuple.f2));
 			});
 		} else {
 			throw new FlinkRuntimeException(

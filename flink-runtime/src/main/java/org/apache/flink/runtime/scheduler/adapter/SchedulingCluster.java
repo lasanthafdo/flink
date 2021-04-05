@@ -97,10 +97,10 @@ public class SchedulingCluster implements SchedulingExecutionContainer {
 	@Override
 	public Tuple3<TaskManagerLocation, Integer, Integer> scheduleExecutionVertex(
 		SchedulingExecutionVertex schedulingExecutionVertex) {
-		Optional<SchedulingExecutionContainer> targetSocket = nodes.values()
+		Optional<SchedulingExecutionContainer> targetNode = nodes.values()
 			.stream().filter(node -> node.getRemainingCapacity() >= 1)
 			.min(Comparator.comparing(sec -> sec.getResourceUsage(OPERATOR)));
-		return targetSocket
+		return targetNode
 			.map(sec -> sec.scheduleExecutionVertex(schedulingExecutionVertex))
 			.orElse(new Tuple3<>(null, -1, -1));
 	}
