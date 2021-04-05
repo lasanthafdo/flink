@@ -71,6 +71,7 @@ import static org.apache.flink.util.Preconditions.checkState;
 public abstract class AbstractSchedulingAgent implements SchedulingAgent, SchedulingRuntimeState {
 
 	public static final String NULL_CPU_ID = "127.0.0.1:-1:-1";
+	public static final int SCALING_FACTOR = 2;
 	protected final SchedulingTopology schedulingTopology;
 	protected final Logger log;
 	protected final int nCpus;
@@ -290,9 +291,38 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		if (previousRescheduleFuture != null) {
 			updateMaxEdgeThroughputMatrices(interOpEdgeThroughput);
 		}
-		orderedEdgeList = interOpEdgeThroughput
+		Map<SchedulingExecutionEdge, Double> edgeThroughputMap = interOpEdgeThroughput
+			.entrySet()
+			.stream()
+			.collect(Collectors.toMap(
+				mapEntry -> edgeMap.get(mapEntry.getKey()),
+				Map.Entry::getValue))
+			.entrySet()
+			.stream()
+			.collect(Collectors.toMap(Map.Entry::getKey, entry -> {
+				// Fingers crossed the following won't throw NPEs :-)
+				TaskManagerLocation srcTmLoc = entry
+					.getKey()
+					.getSourceSchedulingExecutionVertex()
+					.getExecutionPlacement()
+					.getTaskManagerLocation();
+				TaskManagerLocation destTmLoc = entry
+					.getKey()
+					.getTargetSchedulingExecutionVertex()
+					.getExecutionPlacement()
+					.getTaskManagerLocation();
+				if (srcTmLoc != null && destTmLoc != null) {
+					String sourceIp = srcTmLoc.address().getHostAddress();
+					String targetIp = destTmLoc.address().getHostAddress();
+					if (!sourceIp.equals(targetIp)) {
+						return entry.getValue() * SCALING_FACTOR;
+					}
+				}
+				return entry.getValue();
+			}));
+		orderedEdgeList = edgeThroughputMap
 			.entrySet().stream().sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
-			.map(mapEntry -> edgeMap.get(mapEntry.getKey())).collect(Collectors.toList());
+			.map(Map.Entry::getKey).collect(Collectors.toList());
 		mostRecentArrivalRate = influxDBMetricsClient.getMostRecentArrivalRate(sourceVertices
 			.stream()
 			.map(SchedulingExecutionVertex::getId)
