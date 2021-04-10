@@ -48,7 +48,7 @@ public enum ScheduleMode {
 	/**
 	 * Schedules all tasks immediately and places according to a model
 	 */
-	DRL(false, true),
+	Q_ACTOR_CRITIC(false, true),
 
 	/**
 	 * Schedules all tasks immediately according to an adaptive model

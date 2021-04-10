@@ -116,6 +116,11 @@ public class TrafficBasedSchedulingAgent extends AbstractSchedulingAgent {
 	}
 
 	@Override
+	protected void onResourceInitialization() {
+		// Do nothing
+	}
+
+	@Override
 	protected void updatePlacementSolution() {
 		suggestedPlacementAction = getTrafficBasedPlacementAction();
 		if (!isValidPlacementAction(suggestedPlacementAction)) {

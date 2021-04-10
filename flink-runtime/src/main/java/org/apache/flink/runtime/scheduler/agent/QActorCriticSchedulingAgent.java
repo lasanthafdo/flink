@@ -18,18 +18,25 @@
 
 package org.apache.flink.runtime.scheduler.agent;
 
+import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.runtime.executiongraph.ExecutionGraph;
-import org.apache.flink.runtime.jobmaster.slotpool.SlotPool;
 import org.apache.flink.runtime.messages.Acknowledge;
+import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionContainer;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategy;
+import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
+import org.apache.flink.util.FlinkRuntimeException;
 
 import org.slf4j.Logger;
 
+import java.net.InetAddress;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.StreamSupport;
+import java.util.stream.Collectors;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
@@ -38,7 +45,7 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  */
 public class QActorCriticSchedulingAgent extends AbstractSchedulingAgent {
 
-	private final QActorCriticWrapper qActorCriticWrapper;
+	private QActorCriticModel qActorCriticModel;
 	private CompletableFuture<Collection<Acknowledge>> previousRescheduleFuture;
 	private final ScheduledExecutorService executorService;
 	private final long updatePeriodInSeconds;
@@ -47,7 +54,6 @@ public class QActorCriticSchedulingAgent extends AbstractSchedulingAgent {
 		Logger log,
 		ExecutionGraph executionGraph,
 		SchedulingStrategy schedulingStrategy,
-		SlotPool slotPool,
 		ScheduledExecutorService executorService,
 		long triggerPeriod,
 		long waitTimeout,
@@ -62,10 +68,6 @@ public class QActorCriticSchedulingAgent extends AbstractSchedulingAgent {
 			waitTimeout,
 			numRetries, 4);
 
-		int nVertices = Math.toIntExact(StreamSupport.stream(executionGraph
-			.getSchedulingTopology()
-			.getVertices().spliterator(), false).count());
-		this.qActorCriticWrapper = new QActorCriticWrapper(this.nCpus, nVertices, log);
 		this.executorService = checkNotNull(executorService);
 		this.updatePeriodInSeconds = updatePeriod;
 		setupUpdateTriggerThread();
@@ -93,21 +95,60 @@ public class QActorCriticSchedulingAgent extends AbstractSchedulingAgent {
 	}
 
 	@Override
+	protected void onResourceInitialization() {
+		List<Tuple2<InetAddress, Integer>> nodeSocketCounts = new ArrayList<>();
+		List<InetAddress> nodes = taskManLocSlotCountMap
+			.values()
+			.stream()
+			.map(taskManLoc -> taskManLoc.f0.address())
+			.distinct()
+			.collect(Collectors.toList());
+		nodes.forEach(ipAddress -> nodeSocketCounts.add(new Tuple2<>(
+			ipAddress,
+			cpuLayout.sockets())));
+		this.qActorCriticModel = new QActorCriticModel(
+			nodeSocketCounts,
+			this.nVertices,
+			log);
+	}
+
+	@Override
 	protected void updatePlacementSolution() {
-/*
-		Tuple2<TaskManagerLocation, Integer> currentStateId = qActorCriticWrapper.getStateFor(currentPlacementAction);
-		qActorCriticWrapper.updateState(
+		int currentStateId = qActorCriticModel.getStateFor(currentPlacementAction);
+		qActorCriticModel.updateState(
 			getOverallThroughput(),
 			currentStateId,
 			stateId -> -1.0
 				* getTopLevelContainer().getResourceUsage(SchedulingExecutionContainer.CPU));
-		int currentAction = qActorCriticWrapper.getSuggestedAction(currentStateId);
-		suggestedPlacementAction = qActorCriticWrapper.getPlacementSolution(currentAction);
+		int currentAction = qActorCriticModel.getSuggestedAction(currentStateId);
+		List<Tuple2<InetAddress, Integer>> modelSuggestedPlacementAction = qActorCriticModel.getPlacementSolution(
+			currentAction);
+		setFromModelPlacementAction(modelSuggestedPlacementAction);
 		if (!isValidPlacementAction(suggestedPlacementAction)) {
 			throw new FlinkRuntimeException(
 				"Invalid placement action " + suggestedPlacementAction + " suggested.");
 		}
-*/
+	}
+
+	private void setFromModelPlacementAction(List<Tuple2<InetAddress, Integer>> modelSuggestedPlacementAction) {
+		suggestedPlacementAction.clear();
+		List<Tuple2<TaskManagerLocation, Integer>> taskManSlots = new ArrayList<>(nSchedulingSlots);
+		taskManLocSlotCountMap.values().forEach(taskManSlotCountElem -> {
+			for (int i = 0; i < taskManSlotCountElem.f1; i++) {
+				taskManSlots.add(new Tuple2<>(taskManSlotCountElem.f0, i));
+			}
+		});
+		modelSuggestedPlacementAction.forEach(operatorPlacement -> {
+			Tuple2<TaskManagerLocation, Integer> suitableTaskMan = taskManSlots
+				.stream()
+				.filter(taskManLocSlotCountElem -> taskManLocSlotCountElem.f0
+					.address()
+					.equals(operatorPlacement.f0)).findFirst().orElse(new Tuple2<>(null, -1));
+			suggestedPlacementAction.add(new Tuple3<>(
+				suitableTaskMan.f0,
+				-1,
+				operatorPlacement.f1));
+		});
 	}
 
 	@Override

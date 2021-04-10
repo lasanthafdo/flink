@@ -24,7 +24,6 @@ import org.apache.flink.configuration.IllegalConfigurationException;
 import org.apache.flink.runtime.executiongraph.ExecutionGraph;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.ScheduleMode;
-import org.apache.flink.runtime.jobmaster.slotpool.SlotPool;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategy;
 
 import org.slf4j.Logger;
@@ -41,7 +40,6 @@ public class SchedulingAgentUtils {
 		JobGraph jobGraph,
 		SchedulingStrategy schedulingStrategy,
 		Configuration jobMasterConfiguration,
-		SlotPool slotPool,
 		ScheduledExecutorService executorService) {
 
 		int nDefaultConfigElements = 4;
@@ -100,7 +98,7 @@ public class SchedulingAgentUtils {
 					throw new IllegalConfigurationException(
 						"Unable to obtain agent configuration details");
 				}
-			case DRL:
+			case Q_ACTOR_CRITIC:
 				if (jobMasterConfiguration.contains(DeploymentOptions.SCHEDULING_AGENT_CONFIG_STRING)) {
 					String agentConfigString = jobMasterConfiguration.getString(
 						DeploymentOptions.SCHEDULING_AGENT_CONFIG_STRING);
@@ -115,7 +113,6 @@ public class SchedulingAgentUtils {
 							log,
 							executionGraph,
 							schedulingStrategy,
-							slotPool,
 							executorService,
 							triggerPeriod,
 							waitTimeOut,

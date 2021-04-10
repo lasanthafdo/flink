@@ -77,17 +77,20 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	protected final SchedulingTopology schedulingTopology;
 	protected final Logger log;
 	protected final int nCpus;
+	protected int nSchedulingSlots;
 	protected final int nVertices;
 	protected List<Tuple3<TaskManagerLocation, Integer, Integer>> suggestedPlacementAction;
 	protected List<Tuple3<TaskManagerLocation, Integer, Integer>> currentPlacementAction;
 	protected ScheduledFuture<?> updateExecutor;
 	protected final ExecutionGraph executionGraph;
 	protected List<SchedulingExecutionEdge> orderedEdgeList;
+	protected CompletableFuture<Collection<Acknowledge>> previousRescheduleFuture;
+	protected final Map<String, Tuple2<TaskManagerLocation, Integer>> taskManLocSlotCountMap = new HashMap<>();
+	protected final CpuLayout cpuLayout;
 
 	private final Map<String, Double> interOpEdgeThroughput;
 	private final Map<String, SchedulingExecutionEdge> edgeMap;
 	private final Map<String, Integer> orderedOperatorMap = new HashMap<>();
-	private final Map<String, Tuple2<TaskManagerLocation, Integer>> taskManagerLocationMap = new HashMap<>();
 	private final Map<String, Double> maxPhysicalEdgeThroughput = new HashMap<>();
 	private final Map<String, Double> maxLogicalEdgeThroughput = new HashMap<>();
 	private final List<SchedulingExecutionVertex> sourceVertices = new ArrayList<>();
@@ -95,9 +98,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	private final long waitTimeout;
 	private final int numRetries;
 	private final int maxParallelism;
-	private final CpuLayout cpuLayout;
 	private final SchedulingStrategy schedulingStrategy;
-	protected CompletableFuture<Collection<Acknowledge>> previousRescheduleFuture;
 	private SchedulingCluster schedulingCluster;
 	private ResourceManagerGateway resourceManagerGateway;
 	private InfluxDBMetricsClient influxDBMetricsClient;
@@ -119,6 +120,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		this.cpuLayout = AffinityLock.cpuLayout();
 		//TODO Make nCpus user-configurable
 		this.nCpus = cpuLayout.cpus();
+		this.nSchedulingSlots = 0;
 		this.interOpEdgeThroughput = new HashMap<>();
 		this.edgeMap = new HashMap<>();
 		this.triggerPeriod = triggerPeriod;
@@ -160,22 +162,22 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 						e.getMessage(),
 						e);
 				}
-				taskManagerLocationMap.put(
+				taskManLocSlotCountMap.put(
 					tmInfo.getResourceId().getResourceIdString(),
 					new Tuple2<>(tmLoc, tmInfo.getNumberSlots()));
 			}
-		})).thenRun(this::initSchedulingCluster);
+		})).thenRun(this::initClusterInfo);
 	}
 
-	private void initSchedulingCluster() {
-		taskManagerLocationMap.forEach((tmLocResourceId, tmLocNumSlotsTuple) -> log.info(
+	private void initClusterInfo() {
+		taskManLocSlotCountMap.forEach((tmLocResourceId, tmLocNumSlotsTuple) -> log.info(
 			"TaskManager with ID {} available at {} using data port {}",
 			tmLocResourceId,
 			tmLocNumSlotsTuple.f0.address().getHostAddress(),
 			tmLocNumSlotsTuple.f0.dataPort()));
 
 		//TODO Currently using the same CPU layout across the cluster, which is wrong!
-		List<TaskManagerLocation> tmList = taskManagerLocationMap
+		List<TaskManagerLocation> tmList = taskManLocSlotCountMap
 			.values()
 			.stream()
 			.map(tuple -> tuple.f0)
@@ -186,13 +188,14 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 			this.cpuLayout,
 			this.maxParallelism,
 			log);
-		taskManagerLocationMap.forEach((tmResourceId, tmLocNumSlotsTuple) -> {
+		taskManLocSlotCountMap.forEach((tmResourceId, tmLocNumSlotsTuple) -> {
 			TaskManagerLocation tmLoc = tmLocNumSlotsTuple.f0;
 			for (int i = 0; i < tmLocNumSlotsTuple.f1; i++) {
 				schedulingCluster.addTaskSlot(new SimpleSlotInfo(tmResourceId, tmLoc, i));
+				nSchedulingSlots++;
 			}
 		});
-		taskManagerLocationMap
+		taskManLocSlotCountMap
 			.values()
 			.stream()
 			.map(tuple -> tuple.f0.address().getHostAddress())
@@ -202,7 +205,10 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 					schedulingCluster.addCpu(cpuIdString);
 				}
 			});
+		onResourceInitialization();
 	}
+
+	protected abstract void onResourceInitialization();
 
 	protected void init() {
 		AtomicInteger operatorCount = new AtomicInteger(0);

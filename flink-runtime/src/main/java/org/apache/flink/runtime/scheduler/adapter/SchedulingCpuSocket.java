@@ -103,17 +103,6 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 	}
 
 	@Override
-	public int getCpuIdForScheduling(SchedulingExecutionVertex schedulingExecutionVertex) {
-		return cpuAssignmentMap
-			.entrySet()
-			.stream()
-			.filter(mapEntry -> mapEntry.getValue() == null)
-			.findFirst()
-			.map(Map.Entry::getKey)
-			.orElse(-1);
-	}
-
-	@Override
 	public List<Tuple3<TaskManagerLocation, Integer, Integer>> tryScheduleInSameContainer(
 		SchedulingExecutionVertex sourceVertex,
 		SchedulingExecutionVertex targetVertex) {
@@ -138,22 +127,7 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 	}
 
 	@Override
-	public List<Integer> getCpuIdsInSameContainer(
-		SchedulingExecutionVertex sourceVertex,
-		SchedulingExecutionVertex targetVertex) {
-		List<Integer> cpuIdList = cpuAssignmentMap
-			.entrySet()
-			.stream()
-			.filter(mapEntry -> mapEntry.getValue() == null)
-			.map(Map.Entry::getKey).collect(Collectors.toList());
-		if (cpuIdList.size() > 2) {
-			cpuIdList = cpuIdList.subList(0, 2);
-		}
-		return cpuIdList;
-	}
-
-	@Override
-	public int releaseExecutionVertex(SchedulingExecutionVertex schedulingExecutionVertex) {
+	public void releaseExecutionVertex(SchedulingExecutionVertex schedulingExecutionVertex) {
 		checkNotNull(schedulingExecutionVertex);
 		int cpuId = cpuAssignmentMap
 			.entrySet()
@@ -165,8 +139,6 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 		if (cpuId != -1) {
 			cpuAssignmentMap.put(cpuId, null);
 		}
-
-		return cpuId;
 	}
 
 	@Override

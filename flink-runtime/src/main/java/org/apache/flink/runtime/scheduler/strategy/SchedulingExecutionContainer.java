@@ -62,14 +62,6 @@ public interface SchedulingExecutionContainer {
 	Tuple3<TaskManagerLocation, Integer, Integer> scheduleExecutionVertex(SchedulingExecutionVertex schedulingExecutionVertex);
 
 	/**
-	 * @param schedulingExecutionVertex the execution vertex for which the cpu ID is needed
-	 *
-	 * @return the CPU ID for the given execution vertex
-	 */
-	@Deprecated
-	int getCpuIdForScheduling(SchedulingExecutionVertex schedulingExecutionVertex);
-
-	/**
 	 * @param sourceVertex execution vertex that acts as the source of a stream edge
 	 * @param targetVertex execution vertex that acts as the target/sink of the considered stream edge
 	 *
@@ -81,25 +73,12 @@ public interface SchedulingExecutionContainer {
 		SchedulingExecutionVertex targetVertex);
 
 	/**
-	 * @param sourceVertex execution vertex that acts as the source of a stream edge
-	 * @param targetVertex execution vertex that acts as the target of a stream edge
-	 *
-	 * @return a list of CPU IDs as integers for the given execution vertices
-	 */
-	@Deprecated
-	List<Integer> getCpuIdsInSameContainer(
-		SchedulingExecutionVertex sourceVertex,
-		SchedulingExecutionVertex targetVertex);
-
-	/**
 	 * @param schedulingExecutionVertex execution vertex to be released
-	 *
-	 * @return 0 on success and -1 on failure
 	 */
-	int releaseExecutionVertex(SchedulingExecutionVertex schedulingExecutionVertex);
+	void releaseExecutionVertex(SchedulingExecutionVertex schedulingExecutionVertex);
 
 	/**
-	 *
+	 * Releases all execution vertices of the container and its sub-containers
 	 */
 	void releaseAllExecutionVertices();
 

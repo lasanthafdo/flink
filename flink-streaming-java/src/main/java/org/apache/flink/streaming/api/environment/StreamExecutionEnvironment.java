@@ -130,6 +130,8 @@ public class StreamExecutionEnvironment {
 
 	/** The time characteristic that is used if none other is set. */
 	private static final TimeCharacteristic DEFAULT_TIME_CHARACTERISTIC = TimeCharacteristic.ProcessingTime;
+	public static final String TRAFFIC_BASED_ID_STRING = "traffic-based";
+	public static final String Q_ACTOR_CRITIC_ID_STRING = "q-actor-critic";
 
 	/**
 	 * The environment of the context (local by default, cluster if invoked through command line).
@@ -1904,12 +1906,10 @@ public class StreamExecutionEnvironment {
 		if (!allowPinToCpu) {
 			scheduleMode = ScheduleMode.EAGER;
 		} else {
-			if ("traffic-based".equals(runtimeScheduleMode)) {
+			if (TRAFFIC_BASED_ID_STRING.equals(runtimeScheduleMode)) {
 				scheduleMode = ScheduleMode.TRAFFIC_BASED;
-			} else if ("drl-based".equals(runtimeScheduleMode)) {
-				scheduleMode = ScheduleMode.DRL;
-			} else if ("adaptive".equals(runtimeScheduleMode)) {
-				scheduleMode = ScheduleMode.ADAPTIVE;
+			} else if (Q_ACTOR_CRITIC_ID_STRING.equals(runtimeScheduleMode)) {
+				scheduleMode = ScheduleMode.Q_ACTOR_CRITIC;
 			} else {
 				scheduleMode = ScheduleMode.PINNED;
 			}

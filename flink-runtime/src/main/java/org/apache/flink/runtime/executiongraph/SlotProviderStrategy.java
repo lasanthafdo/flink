@@ -83,7 +83,7 @@ public abstract class SlotProviderStrategy {
 			case EAGER:
 			case PINNED:
 			case TRAFFIC_BASED:
-			case DRL:
+			case Q_ACTOR_CRITIC:
 			case ADAPTIVE:
 				return new NormalSlotProviderStrategy(slotProvider, allocationTimeout);
 			default:

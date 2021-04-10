@@ -126,7 +126,7 @@ public class DefaultSchedulerFactory implements SchedulerNGFactory {
 				return new PinnedSchedulingStrategy.Factory();
 			case TRAFFIC_BASED:
 				return new TrafficBasedSchedulingStrategy.Factory();
-			case DRL:
+			case Q_ACTOR_CRITIC:
 				return new QActorCriticSchedulingStrategy.Factory();
 			case LAZY_FROM_SOURCES_WITH_BATCH_SLOT_REQUEST:
 			case LAZY_FROM_SOURCES:

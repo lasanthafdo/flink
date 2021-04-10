@@ -114,24 +114,19 @@ public class QActorCriticSchedulingStrategy implements SchedulingStrategy {
 		schedulerOperations.allocateSlotsAndDeploy(executionVertexDeploymentOptions);
 	}
 
-	private void setupDefaultPlacement() {
-		AtomicInteger currentCpuId = new AtomicInteger(2);
-		schedulingTopology.getVertices().forEach(schedulingExecutionVertex -> {
-			schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
-				null, currentCpuId.getAndIncrement(), 0));
-		});
-	}
-
 	private void setupDerivedPlacement(@NotNull SchedulingRuntimeState runtimeState) {
 		SchedulingExecutionContainer topLevelContainer = runtimeState.getTopLevelContainer();
 		List<Tuple3<TaskManagerLocation, Integer, Integer>> placementAction = runtimeState.getPlacementSolution();
 		if (runtimeState.isValidPlacementAction(placementAction)) {
 			topLevelContainer.releaseAllExecutionVertices();
 			AtomicInteger placementIndex = new AtomicInteger(0);
+			// TODO Change forceSchedule call to a trySchedule call and get the CPU ID (Possibly needs new API method)
+			// TODO Pass the returned CPU ID and set it to placementInfoTuple.f1
+			// TODO Pass the placementInfoTuple down to the task manager
 			schedulingTopology.getVertices().forEach(schedulingExecutionVertex -> {
 				topLevelContainer.forceSchedule(
 					schedulingExecutionVertex,
-					placementAction.get(placementIndex.get()).getField(1));
+					placementAction.get(placementIndex.get()));
 				Tuple3<TaskManagerLocation, Integer, Integer> placementInfoTuple = placementAction.get(
 					placementIndex.getAndIncrement());
 				schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(

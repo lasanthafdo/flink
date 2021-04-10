@@ -19,27 +19,33 @@
 package org.apache.flink.runtime.scheduler.agent;
 
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 
 import com.github.chen0040.rl.learning.actorcritic.ActorCriticLearner;
+import com.google.common.collect.BiMap;
+import com.google.common.collect.HashBiMap;
 import org.paukov.combinatorics.CombinatoricsVector;
 import org.paukov.combinatorics.Generator;
 import org.paukov.combinatorics.ICombinatoricsVector;
 import org.slf4j.Logger;
 
+import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static org.paukov.combinatorics.CombinatoricsFactory.createSimpleCombinationGenerator;
 
 /**
  * Wrapper class for the actor-critic training.
  */
-public class QActorCriticWrapper {
+public class QActorCriticModel {
 
 	private int stateCount;
 	private int actionCount;
@@ -49,43 +55,65 @@ public class QActorCriticWrapper {
 	private final List<Transition> transitionList = new ArrayList<>();
 	private InfluxDBTransitionsClient influxDBTransitionsClient;
 	private final Map<Integer, List<Integer>> stateSpaceMap;
-	private final int nCpus;
+	private final BiMap<Tuple2<InetAddress, Integer>, Integer> socketStateIdMap;
+	private final int nSchedulingSocketSlots;
 	private final Logger log;
 	private int currentStateId;
 	private int currentActionId;
-	private final String retentionPolicyName = "one_day";
+	private final static String retentionPolicyName = "one_day";
 
-	public QActorCriticWrapper(int nCpus, int nVertices, Logger log) {
-		stateSpaceMap = generateActionSpace(nCpus, nVertices);
+	public QActorCriticModel(
+		List<Tuple2<InetAddress, Integer>> nodeSocketCounts,
+		int nVertices,
+		Logger log) {
+		this.socketStateIdMap = HashBiMap.create();
+		this.nSchedulingSocketSlots = getAvailableSlotsAfterDerivation(nodeSocketCounts);
+		this.stateSpaceMap = generateStateActionSpace(nVertices);
 		this.stateCount = stateSpaceMap.size();
 		this.actionCount = stateSpaceMap.size();
-		this.nCpus = nCpus;
 		this.log = log;
 
 		setupInfluxDBConnection();
 	}
 
-	private Map<Integer, List<Integer>> generateActionSpace(int nCpus, int nVertices) {
+	private int getAvailableSlotsAfterDerivation(List<Tuple2<InetAddress, Integer>> taskManLocSlotCounts) {
+		AtomicInteger schedulingSlotCount = new AtomicInteger(0);
+		taskManLocSlotCounts.forEach(locSlotCount -> socketStateIdMap.put(
+			locSlotCount,
+			schedulingSlotCount.incrementAndGet()));
+		return schedulingSlotCount.get();
+	}
+
+	private Map<Integer, List<Integer>> generateStateActionSpace(int nVertices) {
 		Map<Integer, List<Integer>> actionMap = new HashMap<>();
-		CombinatoricsVector<Integer> cpuIds = new CombinatoricsVector<>();
-		for (int i = 0; i < nCpus; i++) {
-			cpuIds.addValue(i);
-		}
-		Generator<Integer> gen = createSimpleCombinationGenerator(cpuIds, nVertices);
+		CombinatoricsVector<Integer> slotIds = new CombinatoricsVector<>();
+		socketStateIdMap.forEach((locSlotCountEntry, stateId) -> {
+			for (int i = 0; i < locSlotCountEntry.f1; i++) {
+				slotIds.addValue(stateId);
+			}
+		});
+		Generator<Integer> gen = createSimpleCombinationGenerator(slotIds, nVertices);
 		int actionId = 1;
 		for (ICombinatoricsVector<Integer> cpuSelection : gen.generateAllObjects()) {
+			// Puts a state/action ID and state pair like <1, {3,1,1,4,2,2,1}>
 			actionMap.put(actionId++, cpuSelection.getVector());
 		}
 		return actionMap;
 	}
 
-	public int getStateFor(List<Tuple2<TaskManagerLocation, Integer>> cpuAssignment) {
+	public int getStateFor(List<Tuple3<TaskManagerLocation, Integer, Integer>> cpuAssignment) {
+		List<Integer> cpuAssignmentStateVector = cpuAssignment
+			.stream()
+			.map(operatorLoc -> socketStateIdMap.get(new Tuple2<>(
+				operatorLoc.f0.address(),
+				operatorLoc.f2)))
+			.collect(Collectors.toList());
 		return stateSpaceMap
 			.entrySet()
 			.stream()
-			.filter(entry -> entry.getValue().size() == cpuAssignment.size() && entry
+			.filter(entry -> entry.getValue().size() == cpuAssignmentStateVector.size() && entry
 				.getValue()
-				.containsAll(cpuAssignment))
+				.containsAll(cpuAssignmentStateVector))
 			.map(
 				Map.Entry::getKey)
 			.findFirst()
@@ -113,8 +141,13 @@ public class QActorCriticWrapper {
 		influxDBTransitionsClient.setup();
 	}
 
-	public List<Integer> getPlacementSolution(int action) {
-		return stateSpaceMap.get(action);
+	public List<Tuple2<InetAddress, Integer>> getPlacementSolution(int action) {
+		List<Tuple2<InetAddress, Integer>> placementSolution = new ArrayList<>();
+		List<Integer> placementAction = stateSpaceMap.get(action);
+		placementAction.forEach(stateId -> placementSolution.add(socketStateIdMap
+			.inverse()
+			.get(stateId)));
+		return placementSolution;
 	}
 
 	public void updateState(
@@ -172,7 +205,7 @@ public class QActorCriticWrapper {
 			StringBuilder actionStr = new StringBuilder();
 			StringBuilder oldStateStr = new StringBuilder();
 			StringBuilder newStateStr = new StringBuilder();
-			for (int i = 0; i < nCpus; i++) {
+			for (int i = 0; i < nSchedulingSocketSlots; i++) {
 				if (actionAsList.contains(i)) {
 					actionStr.append(i).append(",");
 				}

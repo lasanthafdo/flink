@@ -176,7 +176,6 @@ public class DefaultScheduler extends SchedulerBase implements SchedulerOperatio
 			jobGraph,
 			this.schedulingStrategy,
 			jobMasterConfiguration,
-			slotPool,
 			getFutureExecutor());
 	}
 

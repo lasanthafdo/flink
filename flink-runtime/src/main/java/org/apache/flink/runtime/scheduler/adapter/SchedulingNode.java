@@ -123,17 +123,6 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 	}
 
 	@Override
-	public int getCpuIdForScheduling(SchedulingExecutionVertex schedulingExecutionVertex) {
-		Optional<SchedulingExecutionContainer> targetSocket = cpuSockets.values()
-			.stream().filter(cpuSocket -> cpuSocket.getRemainingCapacity() >= 1)
-			.min(Comparator.comparing(sec -> sec.getResourceUsage(OPERATOR)));
-		return targetSocket
-			.map(schedulingExecutionContainer -> schedulingExecutionContainer.getCpuIdForScheduling(
-				schedulingExecutionVertex))
-			.orElse(-1);
-	}
-
-	@Override
 	public List<Tuple3<TaskManagerLocation, Integer, Integer>> tryScheduleInSameContainer(
 		SchedulingExecutionVertex sourceVertex,
 		SchedulingExecutionVertex targetVertex) {
@@ -196,23 +185,8 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 	}
 
 	@Override
-	public List<Integer> getCpuIdsInSameContainer(
-		SchedulingExecutionVertex sourceVertex,
-		SchedulingExecutionVertex targetVertex) {
-		Optional<SchedulingExecutionContainer> firstPreferenceTargetSocket = cpuSockets.values()
-			.stream().filter(cpuSocket -> cpuSocket.getRemainingCapacity() >= 2)
-			.min(Comparator.comparing(sec -> sec.getResourceUsage(OPERATOR)));
-		List<Integer> cpuIds = new ArrayList<>();
-		if (firstPreferenceTargetSocket.isPresent()) {
-			SchedulingExecutionContainer cpuSocket = firstPreferenceTargetSocket.get();
-			cpuIds.addAll(cpuSocket.getCpuIdsInSameContainer(sourceVertex, targetVertex));
-		}
-		return cpuIds;
-	}
-
-	@Override
-	public int releaseExecutionVertex(SchedulingExecutionVertex schedulingExecutionVertex) {
-		return -1;
+	public void releaseExecutionVertex(SchedulingExecutionVertex schedulingExecutionVertex) {
+		// Not implemented
 	}
 
 	@Override
