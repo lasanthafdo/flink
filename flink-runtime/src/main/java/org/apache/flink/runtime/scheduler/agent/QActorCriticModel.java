@@ -22,9 +22,10 @@ import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 
+import org.apache.flink.shaded.guava18.com.google.common.collect.BiMap;
+import org.apache.flink.shaded.guava18.com.google.common.collect.HashBiMap;
+
 import com.github.chen0040.rl.learning.actorcritic.ActorCriticLearner;
-import com.google.common.collect.BiMap;
-import com.google.common.collect.HashBiMap;
 import org.paukov.combinatorics.CombinatoricsVector;
 import org.paukov.combinatorics.Generator;
 import org.paukov.combinatorics.ICombinatoricsVector;

@@ -45,6 +45,7 @@ import org.apache.flink.runtime.execution.librarycache.LibraryCacheManager;
 import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
 import org.apache.flink.runtime.executiongraph.JobInformation;
 import org.apache.flink.runtime.executiongraph.TaskInformation;
+import org.apache.flink.runtime.executiongraph.metrics.CpuIdGauge;
 import org.apache.flink.runtime.executiongraph.metrics.CpuUsageGauge;
 import org.apache.flink.runtime.externalresource.ExternalResourceInfoProvider;
 import org.apache.flink.runtime.filecache.FileCache;
@@ -64,7 +65,7 @@ import org.apache.flink.runtime.jobgraph.tasks.AbstractInvokable;
 import org.apache.flink.runtime.jobgraph.tasks.InputSplitProvider;
 import org.apache.flink.runtime.jobgraph.tasks.TaskOperatorEventGateway;
 import org.apache.flink.runtime.memory.MemoryManager;
-import org.apache.flink.runtime.metrics.groups.OperatorIOMetricGroup;
+import org.apache.flink.runtime.metrics.groups.OperatorMetricGroup;
 import org.apache.flink.runtime.metrics.groups.TaskMetricGroup;
 import org.apache.flink.runtime.operators.coordination.OperatorEvent;
 import org.apache.flink.runtime.operators.coordination.TaskNotRunningException;
@@ -88,6 +89,7 @@ import org.apache.flink.util.SerializedValue;
 import org.apache.flink.util.TaskManagerExceptionUtils;
 import org.apache.flink.util.WrappingRuntimeException;
 
+import net.openhft.affinity.Affinity;
 import net.openhft.affinity.AffinityLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -574,6 +576,10 @@ public class Task implements Runnable, TaskSlotPayload, TaskActions, PartitionPr
 		return executingThread;
 	}
 
+	public int getCpuId() {
+		return cpuId;
+	}
+
 	@Override
 	public CompletableFuture<ExecutionState> getTerminationFuture() {
 		return terminationFuture;
@@ -658,38 +664,47 @@ public class Task implements Runnable, TaskSlotPayload, TaskActions, PartitionPr
 	 */
 	@Override
 	public void run() {
-		OperatorIOMetricGroup operatorIOMetricGroup = metrics
-			.getOrAddOperator(taskInfo.getTaskName())
-			.getIOMetricGroup();
-		CpuUsageGauge cpuUsageGauge = (CpuUsageGauge) operatorIOMetricGroup.getCurrentCpuUsageGauge();
+		OperatorMetricGroup operatorMetricGroup = metrics
+			.getOrAddOperator(taskInfo.getTaskName());
+		CpuUsageGauge cpuUsageGauge = (CpuUsageGauge) operatorMetricGroup
+			.getIOMetricGroup()
+			.getCurrentCpuUsageGauge();
 		cpuUsageGauge.setThreadId(Thread.currentThread().getId());
+		CpuIdGauge cpuIdGauge = (CpuIdGauge) operatorMetricGroup
+			.getIOMetricGroup()
+			.getCurrentCpuIdGauge();
+		cpuIdGauge.setCpuIdSupplier(this::getCpuId);
 
 		if (pinnedToCpu) {
 			if (cpuId >= 0) {
 				try (AffinityLock a1 = AffinityLock.acquireLock(cpuId)) {
 					LOG.info(
-						"Task {} was scheduled to run on CPU {} and bound value is '{}'",
+						"Task {} scheduled to run on CPU {} is running on CPU {}",
 						taskInfo.getTaskNameWithSubtasks(),
-						cpuId, a1.isBound());
+						cpuId, Affinity.getCpu());
+					cpuId = Affinity.getCpu();
 					doRun();
 				} finally {
 					terminationFuture.complete(executionState);
 				}
 			} else {
-				try (AffinityLock a1 = AffinityLock.acquireLock()) {
-					cpuId = a1.cpuId();
+				// This is a workaround to somehow assign a CPU ID when no scheduling information
+				// is available due to limitations in OpenHFT library
+				cpuId = Math.abs(cpuId) % AffinityLock.cpuLayout().cpus();
+				try (AffinityLock a1 = AffinityLock.acquireLock(cpuId)) {
 					LOG.info(
-						"Task {} is running on CPU {} ",
+						"Task {} scheduled to run by default on CPU {} is running on CPU {}",
 						taskInfo.getTaskNameWithSubtasks(),
-						cpuId);
+						cpuId, Affinity.getCpu());
+					cpuId = Affinity.getCpu();
 					doRun();
 				} finally {
 					terminationFuture.complete(executionState);
 				}
-
 			}
 		} else {
 			try {
+				cpuId = Affinity.getCpu();
 				doRun();
 			} finally {
 				terminationFuture.complete(executionState);

@@ -95,23 +95,28 @@ public class QActorCriticSchedulingStrategy implements SchedulingStrategy {
 	private void allocateSlotsAndDeploy(
 		final Set<ExecutionVertexID> verticesToDeploy,
 		@Nullable SchedulingRuntimeState runtimeState) {
-		final List<ExecutionVertexDeploymentOption> executionVertexDeploymentOptions;
 		if (runtimeState == null || runtimeState.getPlacementSolution().isEmpty()) {
-			executionVertexDeploymentOptions =
-				SchedulingStrategyUtils.createExecutionVertexDeploymentOptionsInTopologicalOrder(
-					schedulingTopology,
-					verticesToDeploy,
-					id -> deploymentOption);
+			setupDefaultPlacement();
 		} else {
 			setupDerivedPlacement(runtimeState);
-			executionVertexDeploymentOptions =
-				SchedulingStrategyUtils.createExecutionVertexDeploymentOptionsInTopologicalOrder(
-					schedulingTopology,
-					verticesToDeploy,
-					id -> deploymentOption,
-					id -> schedulingTopology.getVertex(id).getExecutionPlacement());
 		}
+		final List<ExecutionVertexDeploymentOption> executionVertexDeploymentOptions =
+			SchedulingStrategyUtils.createExecutionVertexDeploymentOptionsInTopologicalOrder(
+				schedulingTopology,
+				verticesToDeploy,
+				id -> deploymentOption,
+				id -> schedulingTopology.getVertex(id).getExecutionPlacement());
 		schedulerOperations.allocateSlotsAndDeploy(executionVertexDeploymentOptions);
+	}
+
+	private void setupDefaultPlacement() {
+		AtomicInteger cpuIndex = new AtomicInteger(0);
+		// We send negative CPU IDs to indicate this was a blind schedule
+		schedulingTopology
+			.getVertices()
+			.forEach(schedulingExecutionVertex -> schedulingExecutionVertex.setExecutionPlacement(
+				new ExecutionPlacement(
+					null, cpuIndex.decrementAndGet(), -1)));
 	}
 
 	private void setupDerivedPlacement(@NotNull SchedulingRuntimeState runtimeState) {
@@ -120,17 +125,15 @@ public class QActorCriticSchedulingStrategy implements SchedulingStrategy {
 		if (runtimeState.isValidPlacementAction(placementAction)) {
 			topLevelContainer.releaseAllExecutionVertices();
 			AtomicInteger placementIndex = new AtomicInteger(0);
-			// TODO Change forceSchedule call to a trySchedule call and get the CPU ID (Possibly needs new API method)
-			// TODO Pass the returned CPU ID and set it to placementInfoTuple.f1
-			// TODO Pass the placementInfoTuple down to the task manager
 			schedulingTopology.getVertices().forEach(schedulingExecutionVertex -> {
-				topLevelContainer.forceSchedule(
-					schedulingExecutionVertex,
-					placementAction.get(placementIndex.get()));
-				Tuple3<TaskManagerLocation, Integer, Integer> placementInfoTuple = placementAction.get(
+				Tuple3<TaskManagerLocation, Integer, Integer> placementSuggestion = placementAction.get(
 					placementIndex.getAndIncrement());
+				Tuple3<TaskManagerLocation, Integer, Integer> placementInfo = topLevelContainer.scheduleVertex(
+					schedulingExecutionVertex,
+					placementSuggestion.f0,
+					placementSuggestion.f2);
 				schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
-					placementInfoTuple.f0, placementInfoTuple.f1, placementInfoTuple.f2));
+					placementInfo.f0, placementInfo.f1, placementInfo.f2));
 			});
 		} else {
 			throw new FlinkRuntimeException(

@@ -65,6 +65,7 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 import static org.apache.flink.util.Preconditions.checkState;
@@ -199,13 +200,19 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 			.values()
 			.stream()
 			.map(tuple -> tuple.f0.address().getHostAddress())
-			.forEach(tmAddress -> {
+			.distinct()
+			.forEach(nodeAddress -> {
 				for (int cpuId = 0; cpuId < nCpus; cpuId++) {
-					String cpuIdString = tmAddress + ":" + cpuLayout.socketId(cpuId) + ":" + cpuId;
+					String cpuIdString =
+						nodeAddress + ":" + cpuLayout.socketId(cpuId) + ":" + cpuId;
 					schedulingCluster.addCpu(cpuIdString);
 				}
 			});
-		onResourceInitialization();
+		try {
+			onResourceInitialization();
+		} catch (Throwable e) {
+			log.error("Unexpected error: " + e.getMessage(), e);
+		}
 	}
 
 	protected abstract void onResourceInitialization();
@@ -273,6 +280,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	}
 
 	protected void updateStateInformation() {
+		Map<String, Tuple2<String, Integer>> currentOpPlacementInfo = influxDBMetricsClient.getOperatorPlacementMetrics();
 		Map<String, Double> currentInterOpEdgeThroughput = influxDBMetricsClient.getRateMetricsFor(
 			"taskmanager_job_task_edge_numRecordsProcessedPerSecond",
 			"edge_id",
@@ -281,6 +289,33 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		Map<String, Double> cpuFrequencyMetrics = influxDBMetricsClient.getCpuFrequencyMetrics(nCpus);
 		Map<String, Double> operatorUsageMetrics = influxDBMetricsClient.getOperatorUsageMetrics();
 		if (!waitingForResourceManager) {
+			currentOpPlacementInfo.forEach((operatorId, tmIdCpuIdTuple) -> {
+				TaskManagerLocation tmLoc = Objects.requireNonNull(
+					taskManLocSlotCountMap.get(tmIdCpuIdTuple.f0),
+					"Could not find task manager for resource id " + tmIdCpuIdTuple.f0).f0;
+				Integer cpuId = tmIdCpuIdTuple.f1;
+				Integer socketId = cpuLayout.socketId(cpuId);
+				SchedulingExecutionVertex vertex = StreamSupport
+					.stream(schedulingTopology.getVertices().spliterator(), true)
+					.filter(schedulingExecutionVertex -> {
+						String vertexId = schedulingExecutionVertex.getId().getJobVertexId() + "_"
+							+ schedulingExecutionVertex.getId().getSubtaskIndex();
+						return vertexId.equals(operatorId);
+					})
+					.findAny()
+					.orElse(null);
+				if (tmLoc != null && cpuId >= 0 && socketId >= 0 && vertex != null) {
+					schedulingCluster.forceSchedule(vertex, new Tuple3<>(tmLoc, cpuId, socketId));
+				} else {
+					log.warn(
+						"Could not update placement information for operator {} running on task "
+							+ "manager at {}, with CPU ID {}, running on socket ID {}",
+						operatorId,
+						tmLoc,
+						cpuId,
+						socketId);
+				}
+			});
 			schedulingCluster.updateResourceUsageMetrics(
 				SchedulingExecutionContainer.CPU,
 				cpuUsageMetrics);
@@ -478,6 +513,8 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 
 		if (!currentPlacementTemp.isEmpty()) {
 			currentPlacementAction = new ArrayList<>(currentPlacementTemp.values());
+		} else {
+			log.warn("Current placement is empty. CPU assignment map : {} ", cpuAssignmentMap);
 		}
 	}
 

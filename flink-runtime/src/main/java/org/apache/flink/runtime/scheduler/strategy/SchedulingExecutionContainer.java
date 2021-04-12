@@ -36,6 +36,11 @@ public interface SchedulingExecutionContainer {
 	String FREQ = "FREQ";
 	String CPU_ID_DELIMITER = ":";
 
+	Tuple3<TaskManagerLocation, Integer, Integer> NULL_PLACEMENT = new Tuple3<>(
+		null,
+		-1,
+		-1);
+
 	/**
 	 * Returns the list of sub containers that belong to this container
 	 * which are also of type {@link SchedulingExecutionContainer}
@@ -59,14 +64,24 @@ public interface SchedulingExecutionContainer {
 	 *
 	 * @return a {@link Tuple3} consisting of the TaskManagerLocation, CPU ID, and socket ID
 	 */
-	Tuple3<TaskManagerLocation, Integer, Integer> scheduleExecutionVertex(SchedulingExecutionVertex schedulingExecutionVertex);
+	Tuple3<TaskManagerLocation, Integer, Integer> scheduleVertex(SchedulingExecutionVertex schedulingExecutionVertex);
+
+	/**
+	 * @param schedulingExecutionVertex the execution vertex to be scheduled
+	 *
+	 * @return a {@link Tuple3} consisting of the TaskManagerLocation, CPU ID, and socket ID
+	 */
+	Tuple3<TaskManagerLocation, Integer, Integer> scheduleVertex(
+		SchedulingExecutionVertex schedulingExecutionVertex,
+		TaskManagerLocation targetTaskMan,
+		Integer targetSocket);
 
 	/**
 	 * @param sourceVertex execution vertex that acts as the source of a stream edge
 	 * @param targetVertex execution vertex that acts as the target/sink of the considered stream edge
 	 *
 	 * @return a list of {@link Tuple3} objects that include the task manager location, CPU ID,
-	 * and socket ID in the case of a successful schedule
+	 * 	and socket ID in the case of a successful schedule
 	 */
 	List<Tuple3<TaskManagerLocation, Integer, Integer>> tryScheduleInSameContainer(
 		SchedulingExecutionVertex sourceVertex,
@@ -82,24 +97,61 @@ public interface SchedulingExecutionContainer {
 	 */
 	void releaseAllExecutionVertices();
 
+	/**
+	 * @param schedulingExecutionVertex
+	 *
+	 * @return
+	 */
 	boolean isAssignedToContainer(SchedulingExecutionVertex schedulingExecutionVertex);
 
+	/**
+	 * @param schedulingExecutionVertex
+	 * @param cpuId
+	 *
+	 * @return
+	 */
 	boolean forceSchedule(
 		SchedulingExecutionVertex schedulingExecutionVertex,
 		Tuple3<TaskManagerLocation, Integer, Integer> cpuId);
 
+	/**
+	 * @return
+	 */
 	int getRemainingCapacity();
 
+	/**
+	 * @param type
+	 *
+	 * @return
+	 */
 	double getResourceUsage(String type);
 
+	/**
+	 * @param type
+	 * @param resourceUsageMetrics
+	 */
 	void updateResourceUsageMetrics(String type, Map<String, Double> resourceUsageMetrics);
 
+	/**
+	 * @return
+	 */
 	String getId();
 
+	/**
+	 * @return
+	 */
 	Map<SchedulingExecutionVertex, Tuple3<TaskManagerLocation, Integer, Integer>> getCurrentCpuAssignment();
 
+	/**
+	 * @return
+	 */
 	String getStatus();
 
+	/**
+	 * @param cpuIdFQN
+	 *
+	 * @return
+	 */
 	static int getCpuIdFromFQN(String cpuIdFQN) {
 		String[] idParts = cpuIdFQN.split(CPU_ID_DELIMITER);
 		if (idParts.length == 3) {

@@ -18,6 +18,8 @@
 
 package org.apache.flink.runtime.scheduler.agent;
 
+import org.apache.flink.api.java.tuple.Tuple2;
+
 import org.apache.flink.shaded.guava18.com.google.common.util.concurrent.AtomicDouble;
 
 import org.influxdb.InfluxDB;
@@ -180,6 +182,39 @@ public class InfluxDBMetricsClient {
 			log.warn(
 				"Exception occurred when retrieving metrics for operator CPU usage : {}",
 				e.getMessage());
+		}
+		return resultMap;
+	}
+
+	public Map<String, Tuple2<String, Integer>> getOperatorPlacementMetrics() {
+		Map<String, Tuple2<String, Integer>> resultMap = new HashMap<>();
+		try {
+			QueryResult queryResult = influxDB.query(new Query(
+				"SELECT tm_id, LAST(value) FROM taskmanager_job_task_operator_currentCpuId GROUP BY operator_id, subtask_index"));
+			List<QueryResult.Result> results = queryResult.getResults();
+			results.forEach(result -> {
+				List<QueryResult.Series> series = result.getSeries();
+				if (series != null && !series.isEmpty()) {
+					series.forEach(seriesElement -> {
+						List<Object> record = seriesElement.getValues().get(0);
+						if (record.size() == 3) {
+							resultMap.put(
+								seriesElement.getTags().get("operator_id") + "_" + seriesElement
+									.getTags()
+									.get("subtask_index"),
+								new Tuple2<>(
+									record.get(1).toString(),
+									Double.valueOf(record.get(2).toString()).intValue()));
+						} else {
+							log.warn("Size mismatch when reading metric record.");
+						}
+					});
+				}
+			});
+		} catch (Exception e) {
+			log.warn(
+				"Exception occurred when retrieving operator placement information : {}",
+				e.getMessage(), e);
 		}
 		return resultMap;
 	}

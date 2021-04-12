@@ -159,7 +159,7 @@ public class TrafficBasedSchedulingAgent extends AbstractSchedulingAgent {
 					unassignedVertices.add(targetVertex);
 				}
 			} else if (!targetVertexAssigned) {
-				Tuple3<TaskManagerLocation, Integer, Integer> cpuId = topLevelContainer.scheduleExecutionVertex(
+				Tuple3<TaskManagerLocation, Integer, Integer> cpuId = topLevelContainer.scheduleVertex(
 					targetVertex);
 				if (cpuId.f0 != null) {
 					placementAction.put(placementIndex.getAndIncrement(), cpuId);
@@ -169,7 +169,7 @@ public class TrafficBasedSchedulingAgent extends AbstractSchedulingAgent {
 					unassignedVertices.add(targetVertex);
 				}
 			} else if (!sourceVertexAssigned) {
-				Tuple3<TaskManagerLocation, Integer, Integer> cpuId = topLevelContainer.scheduleExecutionVertex(
+				Tuple3<TaskManagerLocation, Integer, Integer> cpuId = topLevelContainer.scheduleVertex(
 					sourceVertex);
 				if (cpuId.f0 != null) {
 					placementAction.put(placementIndex.getAndIncrement(), cpuId);
@@ -181,7 +181,7 @@ public class TrafficBasedSchedulingAgent extends AbstractSchedulingAgent {
 			}
 		});
 		unassignedVertices.forEach(schedulingExecutionVertex -> {
-			Tuple3<TaskManagerLocation, Integer, Integer> cpuId = topLevelContainer.scheduleExecutionVertex(
+			Tuple3<TaskManagerLocation, Integer, Integer> cpuId = topLevelContainer.scheduleVertex(
 				schedulingExecutionVertex);
 			if (cpuId.f0 == null) {
 				throw new FlinkRuntimeException(

@@ -32,7 +32,8 @@ public class MetricNames {
 	public static final String IO_NUM_RECORDS_IN_RATE = IO_NUM_RECORDS_IN + SUFFIX_RATE;
 	public static final String IO_NUM_RECORDS_OUT_RATE = IO_NUM_RECORDS_OUT + SUFFIX_RATE;
 	public static final String IO_NUM_RECORDS_PROCESSED = "numRecordsProcessed";
-	public static final String IO_NUM_RECORDS_PROCESSED_RATE = IO_NUM_RECORDS_PROCESSED + SUFFIX_RATE;
+	public static final String IO_NUM_RECORDS_PROCESSED_RATE =
+		IO_NUM_RECORDS_PROCESSED + SUFFIX_RATE;
 
 	public static final String IO_NUM_BYTES_IN = "numBytesIn";
 	public static final String IO_NUM_BYTES_OUT = "numBytesOut";
@@ -77,4 +78,5 @@ public class MetricNames {
 	public static final String TASK_IDLE_TIME = "idleTimeMs" + SUFFIX_RATE;
 
 	public static final String CURRENT_CPU_USAGE = "currentCpuUsage";
+	public static final String CURRENT_CPU_ID = "currentCpuId";
 }

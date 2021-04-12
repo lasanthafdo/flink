@@ -35,6 +35,7 @@ import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
+import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.flink.util.Preconditions.checkNotNull;
 import static org.apache.flink.util.Preconditions.checkState;
 
@@ -87,7 +88,7 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 	}
 
 	@Override
-	public Tuple3<TaskManagerLocation, Integer, Integer> scheduleExecutionVertex(
+	public Tuple3<TaskManagerLocation, Integer, Integer> scheduleVertex(
 		SchedulingExecutionVertex schedulingExecutionVertex) {
 		int cpuId = cpuAssignmentMap
 			.entrySet()
@@ -98,8 +99,21 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 			.orElse(-1);
 		if (cpuId != -1) {
 			cpuAssignmentMap.put(cpuId, schedulingExecutionVertex);
+			return new Tuple3<>(null, cpuId, socketId);
+		} else {
+			return NULL_PLACEMENT;
 		}
-		return new Tuple3<>(null, cpuId, socketId);
+	}
+
+	@Override
+	public Tuple3<TaskManagerLocation, Integer, Integer> scheduleVertex(
+		SchedulingExecutionVertex schedulingExecutionVertex,
+		TaskManagerLocation targetTaskMan,
+		Integer targetSocket) {
+		checkArgument(
+			targetSocket == this.socketId,
+			"Scheduling Error : Target socket is different from current socket!");
+		return scheduleVertex(schedulingExecutionVertex);
 	}
 
 	@Override

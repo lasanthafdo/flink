@@ -95,14 +95,32 @@ public class SchedulingCluster implements SchedulingExecutionContainer {
 	}
 
 	@Override
-	public Tuple3<TaskManagerLocation, Integer, Integer> scheduleExecutionVertex(
+	public Tuple3<TaskManagerLocation, Integer, Integer> scheduleVertex(
 		SchedulingExecutionVertex schedulingExecutionVertex) {
 		Optional<SchedulingExecutionContainer> targetNode = nodes.values()
 			.stream().filter(node -> node.getRemainingCapacity() >= 1)
 			.min(Comparator.comparing(sec -> sec.getResourceUsage(OPERATOR)));
 		return targetNode
-			.map(sec -> sec.scheduleExecutionVertex(schedulingExecutionVertex))
-			.orElse(new Tuple3<>(null, -1, -1));
+			.map(sec -> sec.scheduleVertex(schedulingExecutionVertex))
+			.orElse(SchedulingExecutionContainer.NULL_PLACEMENT);
+	}
+
+	@Override
+	public Tuple3<TaskManagerLocation, Integer, Integer> scheduleVertex(
+		SchedulingExecutionVertex schedulingExecutionVertex,
+		TaskManagerLocation targetTaskMan,
+		Integer targetSocket) {
+		Optional<SchedulingExecutionContainer> targetNode = nodes
+			.values()
+			.stream().filter(node -> node.getRemainingCapacity() >= 1)
+			.filter(node -> node.getId().equals(targetTaskMan.address().getHostAddress()))
+			.findFirst();
+		return targetNode
+			.map(sec -> sec.scheduleVertex(
+				schedulingExecutionVertex,
+				targetTaskMan,
+				targetSocket))
+			.orElse(SchedulingExecutionContainer.NULL_PLACEMENT);
 	}
 
 	@Override
@@ -191,7 +209,8 @@ public class SchedulingCluster implements SchedulingExecutionContainer {
 	@Override
 	public Map<SchedulingExecutionVertex, Tuple3<TaskManagerLocation, Integer, Integer>> getCurrentCpuAssignment() {
 		Map<SchedulingExecutionVertex, Tuple3<TaskManagerLocation, Integer, Integer>> currentlyAssignedCpus = new HashMap<>();
-		getSubContainers().forEach(subContainer -> currentlyAssignedCpus.putAll(subContainer.getCurrentCpuAssignment()));
+		getSubContainers()
+			.forEach(subContainer -> currentlyAssignedCpus.putAll(subContainer.getCurrentCpuAssignment()));
 		return currentlyAssignedCpus;
 	}
 
