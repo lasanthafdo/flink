@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.scheduler.agent;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
@@ -77,6 +78,18 @@ public class QActorCriticModel {
 		setupInfluxDBConnection();
 	}
 
+	@VisibleForTesting
+	QActorCriticModel(
+		List<Tuple2<InetAddress, Integer>> nodeSocketCounts,
+		int nVertices) {
+		this.socketStateIdMap = HashBiMap.create();
+		this.nSchedulingSocketSlots = getAvailableSlotsAfterDerivation(nodeSocketCounts);
+		this.stateSpaceMap = generateStateActionSpace(nVertices);
+		this.stateCount = stateSpaceMap.size();
+		this.actionCount = stateSpaceMap.size();
+		this.log = null;
+	}
+
 	private int getAvailableSlotsAfterDerivation(List<Tuple2<InetAddress, Integer>> taskManLocSlotCounts) {
 		AtomicInteger schedulingSlotCount = new AtomicInteger(0);
 		taskManLocSlotCounts.forEach(locSlotCount -> socketStateIdMap.put(
@@ -85,19 +98,34 @@ public class QActorCriticModel {
 		return schedulingSlotCount.get();
 	}
 
-	private Map<Integer, List<Integer>> generateStateActionSpace(int nVertices) {
+	@VisibleForTesting
+	Map<Integer, List<Integer>> generateStateActionSpace(int nVertices) {
 		Map<Integer, List<Integer>> actionMap = new HashMap<>();
-		CombinatoricsVector<Integer> slotIds = new CombinatoricsVector<>();
+		CombinatoricsVector<String> slotIds = new CombinatoricsVector<>();
 		socketStateIdMap.forEach((locSlotCountEntry, stateId) -> {
 			for (int i = 0; i < locSlotCountEntry.f1; i++) {
-				slotIds.addValue(stateId);
+				String proxyStateId = stateId.toString() + String.format("%03d", i);
+				slotIds.addValue(proxyStateId);
 			}
 		});
-		Generator<Integer> gen = createSimpleCombinationGenerator(slotIds, nVertices);
 		int actionId = 1;
-		for (ICombinatoricsVector<Integer> cpuSelection : gen.generateAllObjects()) {
-			// Puts a state/action ID and state pair like <1, {3,1,1,4,2,2,1}>
-			actionMap.put(actionId++, cpuSelection.getVector());
+		if(slotIds.getSize() > 1) {
+			Generator<String> gen = createSimpleCombinationGenerator(slotIds, nVertices);
+			for (ICombinatoricsVector<String> cpuSelection : gen.generateAllObjects()) {
+				// Puts a state/action ID and state pair like <1, {3,1,1,4,2,2,1}>
+				List<Integer> stateIdVector = cpuSelection
+					.getVector()
+					.stream()
+					.map(proxyStateId -> Integer.valueOf(proxyStateId.substring(
+						0,
+						proxyStateId.length() - 3)))
+					.collect(Collectors.toList());
+				actionMap.put(actionId++, stateIdVector);
+			}
+		} else if(slotIds.getSize() == 1) {
+			List<Integer> singletonActionList = new ArrayList<>();
+			singletonActionList.add(1);
+			actionMap.put(actionId, singletonActionList);
 		}
 		return actionMap;
 	}
