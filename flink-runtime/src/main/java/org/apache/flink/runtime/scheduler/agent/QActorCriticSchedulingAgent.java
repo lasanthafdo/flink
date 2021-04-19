@@ -109,6 +109,7 @@ public class QActorCriticSchedulingAgent extends AbstractSchedulingAgent {
 		this.qActorCriticModel = new QActorCriticModel(
 			nodeSocketCounts,
 			this.nVertices,
+			cpuLayout.coresPerSocket() * cpuLayout.threadsPerCore(),
 			log);
 	}
 

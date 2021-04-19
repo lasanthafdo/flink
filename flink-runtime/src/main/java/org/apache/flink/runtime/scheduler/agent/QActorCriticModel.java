@@ -33,7 +33,9 @@ import org.paukov.combinatorics.ICombinatoricsVector;
 import org.slf4j.Logger;
 
 import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -49,6 +51,7 @@ import static org.paukov.combinatorics.CombinatoricsFactory.createSimpleCombinat
  */
 public class QActorCriticModel {
 
+	private static final String INET_ADDR_SOCKET_COUNT_DELIM = ":";
 	private int stateCount;
 	private int actionCount;
 	private int previousStateId;
@@ -57,7 +60,7 @@ public class QActorCriticModel {
 	private final List<Transition> transitionList = new ArrayList<>();
 	private InfluxDBTransitionsClient influxDBTransitionsClient;
 	private final Map<Integer, List<Integer>> stateSpaceMap;
-	private final BiMap<Tuple2<InetAddress, Integer>, Integer> socketStateIdMap;
+	private final BiMap<String, Integer> socketScheduleIdMap;
 	private final int nSchedulingSocketSlots;
 	private final Logger log;
 	private int currentStateId;
@@ -66,11 +69,11 @@ public class QActorCriticModel {
 
 	public QActorCriticModel(
 		List<Tuple2<InetAddress, Integer>> nodeSocketCounts,
-		int nVertices,
+		int nVertices, int nCpusPerSocket,
 		Logger log) {
-		this.socketStateIdMap = HashBiMap.create();
+		this.socketScheduleIdMap = HashBiMap.create();
 		this.nSchedulingSocketSlots = getAvailableSlotsAfterDerivation(nodeSocketCounts);
-		this.stateSpaceMap = generateStateActionSpace(nVertices);
+		this.stateSpaceMap = generateStateActionSpace(nVertices, nCpusPerSocket);
 		this.stateCount = stateSpaceMap.size();
 		this.actionCount = stateSpaceMap.size();
 		this.log = log;
@@ -81,51 +84,64 @@ public class QActorCriticModel {
 	@VisibleForTesting
 	QActorCriticModel(
 		List<Tuple2<InetAddress, Integer>> nodeSocketCounts,
-		int nVertices) {
-		this.socketStateIdMap = HashBiMap.create();
+		int nVertices, int nCpusPerSocket) {
+		this.socketScheduleIdMap = HashBiMap.create();
 		this.nSchedulingSocketSlots = getAvailableSlotsAfterDerivation(nodeSocketCounts);
-		this.stateSpaceMap = generateStateActionSpace(nVertices);
+		this.stateSpaceMap = generateStateActionSpace(nVertices, nCpusPerSocket);
 		this.stateCount = stateSpaceMap.size();
 		this.actionCount = stateSpaceMap.size();
 		this.log = null;
 	}
 
-	private int getAvailableSlotsAfterDerivation(List<Tuple2<InetAddress, Integer>> taskManLocSlotCounts) {
-		AtomicInteger schedulingSlotCount = new AtomicInteger(0);
-		taskManLocSlotCounts.forEach(locSlotCount -> socketStateIdMap.put(
-			locSlotCount,
-			schedulingSlotCount.incrementAndGet()));
-		return schedulingSlotCount.get();
+	private String getSocketAddress(InetAddress node, Integer socket) {
+		return node.getHostAddress() + INET_ADDR_SOCKET_COUNT_DELIM + socket;
+	}
+
+	private Tuple2<InetAddress, Integer> getSocketId(String socketAddress) throws UnknownHostException {
+		String[] socketIdParts = socketAddress.split(INET_ADDR_SOCKET_COUNT_DELIM);
+		return new Tuple2<>(
+			InetAddress.getByName(socketIdParts[0]),
+			Integer.valueOf(socketIdParts[1]));
+	}
+
+	private int getAvailableSlotsAfterDerivation(List<Tuple2<InetAddress, Integer>> nodeSocketCounts) {
+		AtomicInteger scheduleIdCount = new AtomicInteger(0);
+		nodeSocketCounts.forEach(locSlotCount -> {
+			for (int i = 0; i < locSlotCount.f1; i++) {
+				socketScheduleIdMap.put(
+					getSocketAddress(locSlotCount.f0, i),
+					scheduleIdCount.incrementAndGet());
+			}
+		});
+		return scheduleIdCount.get();
 	}
 
 	@VisibleForTesting
-	Map<Integer, List<Integer>> generateStateActionSpace(int nVertices) {
+	void addToSocketScheduleIdMap(String socketAddress) {
+		Integer currentMaxId = socketScheduleIdMap
+			.values()
+			.stream()
+			.max(Comparator.naturalOrder())
+			.orElse(0);
+		socketScheduleIdMap.put(socketAddress, currentMaxId + 1);
+	}
+
+	@VisibleForTesting
+	Map<Integer, List<Integer>> generateStateActionSpace(int nVertices, int nCpusPerSocket) {
 		Map<Integer, List<Integer>> actionMap = new HashMap<>();
-		CombinatoricsVector<String> slotIds = new CombinatoricsVector<>();
-		socketStateIdMap.forEach((locSlotCountEntry, stateId) -> {
-			for (int i = 0; i < locSlotCountEntry.f1; i++) {
-				String proxyStateId = stateId.toString() + String.format("%03d", i);
-				slotIds.addValue(proxyStateId);
+		CombinatoricsVector<Integer> slotIds = new CombinatoricsVector<>();
+		socketScheduleIdMap.forEach((nodeSocketCountEntry, stateId) -> {
+			for (int i = 0; i < nCpusPerSocket; i++) {
+				//TODO Is this approach generating more states than necessary?
+				slotIds.addValue(stateId);
 			}
 		});
 		int actionId = 1;
-		if(slotIds.getSize() > 1) {
-			Generator<String> gen = createSimpleCombinationGenerator(slotIds, nVertices);
-			for (ICombinatoricsVector<String> cpuSelection : gen.generateAllObjects()) {
-				// Puts a state/action ID and state pair like <1, {3,1,1,4,2,2,1}>
-				List<Integer> stateIdVector = cpuSelection
-					.getVector()
-					.stream()
-					.map(proxyStateId -> Integer.valueOf(proxyStateId.substring(
-						0,
-						proxyStateId.length() - 3)))
-					.collect(Collectors.toList());
-				actionMap.put(actionId++, stateIdVector);
-			}
-		} else if(slotIds.getSize() == 1) {
-			List<Integer> singletonActionList = new ArrayList<>();
-			singletonActionList.add(1);
-			actionMap.put(actionId, singletonActionList);
+		Generator<Integer> gen = createSimpleCombinationGenerator(slotIds, nVertices);
+		for (ICombinatoricsVector<Integer> cpuSelection : gen.generateAllObjects()) {
+			// Puts a state/action ID and state pair like <1, {3,1,1,4,2,2,1}>
+			List<Integer> stateIdVector = cpuSelection.getVector();
+			actionMap.put(actionId++, stateIdVector);
 		}
 		return actionMap;
 	}
@@ -133,7 +149,7 @@ public class QActorCriticModel {
 	public int getStateFor(List<Tuple3<TaskManagerLocation, Integer, Integer>> cpuAssignment) {
 		List<Integer> cpuAssignmentStateVector = cpuAssignment
 			.stream()
-			.map(operatorLoc -> socketStateIdMap.get(new Tuple2<>(
+			.map(operatorLoc -> socketScheduleIdMap.get(getSocketAddress(
 				operatorLoc.f0.address(),
 				operatorLoc.f2)))
 			.collect(Collectors.toList());
@@ -173,9 +189,17 @@ public class QActorCriticModel {
 	public List<Tuple2<InetAddress, Integer>> getPlacementSolution(int action) {
 		List<Tuple2<InetAddress, Integer>> placementSolution = new ArrayList<>();
 		List<Integer> placementAction = stateSpaceMap.get(action);
-		placementAction.forEach(stateId -> placementSolution.add(socketStateIdMap
-			.inverse()
-			.get(stateId)));
+		placementAction.forEach(stateId -> {
+			try {
+				placementSolution.add(getSocketId(socketScheduleIdMap
+					.inverse()
+					.get(stateId)));
+			} catch (UnknownHostException e) {
+				log.warn(
+					"Incorrect placement solution due to : {}",
+					e.getMessage());
+			}
+		});
 		return placementSolution;
 	}
 

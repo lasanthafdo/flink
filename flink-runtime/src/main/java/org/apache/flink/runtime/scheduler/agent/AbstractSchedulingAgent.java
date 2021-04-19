@@ -289,33 +289,42 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		Map<String, Double> cpuFrequencyMetrics = influxDBMetricsClient.getCpuFrequencyMetrics(nCpus);
 		Map<String, Double> operatorUsageMetrics = influxDBMetricsClient.getOperatorUsageMetrics();
 		if (!waitingForResourceManager) {
-			currentOpPlacementInfo.forEach((operatorId, tmIdCpuIdTuple) -> {
-				TaskManagerLocation tmLoc = Objects.requireNonNull(
-					taskManLocSlotCountMap.get(tmIdCpuIdTuple.f0),
-					"Could not find task manager for resource id " + tmIdCpuIdTuple.f0).f0;
-				Integer cpuId = tmIdCpuIdTuple.f1;
-				Integer socketId = cpuLayout.socketId(cpuId);
-				SchedulingExecutionVertex vertex = StreamSupport
-					.stream(schedulingTopology.getVertices().spliterator(), true)
-					.filter(schedulingExecutionVertex -> {
-						String vertexId = schedulingExecutionVertex.getId().getJobVertexId() + "_"
-							+ schedulingExecutionVertex.getId().getSubtaskIndex();
-						return vertexId.equals(operatorId);
-					})
-					.findAny()
-					.orElse(null);
-				if (tmLoc != null && cpuId >= 0 && socketId >= 0 && vertex != null) {
-					schedulingCluster.forceSchedule(vertex, new Tuple3<>(tmLoc, cpuId, socketId));
-				} else {
-					log.warn(
-						"Could not update placement information for operator {} running on task "
-							+ "manager at {}, with CPU ID {}, running on socket ID {}",
-						operatorId,
-						tmLoc,
-						cpuId,
-						socketId);
-				}
-			});
+			if (!currentOpPlacementInfo.isEmpty()) {
+				schedulingCluster.releaseAllExecutionVertices();
+				currentOpPlacementInfo.forEach((operatorId, tmIdCpuIdTuple) -> {
+					TaskManagerLocation tmLoc = null;
+					Tuple2<TaskManagerLocation, Integer> taskManSlotCount = taskManLocSlotCountMap.get(
+						tmIdCpuIdTuple.f0);
+					if (taskManSlotCount != null) {
+						tmLoc = taskManSlotCount.f0;
+					}
+					Integer cpuId = tmIdCpuIdTuple.f1;
+					Integer socketId = cpuLayout.socketId(cpuId);
+					SchedulingExecutionVertex vertex = StreamSupport
+						.stream(schedulingTopology.getVertices().spliterator(), true)
+						.filter(schedulingExecutionVertex -> {
+							String vertexId =
+								schedulingExecutionVertex.getId().getJobVertexId() + "_"
+									+ schedulingExecutionVertex.getId().getSubtaskIndex();
+							return vertexId.equals(operatorId);
+						})
+						.findAny()
+						.orElse(null);
+					if (tmLoc != null && cpuId >= 0 && socketId >= 0 && vertex != null) {
+						schedulingCluster.forceSchedule(
+							vertex,
+							new Tuple3<>(tmLoc, cpuId, socketId));
+					} else {
+						log.warn(
+							"Could not update placement information for operator {} running on task "
+								+ "manager at {}, with CPU ID {}, running on socket ID {}",
+							operatorId,
+							tmLoc,
+							cpuId,
+							socketId);
+					}
+				});
+			}
 			schedulingCluster.updateResourceUsageMetrics(
 				SchedulingExecutionContainer.CPU,
 				cpuUsageMetrics);
@@ -504,9 +513,20 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 			AtomicInteger vertexCount = new AtomicInteger(1);
 			IterableUtils
 				.toStream(schedulingTopology.getVertices())
-				.forEachOrdered(schedulingExecutionVertex -> currentPlacementTemp.put(
-					vertexCount.getAndIncrement(),
-					cpuAssignmentMap.get(schedulingExecutionVertex)));
+				.forEachOrdered(schedulingExecutionVertex -> {
+					Tuple3<TaskManagerLocation, Integer, Integer> currentVertexAssignment = cpuAssignmentMap
+						.get(schedulingExecutionVertex);
+					if (currentVertexAssignment == null) {
+						log.warn(
+							"Cannot find CPU assignment for vertex {}",
+							schedulingExecutionVertex.getTaskName() + ":"
+								+ schedulingExecutionVertex.getSubTaskIndex());
+						currentVertexAssignment = getTopLevelContainer().scheduleVertex(
+							schedulingExecutionVertex);
+					}
+					currentPlacementTemp.put(
+						vertexCount.getAndIncrement(), currentVertexAssignment);
+				});
 		} else {
 			log.warn("Could not retrieve current CPU assignment for this job.");
 		}
@@ -527,9 +547,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		return suggestedCpuIds.size() == nVertices
 			&& suggestedCpuIds
 			.stream()
-			.noneMatch(cpuId -> cpuId < 0 || cpuId > (nCpus - 1))
-			&& suggestedPlacementAction.stream().distinct().count()
-			== suggestedPlacementAction.size();
+			.noneMatch(cpuId -> cpuId < -1 || cpuId > (nCpus - 1));
 	}
 
 	protected CompletableFuture<Collection<Acknowledge>> rescheduleEager() {

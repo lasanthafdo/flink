@@ -27,29 +27,48 @@ import org.junit.Test;
 
 import java.net.InetAddress;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 public class QActorCriticModelTest extends TestLogger {
 
 	private QActorCriticModel qActorCriticModel;
+	private int nCpusPerSocket = 8;
+	private int nVertices = 7;
+
 	@Before
 	public void setUp() {
 		List<Tuple2<InetAddress, Integer>> nodeSocketCounts = generateNodeSocketInfo();
-		qActorCriticModel = new QActorCriticModel(nodeSocketCounts, 7);
+		qActorCriticModel = new QActorCriticModel(nodeSocketCounts, nVertices, nCpusPerSocket);
 	}
 
 	private List<Tuple2<InetAddress, Integer>> generateNodeSocketInfo() {
 		List<Tuple2<InetAddress, Integer>> nodeSocketCounts = new ArrayList<>();
-		nodeSocketCounts.add(new Tuple2<>(InetAddress.getLoopbackAddress(), 4));
+		nodeSocketCounts.add(new Tuple2<>(InetAddress.getLoopbackAddress(), 2));
 		return nodeSocketCounts;
 	}
 
 	@Test
-	public void testStateActionSpaceGeneration() {
-		Map<Integer, List<Integer>> stateActionMap = qActorCriticModel.generateStateActionSpace(7);
-		Map<Integer, List<Integer>> expected = new HashMap<>();
-		Assert.assertEquals(expected, stateActionMap);
+	public void testStateActionSpaceGenerationSingleNode() {
+		Map<Integer, List<Integer>> stateActionMap = qActorCriticModel.generateStateActionSpace(
+			nVertices,
+			nCpusPerSocket);
+		int expectedSize = 11440;
+		Assert.assertEquals(expectedSize, stateActionMap.size());
+	}
+
+	@Test
+	public void testStateActionSpaceGenerationMultiNode() {
+		qActorCriticModel.addToSocketScheduleIdMap("10.38.205.112:0");
+		qActorCriticModel.addToSocketScheduleIdMap("10.38.205.112:1");
+//		qActorCriticModel.addToSocketScheduleIdMap("10.38.205.61:0");
+//		qActorCriticModel.addToSocketScheduleIdMap("10.38.205.61:1");
+		nVertices = 40;
+		nCpusPerSocket = 12;
+		Map<Integer, List<Integer>> stateActionMap = qActorCriticModel.generateStateActionSpace(
+			nVertices,
+			nCpusPerSocket);
+		int expectedSize = 0;
+		Assert.assertEquals(expectedSize, stateActionMap.size());
 	}
 }
