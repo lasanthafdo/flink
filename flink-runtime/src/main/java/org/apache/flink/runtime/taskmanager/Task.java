@@ -577,6 +577,7 @@ public class Task implements Runnable, TaskSlotPayload, TaskActions, PartitionPr
 	}
 
 	public int getCpuId() {
+		cpuId = Affinity.getCpu();
 		return cpuId;
 	}
 

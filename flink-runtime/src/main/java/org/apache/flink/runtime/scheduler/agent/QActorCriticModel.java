@@ -69,11 +69,11 @@ public class QActorCriticModel {
 
 	public QActorCriticModel(
 		List<Tuple2<InetAddress, Integer>> nodeSocketCounts,
-		int nVertices, int nCpusPerSocket,
+		int nVertices, int nProcessorsPerSocket,
 		Logger log) {
 		this.socketScheduleIdMap = HashBiMap.create();
 		this.nSchedulingSocketSlots = getAvailableSlotsAfterDerivation(nodeSocketCounts);
-		this.stateSpaceMap = generateStateActionSpace(nVertices, nCpusPerSocket);
+		this.stateSpaceMap = generateStateActionSpace(nVertices, nProcessorsPerSocket);
 		this.stateCount = stateSpaceMap.size();
 		this.actionCount = stateSpaceMap.size();
 		this.log = log;
@@ -156,9 +156,23 @@ public class QActorCriticModel {
 		return stateSpaceMap
 			.entrySet()
 			.stream()
-			.filter(entry -> entry.getValue().size() == cpuAssignmentStateVector.size() && entry
-				.getValue()
-				.containsAll(cpuAssignmentStateVector))
+			.filter(entry -> {
+				boolean condition = false;
+				if (entry != null && entry.getValue() != null) {
+					condition =
+						entry.getValue().size() == cpuAssignmentStateVector.size() && entry
+							.getValue()
+							.containsAll(cpuAssignmentStateVector);
+
+				} else {
+					if (entry == null) {
+						log.warn("Entry was null");
+					} else {
+						log.warn("Entry value for state {} was null", entry.getKey());
+					}
+				}
+				return condition;
+			})
 			.map(
 				Map.Entry::getKey)
 			.findFirst()

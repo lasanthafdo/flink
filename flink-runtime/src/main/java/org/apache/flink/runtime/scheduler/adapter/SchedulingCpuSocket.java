@@ -101,6 +101,9 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 			cpuAssignmentMap.put(cpuId, schedulingExecutionVertex);
 			return new Tuple3<>(null, cpuId, socketId);
 		} else {
+			log.warn("Could not find available CPU to schedule {}",
+				schedulingExecutionVertex.getTaskName() + ":"
+					+ schedulingExecutionVertex.getSubTaskIndex());
 			return NULL_PLACEMENT;
 		}
 	}

@@ -523,6 +523,11 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 								+ schedulingExecutionVertex.getSubTaskIndex());
 						currentVertexAssignment = getTopLevelContainer().scheduleVertex(
 							schedulingExecutionVertex);
+						log.warn(
+							"Obtained arbitrary scheduling at {}:{}:{}",
+							currentVertexAssignment.f0,
+							currentVertexAssignment.f2,
+							currentVertexAssignment.f1);
 					}
 					currentPlacementTemp.put(
 						vertexCount.getAndIncrement(), currentVertexAssignment);

@@ -42,7 +42,7 @@ public class SchedulingAgentUtils {
 		Configuration jobMasterConfiguration,
 		ScheduledExecutorService executorService) {
 
-		int nDefaultConfigElements = 4;
+		int nDefaultConfigElements = 5;
 		ScheduleMode scheduleMode = jobGraph.getScheduleMode();
 		switch (scheduleMode) {
 			case PINNED:
@@ -80,6 +80,7 @@ public class SchedulingAgentUtils {
 						long waitTimeOut = Long.parseLong(configElements[1]);
 						int numRetries = Integer.parseInt(configElements[2]);
 						int updatePeriod = Integer.parseInt(configElements[3]);
+						boolean taskPerCore = Boolean.parseBoolean(configElements[4]);
 
 						return new TrafficBasedSchedulingAgent(
 							log,
@@ -108,6 +109,7 @@ public class SchedulingAgentUtils {
 						long waitTimeOut = Long.parseLong(configElements[1]);
 						int numRetries = Integer.parseInt(configElements[2]);
 						int updatePeriod = Integer.parseInt(configElements[3]);
+						boolean taskPerCore = Boolean.parseBoolean(configElements[4]);
 
 						return new QActorCriticSchedulingAgent(
 							log,
@@ -117,7 +119,9 @@ public class SchedulingAgentUtils {
 							triggerPeriod,
 							waitTimeOut,
 							numRetries,
-							updatePeriod);
+							updatePeriod,
+							jobGraph.getMaximumParallelism(),
+							taskPerCore);
 					} else {
 						throw new IllegalConfigurationException(
 							"Incorrect number of arguments in the scheduling agent configuration string.");

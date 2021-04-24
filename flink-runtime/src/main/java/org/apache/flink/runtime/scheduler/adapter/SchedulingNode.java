@@ -99,6 +99,11 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 					schedulingExecutionVertex,
 					candidateSlot,
 					targetSocket);
+			} else {
+				log.warn(
+					"Could not find suitable CPU socket to schedule {}",
+					schedulingExecutionVertex.getTaskName() + ":"
+						+ schedulingExecutionVertex.getSubTaskIndex());
 			}
 		}
 		return scheduledCpuInfo;
@@ -160,6 +165,12 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 						+ candidateSlot.getPhysicalSlotNumber(),
 					maxParallelism);
 			}
+		} else {
+			log.warn(
+				"Scheduling {} on target socket {} failed",
+				schedulingExecutionVertex.getTaskName() + ":"
+					+ schedulingExecutionVertex.getSubTaskIndex(),
+				targetSocket.getId());
 		}
 		return scheduledCpuInfo;
 	}

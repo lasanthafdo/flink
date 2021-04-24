@@ -58,7 +58,9 @@ public class QActorCriticSchedulingAgent extends AbstractSchedulingAgent {
 		long triggerPeriod,
 		long waitTimeout,
 		int numRetries,
-		int updatePeriod) {
+		int updatePeriod,
+		int maxParallelism,
+		boolean taskPerCore) {
 
 		super(
 			log,
@@ -66,7 +68,8 @@ public class QActorCriticSchedulingAgent extends AbstractSchedulingAgent {
 			executionGraph,
 			schedulingStrategy,
 			waitTimeout,
-			numRetries, 4);
+			numRetries,
+			maxParallelism);
 
 		this.executorService = checkNotNull(executorService);
 		this.updatePeriodInSeconds = updatePeriod;

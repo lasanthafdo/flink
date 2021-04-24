@@ -100,9 +100,15 @@ public class SchedulingCluster implements SchedulingExecutionContainer {
 		Optional<SchedulingExecutionContainer> targetNode = nodes.values()
 			.stream().filter(node -> node.getRemainingCapacity() >= 1)
 			.min(Comparator.comparing(sec -> sec.getResourceUsage(OPERATOR)));
-		return targetNode
-			.map(sec -> sec.scheduleVertex(schedulingExecutionVertex))
-			.orElse(SchedulingExecutionContainer.NULL_PLACEMENT);
+		Tuple3<TaskManagerLocation, Integer, Integer> vertexAssignment = NULL_PLACEMENT;
+		if (targetNode.isPresent()) {
+			vertexAssignment = targetNode.get().scheduleVertex(schedulingExecutionVertex);
+		} else {
+			log.warn("Could not find available node to schedule vertex {}",
+				schedulingExecutionVertex.getTaskName() + ":"
+					+ schedulingExecutionVertex.getSubTaskIndex());
+		}
+		return vertexAssignment;
 	}
 
 	@Override
