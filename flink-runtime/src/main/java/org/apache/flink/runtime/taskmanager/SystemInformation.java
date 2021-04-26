@@ -18,22 +18,100 @@
 
 package org.apache.flink.runtime.taskmanager;
 
+import org.apache.flink.util.FlinkRuntimeException;
+
 import com.sun.jna.LastErrorException;
 import com.sun.jna.Library;
 import com.sun.jna.Native;
+import com.sun.jna.NativeLong;
+import com.sun.jna.Structure;
+
+import java.util.BitSet;
+import java.util.Collections;
+import java.util.List;
 
 /**
  * System information using syscalls
  */
 public class SystemInformation {
+
+	/*
+	 *  Copied from OpenHFT Java Affinity library
+	 *
+	 *  https://github.com/OpenHFT/Java-Thread-Affinity
+	 * */
+	public static class cpu_set_t extends Structure {
+		static final int __CPU_SETSIZE = 1024;
+		static final int __NCPUBITS = 8 * NativeLong.SIZE;
+		static final int SIZE_OF_CPU_SET_T = (__CPU_SETSIZE / __NCPUBITS) * NativeLong.SIZE;
+		static List<String> FIELD_ORDER = Collections.singletonList("__bits");
+		public NativeLong[] __bits = new NativeLong[__CPU_SETSIZE / __NCPUBITS];
+
+		public cpu_set_t() {
+			for (int i = 0; i < __bits.length; i++) {
+				__bits[i] = new NativeLong(0);
+			}
+		}
+
+		@Override
+		protected List<String> getFieldOrder() {
+			return FIELD_ORDER;
+		}
+	}
+
 	private interface CStdLib extends Library {
 		int sched_getcpu() throws LastErrorException;
+
+
+		int sched_setaffinity(
+			final int pid,
+			final int cpu_set_size,
+			cpu_set_t cpu_mask) throws LastErrorException;
+
+		int sched_getaffinity(
+			final int pid,
+			final int cpu_set_size,
+			cpu_set_t cpu_mask) throws LastErrorException;
 	}
 
 	private final CStdLib cStdLib;
 
 	SystemInformation() {
 		cStdLib = Native.loadLibrary("c", CStdLib.class);
+	}
+
+	public BitSet getCpuAffinity() {
+		final cpu_set_t cpu_mask = new cpu_set_t();
+		final int size = cpu_set_t.SIZE_OF_CPU_SET_T;
+		int result = cStdLib.sched_getaffinity(0, size, cpu_mask);
+		if (result == 0) {
+			BitSet affinity = new BitSet(cpu_set_t.SIZE_OF_CPU_SET_T);
+			int i = 0;
+			for (NativeLong nativeLong : cpu_mask.__bits) {
+				for (int j = 0; j < Long.SIZE; j++) {
+					affinity.set(i++, ((nativeLong.longValue() >>> j) & 1) != 0);
+				}
+			}
+			return affinity;
+		} else {
+			throw new FlinkRuntimeException("Could not get the CPU affinity for this platform");
+		}
+	}
+
+	public int setCpuAffinity(BitSet affinity) {
+		cpu_set_t cpu_mask = new cpu_set_t();
+		int size = cpu_set_t.SIZE_OF_CPU_SET_T;
+		long[] bits = affinity.toLongArray();
+		for (int i = 0; i < bits.length; i++) {
+			cpu_mask.__bits[i].setValue(bits[i]);
+		}
+		return cStdLib.sched_setaffinity(0, size, cpu_mask);
+	}
+
+	public int setCpuAffinity(int cpuId) {
+		BitSet affinity = new BitSet(Runtime.getRuntime().availableProcessors());
+		affinity.set(cpuId);
+		return setCpuAffinity(affinity);
 	}
 
 	public int getCpuId() {

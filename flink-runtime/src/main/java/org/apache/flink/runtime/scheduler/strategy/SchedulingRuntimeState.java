@@ -44,5 +44,9 @@ public interface SchedulingRuntimeState {
 
 	List<Tuple3<TaskManagerLocation, Integer, Integer>> getPlacementSolution();
 
+	void logPlacementAction(
+		int actionId,
+		List<Tuple3<TaskManagerLocation, Integer, Integer>> placementAction);
+
 	boolean isValidPlacementAction(List<Tuple3<TaskManagerLocation, Integer, Integer>> suggestedPlacementAction);
 }

@@ -128,6 +128,7 @@ public class QActorCriticSchedulingAgent extends AbstractSchedulingAgent {
 		List<Tuple2<InetAddress, Integer>> modelSuggestedPlacementAction = qActorCriticModel.getPlacementSolution(
 			currentAction);
 		setFromModelPlacementAction(modelSuggestedPlacementAction);
+		logPlacementAction(currentAction, suggestedPlacementAction);
 		if (!isValidPlacementAction(suggestedPlacementAction)) {
 			throw new FlinkRuntimeException(
 				"Invalid placement action " + suggestedPlacementAction + " suggested.");

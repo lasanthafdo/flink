@@ -101,6 +101,7 @@ import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
+import java.util.BitSet;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -580,7 +581,6 @@ public class Task implements Runnable, TaskSlotPayload, TaskActions, PartitionPr
 	}
 
 	public int getCpuId() {
-		cpuId = Affinity.getCpu();
 		return cpuId;
 	}
 
@@ -681,38 +681,35 @@ public class Task implements Runnable, TaskSlotPayload, TaskActions, PartitionPr
 
 		if (pinnedToCpu) {
 			if (cpuId >= 0) {
+				BitSet oldCpuAffinity = systemInformation.getCpuAffinity();
 				try {
-					Affinity.setAffinity(cpuId);
+					systemInformation.setCpuAffinity(cpuId);
 					int actualCpuId = systemInformation.getCpuId();
 					LOG.info(
 						"Task {} scheduled to run on CPU {} is running on CPU {}",
 						taskInfo.getTaskNameWithSubtasks(),
 						cpuId, actualCpuId);
-					if (Affinity.getCpu() != actualCpuId) {
-						LOG.warn("Mismatch between Affinity supplied CPU ID {} "
-								+ "and CPU ID {} obtained directly via native call",
-							Affinity.getCpu(), actualCpuId);
-					}
 					cpuId = systemInformation.getCpuId();
 					doRun();
 				} finally {
-					Affinity.resetToBaseAffinity();
+					systemInformation.setCpuAffinity(oldCpuAffinity);
 					terminationFuture.complete(executionState);
 				}
 			} else {
 				// This is a workaround to somehow assign a CPU ID when no scheduling information
 				// is available due to limitation in design
 				cpuId = Math.abs(cpuId) % AffinityLock.cpuLayout().cpus();
+				BitSet oldCpuAffinity = systemInformation.getCpuAffinity();
 				try {
-					Affinity.setAffinity(cpuId);
+					systemInformation.setCpuAffinity(cpuId);
 					LOG.info(
 						"Task {} scheduled to run by default on CPU {} is running on CPU {}",
 						taskInfo.getTaskNameWithSubtasks(),
-						cpuId, Affinity.getCpu());
-					cpuId = Affinity.getCpu();
+						cpuId, systemInformation.getCpuId());
+					cpuId = systemInformation.getCpuId();
 					doRun();
 				} finally {
-					Affinity.resetToBaseAffinity();
+					systemInformation.setCpuAffinity(oldCpuAffinity);
 					terminationFuture.complete(executionState);
 				}
 			}

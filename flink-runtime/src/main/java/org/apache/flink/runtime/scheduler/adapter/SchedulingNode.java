@@ -29,7 +29,6 @@ import net.openhft.affinity.CpuLayout;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 
-import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -312,21 +311,21 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 					assignedExecutionVertices.add(schedulingExecutionVertex);
 					slotAssignmentMap.put(
 						entry.getKey(), assignedExecutionVertices);
+					return evictedVertex;
 				} else if (assignedExecutionVertices.size() < maxParallelism) {
 					assignedExecutionVertices.add(schedulingExecutionVertex);
+					return evictedVertex;
 				}
-				return evictedVertex;
 			}
 		}
 		// Reaching here means that non of the assignments above succeeded
 		// So we need to release the resources and return false
 		cpuSockets.get(cpuId.f2).releaseExecutionVertex(schedulingExecutionVertex);
-		throw new FlinkRuntimeException(MessageFormat.format(
-			"Invalid placement : Could not schedule vertex {} on CPU ID {} of node {}",
-			schedulingExecutionVertex.getTaskName() + ":"
-				+ schedulingExecutionVertex.getSubTaskIndex(),
-			cpuId.f1, cpuId.f0.address().getHostAddress()
-		));
+		throw new FlinkRuntimeException("Invalid placement : Could not schedule vertex "
+			+ schedulingExecutionVertex.getTaskName() + ":"
+			+ schedulingExecutionVertex.getSubTaskIndex() + " on CPU ID " + cpuId.f1 + " of node "
+			+ cpuId.f0.address().getHostAddress()
+		);
 	}
 
 	@Override

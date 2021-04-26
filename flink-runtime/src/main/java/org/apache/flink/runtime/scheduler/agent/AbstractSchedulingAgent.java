@@ -612,6 +612,30 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		});
 	}
 
+	@Override
+	public void logPlacementAction(
+		int actionId,
+		List<Tuple3<TaskManagerLocation, Integer, Integer>> placementAction) {
+		if (placementAction != null && !placementAction.isEmpty()) {
+			StringBuilder logMessage = new StringBuilder();
+			for (int i = 0; i < placementAction.size(); i++) {
+				Tuple3<TaskManagerLocation, Integer, Integer> currentOpPlacement = placementAction.get(
+					i);
+				logMessage
+					.append("[")
+					.append(i)
+					.append(":")
+					.append(currentOpPlacement.f0.address().getHostAddress())
+					.append(",")
+					.append(currentOpPlacement.f2)
+					.append(",")
+					.append(currentOpPlacement.f1)
+					.append("], ");
+			}
+			log.info("Placement action for state ID {} is {} ", actionId, logMessage);
+		}
+	}
+
 	private static class SimpleSlotInfo implements SlotInfo {
 		private final AllocationID allocationID;
 		private final String taskManagerResourceId;
