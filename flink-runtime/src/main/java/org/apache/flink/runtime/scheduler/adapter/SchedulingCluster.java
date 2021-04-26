@@ -104,7 +104,8 @@ public class SchedulingCluster implements SchedulingExecutionContainer {
 		if (targetNode.isPresent()) {
 			vertexAssignment = targetNode.get().scheduleVertex(schedulingExecutionVertex);
 		} else {
-			log.warn("Could not find available node to schedule vertex {}",
+			log.warn(
+				"Could not find available node to schedule vertex {}",
 				schedulingExecutionVertex.getTaskName() + ":"
 					+ schedulingExecutionVertex.getSubTaskIndex());
 		}
@@ -148,7 +149,7 @@ public class SchedulingCluster implements SchedulingExecutionContainer {
 
 	@Override
 	public void releaseExecutionVertex(SchedulingExecutionVertex schedulingExecutionVertex) {
-		// Not implemented
+		getSubContainers().forEach(node -> node.releaseExecutionVertex(schedulingExecutionVertex));
 	}
 
 	@Override
@@ -171,15 +172,17 @@ public class SchedulingCluster implements SchedulingExecutionContainer {
 	}
 
 	@Override
-	public boolean forceSchedule(
+	public SchedulingExecutionVertex forceSchedule(
 		SchedulingExecutionVertex schedulingExecutionVertex,
 		Tuple3<TaskManagerLocation, Integer, Integer> cpuId) {
-		for (SchedulingExecutionContainer subContainer : getSubContainers()) {
-			if (subContainer.forceSchedule(schedulingExecutionVertex, cpuId)) {
-				return true;
-			}
+		String nodeIp = cpuId.f0.address().getHostAddress();
+		SchedulingExecutionVertex evictedVertex = nodes
+			.get(nodeIp)
+			.forceSchedule(schedulingExecutionVertex, cpuId);
+		if (evictedVertex != null) {
+			releaseExecutionVertex(evictedVertex);
 		}
-		return false;
+		return evictedVertex;
 	}
 
 	@Override

@@ -23,10 +23,12 @@ import org.apache.flink.runtime.jobmaster.SlotInfo;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionContainer;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
+import org.apache.flink.util.FlinkRuntimeException;
 
 import net.openhft.affinity.CpuLayout;
 import org.slf4j.Logger;
 
+import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -101,7 +103,8 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 			cpuAssignmentMap.put(cpuId, schedulingExecutionVertex);
 			return new Tuple3<>(null, cpuId, socketId);
 		} else {
-			log.warn("Could not find available CPU to schedule {}",
+			log.warn(
+				"Could not find available CPU to schedule {}",
 				schedulingExecutionVertex.getTaskName() + ":"
 					+ schedulingExecutionVertex.getSubTaskIndex());
 			return NULL_PLACEMENT;
@@ -171,7 +174,7 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 	}
 
 	@Override
-	public boolean forceSchedule(
+	public SchedulingExecutionVertex forceSchedule(
 		SchedulingExecutionVertex schedulingExecutionVertex,
 		Tuple3<TaskManagerLocation, Integer, Integer> cpuId) {
 		if (cpuAssignmentMap.containsKey(cpuId.f1)) {
@@ -187,9 +190,13 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 						+ schedulingExecutionVertex.getSubTaskIndex());
 			}
 			cpuAssignmentMap.put(cpuId.f1, schedulingExecutionVertex);
-			return true;
+			return currentlyAssignedVertex;
 		} else {
-			return false;
+			throw new FlinkRuntimeException(MessageFormat.format(
+				"Invalid placement : Socket {} of node {} does not contain CPU ID {}",
+				getId(),
+				cpuId.f0.address().getHostAddress(),
+				cpuId.f1));
 		}
 	}
 

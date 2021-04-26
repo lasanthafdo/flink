@@ -367,9 +367,11 @@ public class Task implements Runnable, TaskSlotPayload, TaskActions, PartitionPr
 	/**
 	 * Indicates whether the task should be pinned to a CPU or not
 	 */
-	private boolean pinnedToCpu;
+	private final boolean pinnedToCpu;
 
 	private int cpuId;
+
+	private SystemInformation systemInformation;
 
 	/**
 	 * This class loader should be set as the context class loader for threads that may dynamically load user code.
@@ -524,6 +526,7 @@ public class Task implements Runnable, TaskSlotPayload, TaskActions, PartitionPr
 		invokableHasBeenCanceled = new AtomicBoolean(false);
 		this.pinnedToCpu = pinToCpu;
 		this.cpuId = cpuId;
+		this.systemInformation = new SystemInformation();
 		// finally, create the executing thread, but do not start it
 
 		executingThread = new Thread(TASK_THREADS_GROUP, this, taskNameWithSubtask);
@@ -678,21 +681,30 @@ public class Task implements Runnable, TaskSlotPayload, TaskActions, PartitionPr
 
 		if (pinnedToCpu) {
 			if (cpuId >= 0) {
-				try (AffinityLock a1 = AffinityLock.acquireLock(cpuId)) {
+				try {
+					Affinity.setAffinity(cpuId);
+					int actualCpuId = systemInformation.getCpuId();
 					LOG.info(
 						"Task {} scheduled to run on CPU {} is running on CPU {}",
 						taskInfo.getTaskNameWithSubtasks(),
-						cpuId, Affinity.getCpu());
-					cpuId = Affinity.getCpu();
+						cpuId, actualCpuId);
+					if (Affinity.getCpu() != actualCpuId) {
+						LOG.warn("Mismatch between Affinity supplied CPU ID {} "
+								+ "and CPU ID {} obtained directly via native call",
+							Affinity.getCpu(), actualCpuId);
+					}
+					cpuId = systemInformation.getCpuId();
 					doRun();
 				} finally {
+					Affinity.resetToBaseAffinity();
 					terminationFuture.complete(executionState);
 				}
 			} else {
 				// This is a workaround to somehow assign a CPU ID when no scheduling information
-				// is available due to limitations in OpenHFT library
+				// is available due to limitation in design
 				cpuId = Math.abs(cpuId) % AffinityLock.cpuLayout().cpus();
-				try (AffinityLock a1 = AffinityLock.acquireLock(cpuId)) {
+				try {
+					Affinity.setAffinity(cpuId);
 					LOG.info(
 						"Task {} scheduled to run by default on CPU {} is running on CPU {}",
 						taskInfo.getTaskNameWithSubtasks(),
@@ -700,6 +712,7 @@ public class Task implements Runnable, TaskSlotPayload, TaskActions, PartitionPr
 					cpuId = Affinity.getCpu();
 					doRun();
 				} finally {
+					Affinity.resetToBaseAffinity();
 					terminationFuture.complete(executionState);
 				}
 			}

@@ -110,7 +110,7 @@ public interface SchedulingExecutionContainer {
 	 *
 	 * @return
 	 */
-	boolean forceSchedule(
+	SchedulingExecutionVertex forceSchedule(
 		SchedulingExecutionVertex schedulingExecutionVertex,
 		Tuple3<TaskManagerLocation, Integer, Integer> cpuId);
 

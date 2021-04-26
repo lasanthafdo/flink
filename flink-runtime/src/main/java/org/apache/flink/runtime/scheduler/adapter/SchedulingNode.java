@@ -23,17 +23,21 @@ import org.apache.flink.runtime.jobmaster.SlotInfo;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionContainer;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
+import org.apache.flink.util.FlinkRuntimeException;
 
 import net.openhft.affinity.CpuLayout;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 
+import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.apache.flink.util.Preconditions.checkArgument;
 
@@ -42,7 +46,7 @@ import static org.apache.flink.util.Preconditions.checkArgument;
  */
 public class SchedulingNode implements SchedulingExecutionContainer {
 	private final Map<Integer, SchedulingExecutionContainer> cpuSockets;
-	private final Map<SlotInfo, List<SchedulingExecutionVertex>> slotAssignmentMap;
+	private final Map<SlotInfo, Set<SchedulingExecutionVertex>> slotAssignmentMap;
 	private final String nodeIp;
 	private final CpuLayout cpuLayout;
 	private final Integer maxParallelism;
@@ -75,7 +79,7 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 	@Override
 	public void addTaskSlot(SlotInfo slotInfo) {
 		checkArgument(slotInfo.getTaskManagerLocation().address().getHostAddress().equals(nodeIp));
-		slotAssignmentMap.putIfAbsent(slotInfo, new ArrayList<>(maxParallelism));
+		slotAssignmentMap.putIfAbsent(slotInfo, new HashSet<>(maxParallelism));
 	}
 
 	@Override
@@ -151,7 +155,7 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 			schedulingExecutionVertex);
 		if (scheduledCpuInfo != NULL_PLACEMENT) {
 			scheduledCpuInfo.f0 = candidateSlot.getTaskManagerLocation();
-			List<SchedulingExecutionVertex> assignedVertexList = slotAssignmentMap.get(
+			Set<SchedulingExecutionVertex> assignedVertexList = slotAssignmentMap.get(
 				candidateSlot);
 			if (assignedVertexList != null && assignedVertexList.size() < maxParallelism) {
 				assignedVertexList.add(schedulingExecutionVertex);
@@ -216,7 +220,7 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 						if (cpuIdIndex != 0) {
 							selectedVertex = targetVertex;
 						}
-						List<SchedulingExecutionVertex> targetSlotList = slotAssignmentMap.get(
+						Set<SchedulingExecutionVertex> targetSlotList = slotAssignmentMap.get(
 							targetSlot);
 						if (targetSlotList != null && targetSlotList.size() < maxParallelism) {
 							targetSlotList.add(selectedVertex);
@@ -239,7 +243,14 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 
 	@Override
 	public void releaseExecutionVertex(SchedulingExecutionVertex schedulingExecutionVertex) {
-		// Not implemented
+		slotAssignmentMap
+			.values()
+			.stream()
+			.filter(verticesSet -> verticesSet.contains(schedulingExecutionVertex))
+			.findAny()
+			.ifPresent(targetVerticesSet -> targetVerticesSet.remove(schedulingExecutionVertex));
+		getSubContainers()
+			.forEach(socket -> socket.releaseExecutionVertex(schedulingExecutionVertex));
 	}
 
 	@Override
@@ -248,7 +259,7 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 			log.debug("Node status: {}", getStatus());
 		}
 		cpuSockets.values().forEach(SchedulingExecutionContainer::releaseAllExecutionVertices);
-		slotAssignmentMap.values().forEach(List::clear);
+		slotAssignmentMap.values().forEach(Set::clear);
 	}
 
 	@Override
@@ -274,33 +285,48 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 	}
 
 	@Override
-	public boolean forceSchedule(
+	public SchedulingExecutionVertex forceSchedule(
 		SchedulingExecutionVertex schedulingExecutionVertex,
 		Tuple3<TaskManagerLocation, Integer, Integer> cpuId) {
-		for (SchedulingExecutionContainer subContainer : getSubContainers()) {
-			if (subContainer.forceSchedule(schedulingExecutionVertex, cpuId)) {
-				for (Map.Entry<SlotInfo, List<SchedulingExecutionVertex>> entry : slotAssignmentMap
-					.entrySet()) {
-					if (verifyEqual(entry.getKey().getTaskManagerLocation(), cpuId.f0)) {
-						if (entry.getValue() == null) {
-							List<SchedulingExecutionVertex> assignedExecutionVertices = new ArrayList<>(
-								maxParallelism);
-							assignedExecutionVertices.add(schedulingExecutionVertex);
-							slotAssignmentMap.put(
-								entry.getKey(), assignedExecutionVertices);
-							return true;
-						} else if (entry.getValue().size() < maxParallelism) {
-							entry.getValue().add(schedulingExecutionVertex);
-							return true;
-						}
-					}
+		boolean alreadyScheduledInNode = slotAssignmentMap
+			.values()
+			.stream()
+			.anyMatch(vertexInSlotMap -> vertexInSlotMap.contains(schedulingExecutionVertex));
+		if (alreadyScheduledInNode) {
+			log.warn(
+				"Vertex {} already scheduled in node {}",
+				schedulingExecutionVertex.getTaskName() + ":"
+					+ schedulingExecutionVertex.getSubTaskIndex(),
+				getId());
+		}
+		SchedulingExecutionVertex evictedVertex = cpuSockets
+			.get(cpuId.f2)
+			.forceSchedule(schedulingExecutionVertex, cpuId);
+		for (Map.Entry<SlotInfo, Set<SchedulingExecutionVertex>> entry : slotAssignmentMap
+			.entrySet()) {
+			if (verifyEqual(entry.getKey().getTaskManagerLocation(), cpuId.f0)) {
+				Set<SchedulingExecutionVertex> assignedExecutionVertices = entry.getValue();
+				if (assignedExecutionVertices == null) {
+					assignedExecutionVertices = new HashSet<>(
+						maxParallelism);
+					assignedExecutionVertices.add(schedulingExecutionVertex);
+					slotAssignmentMap.put(
+						entry.getKey(), assignedExecutionVertices);
+				} else if (assignedExecutionVertices.size() < maxParallelism) {
+					assignedExecutionVertices.add(schedulingExecutionVertex);
 				}
-				// Reaching here means that non of the assignments above succeeded
-				// So we need to release the resources and return false
-				subContainer.releaseExecutionVertex(schedulingExecutionVertex);
+				return evictedVertex;
 			}
 		}
-		return false;
+		// Reaching here means that non of the assignments above succeeded
+		// So we need to release the resources and return false
+		cpuSockets.get(cpuId.f2).releaseExecutionVertex(schedulingExecutionVertex);
+		throw new FlinkRuntimeException(MessageFormat.format(
+			"Invalid placement : Could not schedule vertex {} on CPU ID {} of node {}",
+			schedulingExecutionVertex.getTaskName() + ":"
+				+ schedulingExecutionVertex.getSubTaskIndex(),
+			cpuId.f1, cpuId.f0.address().getHostAddress()
+		));
 	}
 
 	@Override
