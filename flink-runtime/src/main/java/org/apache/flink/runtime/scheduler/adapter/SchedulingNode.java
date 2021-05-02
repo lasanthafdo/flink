@@ -381,16 +381,21 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 	public String getStatus() {
 		StringBuilder currentSchedulingStateMsg = new StringBuilder();
 		currentSchedulingStateMsg
-			.append("{Node: {Available CPUs : ").append(getRemainingCapacity())
-			.append(", Container CPU Usage : ").append(getResourceUsage(CPU))
-			.append(", Operator CPU Usage :").append(getResourceUsage(OPERATOR))
-			.append(", Sockets : [");
+			.append("Node ")
+			.append(getId())
+			.append(" : (nProcUnits(Avail) : ")
+			.append(getRemainingCapacity())
+			.append(", totCPU : ")
+			.append(getResourceUsage(CPU))
+			.append(", operatorCPU :")
+			.append(getResourceUsage(OPERATOR))
+			.append(") Sockets : [");
 		cpuSockets
 			.values()
 			.forEach(cpuSocket -> currentSchedulingStateMsg
 				.append(cpuSocket.getStatus())
 				.append(","));
-		currentSchedulingStateMsg.append("]}}");
+		currentSchedulingStateMsg.append("]");
 		return currentSchedulingStateMsg.toString();
 	}
 }

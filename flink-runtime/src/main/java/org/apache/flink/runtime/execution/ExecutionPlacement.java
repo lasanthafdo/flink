@@ -32,13 +32,15 @@ public class ExecutionPlacement implements Serializable {
 	private final TaskManagerLocation taskManagerLocation;
 	private final int cpuId;
 	private final int socketId;
+	private final boolean taskPerCore;
 
 	public ExecutionPlacement(
 		TaskManagerLocation taskManagerLocation,
-		int cpuId, int socketId) {
+		int cpuId, int socketId, boolean taskPerCore) {
 		this.taskManagerLocation = taskManagerLocation;
 		this.cpuId = cpuId;
 		this.socketId = socketId;
+		this.taskPerCore = taskPerCore;
 	}
 
 	public TaskManagerLocation getTaskManagerLocation() {
@@ -51,5 +53,9 @@ public class ExecutionPlacement implements Serializable {
 
 	public int getSocketId() {
 		return socketId;
+	}
+
+	public boolean isTaskPerCore() {
+		return taskPerCore;
 	}
 }

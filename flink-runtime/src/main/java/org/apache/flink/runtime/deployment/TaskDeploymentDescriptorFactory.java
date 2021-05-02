@@ -103,6 +103,7 @@ public class TaskDeploymentDescriptorFactory {
 			subtaskIndex,
 			attemptNumber,
 			targetSlotNumber,
+			executionPlacement.isTaskPerCore(),
 			pinToCpu,
 			executionPlacement.getCpuId(),
 			taskRestore,
@@ -160,7 +161,7 @@ public class TaskDeploymentDescriptorFactory {
 				.getTaskInformationOrBlobKey()),
 			executionGraph.getJobID(),
 			executionGraph.getScheduleMode().allowLazyDeployment(),
-			executionVertex.getDeploymentConstraint().getPinToCpu(),
+			executionVertex.getDeploymentConstraints().getPinToCpu(),
 			executionVertex.getExecutionPlacement(),
 			executionVertex.getParallelSubtaskIndex(),
 			executionVertex.getAllInputEdges());

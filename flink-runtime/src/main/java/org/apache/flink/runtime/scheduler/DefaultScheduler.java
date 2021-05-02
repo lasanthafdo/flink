@@ -39,7 +39,6 @@ import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobmanager.scheduler.NoResourceAvailableException;
 import org.apache.flink.runtime.jobmaster.LogicalSlot;
-import org.apache.flink.runtime.jobmaster.slotpool.SlotPool;
 import org.apache.flink.runtime.jobmaster.slotpool.ThrowingSlotProvider;
 import org.apache.flink.runtime.metrics.groups.JobManagerJobMetricGroup;
 import org.apache.flink.runtime.operators.coordination.OperatorCoordinator;
@@ -119,7 +118,6 @@ public class DefaultScheduler extends SchedulerBase implements SchedulerOperatio
 		final SchedulingStrategyFactory schedulingStrategyFactory,
 		final FailoverStrategy.Factory failoverStrategyFactory,
 		final RestartBackoffTimeStrategy restartBackoffTimeStrategy,
-		final SlotPool slotPool,
 		final ExecutionVertexOperations executionVertexOperations,
 		final ExecutionVertexVersioner executionVertexVersioner,
 		final ExecutionSlotAllocatorFactory executionSlotAllocatorFactory) throws Exception {
@@ -165,7 +163,7 @@ public class DefaultScheduler extends SchedulerBase implements SchedulerOperatio
 			restartBackoffTimeStrategy);
 		this.schedulingStrategy = schedulingStrategyFactory.createInstance(
 			this,
-			getSchedulingTopology());
+			getSchedulingTopology(), log);
 		this.executionSlotAllocator = checkNotNull(executionSlotAllocatorFactory).createInstance(
 			getInputsLocationsRetriever());
 
@@ -403,12 +401,21 @@ public class DefaultScheduler extends SchedulerBase implements SchedulerOperatio
 	}
 
 	private List<SlotExecutionVertexAssignment> allocateSlots(final List<ExecutionVertexDeploymentOption> executionVertexDeploymentOptions) {
-		return executionSlotAllocator.allocateSlotsFor(executionVertexDeploymentOptions
-			.stream()
-			.map(ExecutionVertexDeploymentOption::getExecutionVertexId)
-			.map(this::getExecutionVertex)
-			.map(ExecutionVertexSchedulingRequirementsMapper::from)
-			.collect(Collectors.toList()));
+		if (schedulingAgent != null) {
+			return executionSlotAllocator.allocateSlotsFor(executionVertexDeploymentOptions
+				.stream()
+				.map(ExecutionVertexDeploymentOption::getExecutionVertexId)
+				.map(this::getExecutionVertex)
+				.map(ExecutionVertexSchedulingRequirementsMapper::fromSchedule)
+				.collect(Collectors.toList()));
+		} else {
+			return executionSlotAllocator.allocateSlotsFor(executionVertexDeploymentOptions
+				.stream()
+				.map(ExecutionVertexDeploymentOption::getExecutionVertexId)
+				.map(this::getExecutionVertex)
+				.map(ExecutionVertexSchedulingRequirementsMapper::from)
+				.collect(Collectors.toList()));
+		}
 	}
 
 	private static List<DeploymentHandle> createDeploymentHandles(

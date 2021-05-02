@@ -122,7 +122,11 @@ public class TaskAsyncCallTest extends TestLogger {
 			awaitLatch.await();
 
 			for (int i = 1; i <= numCalls; i++) {
-				task.triggerCheckpointBarrier(i, 156865867234L, CheckpointOptions.forCheckpointWithDefaultLocation(), false);
+				task.triggerCheckpointBarrier(
+					i,
+					156865867234L,
+					CheckpointOptions.forCheckpointWithDefaultLocation(),
+					false);
 			}
 
 			triggerLatch.await();
@@ -144,7 +148,11 @@ public class TaskAsyncCallTest extends TestLogger {
 			awaitLatch.await();
 
 			for (int i = 1; i <= numCalls; i++) {
-				task.triggerCheckpointBarrier(i, 156865867234L, CheckpointOptions.forCheckpointWithDefaultLocation(), false);
+				task.triggerCheckpointBarrier(
+					i,
+					156865867234L,
+					CheckpointOptions.forCheckpointWithDefaultLocation(),
+					false);
 				task.notifyCheckpointComplete(i);
 			}
 
@@ -163,7 +171,8 @@ public class TaskAsyncCallTest extends TestLogger {
 			.build();
 
 		ResultPartitionConsumableNotifier consumableNotifier = new NoOpResultPartitionConsumableNotifier();
-		PartitionProducerStateChecker partitionProducerStateChecker = mock(PartitionProducerStateChecker.class);
+		PartitionProducerStateChecker partitionProducerStateChecker = mock(
+			PartitionProducerStateChecker.class);
 		Executor executor = mock(Executor.class);
 		TaskMetricGroup taskMetricGroup = UnregisteredMetricGroups.createUnregisteredTaskMetricGroup();
 
@@ -193,6 +202,7 @@ public class TaskAsyncCallTest extends TestLogger {
 			Collections.<ResultPartitionDeploymentDescriptor>emptyList(),
 			Collections.<InputGateDeploymentDescriptor>emptyList(),
 			0,
+			false,
 			false,
 			-1,
 			mock(MemoryManager.class),
@@ -250,14 +260,16 @@ public class TaskAsyncCallTest extends TestLogger {
 		}
 
 		@Override
-		public Future<Boolean> triggerCheckpointAsync(CheckpointMetaData checkpointMetaData, CheckpointOptions checkpointOptions, boolean advanceToEndOfEventTime) {
+		public Future<Boolean> triggerCheckpointAsync(
+			CheckpointMetaData checkpointMetaData,
+			CheckpointOptions checkpointOptions,
+			boolean advanceToEndOfEventTime) {
 			lastCheckpointId++;
 			if (checkpointMetaData.getCheckpointId() == lastCheckpointId) {
 				if (lastCheckpointId == numCalls) {
 					triggerLatch.trigger();
 				}
-			}
-			else if (this.error == null) {
+			} else if (this.error == null) {
 				this.error = new Exception("calls out of order");
 				synchronized (this) {
 					notifyAll();
@@ -267,7 +279,10 @@ public class TaskAsyncCallTest extends TestLogger {
 		}
 
 		@Override
-		public void triggerCheckpointOnBarrier(CheckpointMetaData checkpointMetaData, CheckpointOptions checkpointOptions, CheckpointMetrics checkpointMetrics) {
+		public void triggerCheckpointOnBarrier(
+			CheckpointMetaData checkpointMetaData,
+			CheckpointOptions checkpointOptions,
+			CheckpointMetrics checkpointMetrics) {
 			throw new UnsupportedOperationException("Should not be called");
 		}
 

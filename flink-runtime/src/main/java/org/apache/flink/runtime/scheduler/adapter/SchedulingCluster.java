@@ -48,18 +48,21 @@ public class SchedulingCluster implements SchedulingExecutionContainer {
 	private final List<TaskManagerLocation> taskManagerLocations;
 	private final CpuLayout cpuLayout;
 	private final Integer maxParallelism;
+	private final boolean taskPerCore;
 	private final Logger log;
 
 	public SchedulingCluster(
 		Collection<TaskManagerLocation> taskManagerLocations,
 		CpuLayout cpuLayout,
 		Integer maxParallelism,
+		boolean taskPerCore,
 		Logger log) {
 		this.nodes = new HashMap<>();
 		this.taskManagerLocations = new ArrayList<>();
 		this.taskManagerLocations.addAll(taskManagerLocations);
 		this.cpuLayout = cpuLayout;
 		this.maxParallelism = maxParallelism;
+		this.taskPerCore = taskPerCore;
 		this.log = log;
 	}
 
@@ -227,16 +230,16 @@ public class SchedulingCluster implements SchedulingExecutionContainer {
 	public String getStatus() {
 		StringBuilder currentSchedulingStateMsg = new StringBuilder();
 		currentSchedulingStateMsg
-			.append("{Cluster: {Available CPUs : ").append(getRemainingCapacity())
-			.append(", Container CPU Usage : ").append(getResourceUsage(CPU))
-			.append(", Operator CPU Usage :").append(getResourceUsage(OPERATOR))
-			.append(", Nodes : [");
+			.append("Cluster: (nProcUnits(Avail) : ").append(getRemainingCapacity())
+			.append(", totCPU : ").append(getResourceUsage(CPU))
+			.append(", operatorCPU :").append(getResourceUsage(OPERATOR))
+			.append(") Nodes : [");
 		nodes
 			.values()
 			.forEach(node -> currentSchedulingStateMsg
 				.append(node.getStatus())
 				.append(","));
-		currentSchedulingStateMsg.append("]}}");
+		currentSchedulingStateMsg.append("]");
 		return currentSchedulingStateMsg.toString();
 	}
 }

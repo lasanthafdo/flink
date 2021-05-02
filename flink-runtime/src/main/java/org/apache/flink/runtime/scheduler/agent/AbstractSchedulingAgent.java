@@ -67,6 +67,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
+import static org.apache.flink.runtime.scheduler.agent.SchedulingAgentUtils.getVertexName;
 import static org.apache.flink.util.Preconditions.checkNotNull;
 import static org.apache.flink.util.Preconditions.checkState;
 
@@ -77,7 +78,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	public static final double INTER_SOCKET_TRAFFIC_SCALING_FACTOR = 1.25;
 	protected final SchedulingTopology schedulingTopology;
 	protected final Logger log;
-	protected final int nCpus;
+	protected final int nProcessingUnits;
 	protected int nSchedulingSlots;
 	protected final int nVertices;
 	protected List<Tuple3<TaskManagerLocation, Integer, Integer>> suggestedPlacementAction;
@@ -99,6 +100,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	private final long waitTimeout;
 	private final int numRetries;
 	private final int maxParallelism;
+	protected final boolean taskPerCore;
 	private final SchedulingStrategy schedulingStrategy;
 	private SchedulingCluster schedulingCluster;
 	private ResourceManagerGateway resourceManagerGateway;
@@ -112,15 +114,20 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		ExecutionGraph executionGraph,
 		SchedulingStrategy schedulingStrategy,
 		long waitTimeout,
-		int numRetries, int maxParallelism) {
+		int numRetries, int maxParallelism, boolean taskPerCore) {
 
 		this.executionGraph = checkNotNull(executionGraph);
 		this.schedulingStrategy = checkNotNull(schedulingStrategy);
 		this.schedulingTopology = checkNotNull(executionGraph.getSchedulingTopology());
+		this.taskPerCore = taskPerCore;
 		this.log = log;
 		this.cpuLayout = AffinityLock.cpuLayout();
 		//TODO Make nCpus user-configurable
-		this.nCpus = cpuLayout.cpus();
+		if (this.taskPerCore) {
+			this.nProcessingUnits = cpuLayout.coresPerSocket() * cpuLayout.sockets();
+		} else {
+			this.nProcessingUnits = cpuLayout.cpus();
+		}
 		this.nSchedulingSlots = 0;
 		this.interOpEdgeThroughput = new HashMap<>();
 		this.edgeMap = new HashMap<>();
@@ -133,8 +140,6 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		this.maxParallelism = maxParallelism;
 		this.currentPlacementAction = new ArrayList<>();
 		this.nVertices = executionGraph.getTotalNumberOfVertices();
-		this.schedulingStrategy.setTopLevelContainer(getTopLevelContainer());
-
 		this.suggestedPlacementAction = new ArrayList<>();
 	}
 
@@ -188,6 +193,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 			tmList,
 			this.cpuLayout,
 			this.maxParallelism,
+			this.taskPerCore,
 			log);
 		taskManLocSlotCountMap.forEach((tmResourceId, tmLocNumSlotsTuple) -> {
 			TaskManagerLocation tmLoc = tmLocNumSlotsTuple.f0;
@@ -202,7 +208,8 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 			.map(tuple -> tuple.f0.address().getHostAddress())
 			.distinct()
 			.forEach(nodeAddress -> {
-				for (int cpuId = 0; cpuId < nCpus; cpuId++) {
+				List<Integer> cpuIdList = getCpuIdList(taskPerCore, cpuLayout);
+				for (Integer cpuId : cpuIdList) {
 					String cpuIdString =
 						nodeAddress + ":" + cpuLayout.socketId(cpuId) + ":" + cpuId;
 					schedulingCluster.addCpu(cpuIdString);
@@ -210,9 +217,29 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 			});
 		try {
 			onResourceInitialization();
+			schedulingStrategy.setTopLevelContainer(schedulingCluster);
 		} catch (Throwable e) {
 			log.error("Unexpected error: " + e.getMessage(), e);
 		}
+	}
+
+	private List<Integer> getCpuIdList(boolean taskPerCore, CpuLayout cpuLayout) {
+		List<Integer> cpuIdList = new ArrayList<>();
+		if (taskPerCore) {
+			List<Integer> visitedCoreIdList = new ArrayList<>();
+			for (int cpuId = 0; cpuId < cpuLayout.cpus(); cpuId++) {
+				int currentCoreId = cpuLayout.coreId(cpuId);
+				if (!visitedCoreIdList.contains(currentCoreId)) {
+					cpuIdList.add(cpuId);
+					visitedCoreIdList.add(currentCoreId);
+				}
+			}
+		} else {
+			for (int cpuId = 0; cpuId < cpuLayout.cpus(); cpuId++) {
+				cpuIdList.add(cpuId);
+			}
+		}
+		return cpuIdList;
 	}
 
 	protected abstract void onResourceInitialization();
@@ -272,11 +299,11 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	}
 
 	protected Map<String, Double> getCpuUsageMetrics() {
-		return influxDBMetricsClient.getCpuUsageMetrics(nCpus);
+		return influxDBMetricsClient.getCpuUsageMetrics(nProcessingUnits);
 	}
 
 	protected Map<String, Double> getCpuFrequencyMetrics() {
-		return influxDBMetricsClient.getCpuFrequencyMetrics(nCpus);
+		return influxDBMetricsClient.getCpuFrequencyMetrics(nProcessingUnits);
 	}
 
 	protected void updateStateInformation() {
@@ -285,8 +312,10 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 			"taskmanager_job_task_edge_numRecordsProcessedPerSecond",
 			"edge_id",
 			"rate");
-		Map<String, Double> cpuUsageMetrics = influxDBMetricsClient.getCpuUsageMetrics(nCpus);
-		Map<String, Double> cpuFrequencyMetrics = influxDBMetricsClient.getCpuFrequencyMetrics(nCpus);
+		Map<String, Double> cpuUsageMetrics = influxDBMetricsClient.getCpuUsageMetrics(
+			nProcessingUnits);
+		Map<String, Double> cpuFrequencyMetrics = influxDBMetricsClient.getCpuFrequencyMetrics(
+			nProcessingUnits);
 		Map<String, Double> operatorUsageMetrics = influxDBMetricsClient.getOperatorUsageMetrics();
 		if (!waitingForResourceManager) {
 			Map<String, SchedulingExecutionVertex> currentOperators = StreamSupport
@@ -488,6 +517,9 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 			"Shutting down scheduling agent for {} scheduling mode",
 			executionGraph.getScheduleMode());
 		if (updateExecutor != null) {
+			log.info(
+				"Shutting down update thread for {} scheduling mode",
+				executionGraph.getScheduleMode());
 			updateExecutor.cancel(true);
 		}
 		influxDBMetricsClient.closeConnection();
@@ -521,13 +553,15 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 					if (currentVertexAssignment == null) {
 						log.warn(
 							"Cannot find CPU assignment for vertex {}",
-							schedulingExecutionVertex.getTaskName() + ":"
-								+ schedulingExecutionVertex.getSubTaskIndex());
+							getVertexName(schedulingExecutionVertex));
 						currentVertexAssignment = getTopLevelContainer().scheduleVertex(
 							schedulingExecutionVertex);
 						log.warn(
-							"Obtained arbitrary scheduling at {}:{}:{}",
-							currentVertexAssignment.f0,
+							"Vertex {} arbitrarily scheduled at {}:{}:{}",
+							getVertexName(schedulingExecutionVertex),
+							currentVertexAssignment.f0 != null ? currentVertexAssignment.f0
+								.address()
+								.getHostAddress() : "null",
 							currentVertexAssignment.f2,
 							currentVertexAssignment.f1);
 					}
@@ -549,12 +583,12 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	public boolean isValidPlacementAction(List<Tuple3<TaskManagerLocation, Integer, Integer>> suggestedPlacementAction) {
 		List<Integer> suggestedCpuIds = suggestedPlacementAction
 			.stream()
-			.map(tuple -> (Integer) tuple.getField(1))
+			.map(placementInfo -> placementInfo.f1)
 			.collect(Collectors.toList());
 		return suggestedCpuIds.size() == nVertices
 			&& suggestedCpuIds
 			.stream()
-			.noneMatch(cpuId -> cpuId < -1 || cpuId > (nCpus - 1));
+			.noneMatch(procUnitId -> procUnitId < -1 || procUnitId > (nProcessingUnits - 1));
 	}
 
 	protected CompletableFuture<Collection<Acknowledge>> rescheduleEager() {
@@ -572,12 +606,12 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 						.getVertex()
 						.getTaskNameWithSubtaskIndex();
 					for (int i = 0; i < numRetries; i++) {
-						if (attempt.getState() != ExecutionState.CREATED) {
+						if (!attempt.isFinished() && attempt.getState() != ExecutionState.CREATED) {
 							try {
 								Thread.sleep(waitTimeout);
 							} catch (InterruptedException exception) {
 								log.warn(
-									"Thread waiting on halting of task {} was interrupted due to cause : {}",
+									"Thread waiting on halting of task {} was interrupted due to : {}",
 									taskNameWithSubtaskIndex,
 									exception);
 							}
@@ -590,7 +624,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 							return;
 						}
 					}
-					log.error("Couldn't halt execution for task {}.", taskNameWithSubtaskIndex);
+					log.error("Couldn't halt execution for task {}", taskNameWithSubtaskIndex);
 					FutureUtils.completedExceptionally(new Exception(
 						"Couldn't halt execution for task " + taskNameWithSubtaskIndex));
 				});
@@ -604,7 +638,9 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 				throw new CompletionException("Halt process unsuccessful", fail);
 			} else {
 				try {
-					schedulingStrategy.startScheduling(this);
+					if (executionGraph.getState() == JobStatus.RUNNING) {
+						schedulingStrategy.startScheduling(this);
+					}
 				} catch (Exception e) {
 					log.error("Unexpected error : {}", e.getMessage(), e);
 				}
@@ -624,11 +660,11 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 				logMessage
 					.append("[")
 					.append(i)
-					.append(":")
+					.append("->")
 					.append(currentOpPlacement.f0.address().getHostAddress())
-					.append(",")
+					.append(":")
 					.append(currentOpPlacement.f2)
-					.append(",")
+					.append(":")
 					.append(currentOpPlacement.f1)
 					.append("], ");
 			}

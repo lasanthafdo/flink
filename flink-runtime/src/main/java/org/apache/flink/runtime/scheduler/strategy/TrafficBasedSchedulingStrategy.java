@@ -28,6 +28,8 @@ import org.apache.flink.runtime.scheduler.SchedulerOperations;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 import org.apache.flink.util.FlinkRuntimeException;
 
+import org.slf4j.Logger;
+
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -42,6 +44,7 @@ public class TrafficBasedSchedulingStrategy implements SchedulingStrategy {
 	private final SchedulerOperations schedulerOperations;
 	private final SchedulingTopology schedulingTopology;
 	private final DeploymentOption deploymentOption = new DeploymentOption(false);
+	private boolean taskPerCore = false;
 
 	public TrafficBasedSchedulingStrategy(
 		SchedulerOperations schedulerOperations,
@@ -66,6 +69,11 @@ public class TrafficBasedSchedulingStrategy implements SchedulingStrategy {
 	@Override
 	public void setTopLevelContainer(SchedulingExecutionContainer schedulingExecutionContainer) {
 
+	}
+
+	@Override
+	public void setTaskPerCoreScheduling(boolean taskPerCoreScheduling) {
+		this.taskPerCore = taskPerCoreScheduling;
 	}
 
 	@Override
@@ -120,7 +128,10 @@ public class TrafficBasedSchedulingStrategy implements SchedulingStrategy {
 				Tuple3<TaskManagerLocation, Integer, Integer> placementInfoTuple = placementAction.get(
 					placementIndex.getAndIncrement());
 				schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
-					placementInfoTuple.f0, placementInfoTuple.f1, placementInfoTuple.f2));
+					placementInfoTuple.f0,
+					placementInfoTuple.f1,
+					placementInfoTuple.f2,
+					taskPerCore));
 			});
 		} else {
 			throw new FlinkRuntimeException(
@@ -136,7 +147,7 @@ public class TrafficBasedSchedulingStrategy implements SchedulingStrategy {
 		@Override
 		public SchedulingStrategy createInstance(
 			SchedulerOperations schedulerOperations,
-			SchedulingTopology schedulingTopology) {
+			SchedulingTopology schedulingTopology, Logger log) {
 			return new TrafficBasedSchedulingStrategy(schedulerOperations, schedulingTopology);
 		}
 	}

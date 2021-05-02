@@ -24,6 +24,8 @@ import org.apache.flink.runtime.scheduler.DeploymentOption;
 import org.apache.flink.runtime.scheduler.ExecutionVertexDeploymentOption;
 import org.apache.flink.runtime.scheduler.SchedulerOperations;
 
+import org.slf4j.Logger;
+
 import java.util.List;
 import java.util.Set;
 
@@ -39,6 +41,7 @@ public class PinnedSchedulingStrategy implements SchedulingStrategy {
 	private final SchedulingTopology schedulingTopology;
 
 	private final DeploymentOption deploymentOption = new DeploymentOption(false);
+	private boolean taskPerCore = false;
 
 	public PinnedSchedulingStrategy(
 		SchedulerOperations schedulerOperations,
@@ -63,12 +66,19 @@ public class PinnedSchedulingStrategy implements SchedulingStrategy {
 	}
 
 	@Override
+	public void setTaskPerCoreScheduling(boolean taskPerCoreScheduling) {
+		this.taskPerCore = taskPerCoreScheduling;
+	}
+
+	@Override
 	public void restartTasks(Set<ExecutionVertexID> verticesToRestart) {
 		allocateSlotsAndDeploy(verticesToRestart);
 	}
 
 	@Override
-	public void onExecutionStateChange(ExecutionVertexID executionVertexId, ExecutionState executionState) {
+	public void onExecutionStateChange(
+		ExecutionVertexID executionVertexId,
+		ExecutionState executionState) {
 		// Will not react to these notifications.
 	}
 
@@ -94,7 +104,7 @@ public class PinnedSchedulingStrategy implements SchedulingStrategy {
 		@Override
 		public SchedulingStrategy createInstance(
 			SchedulerOperations schedulerOperations,
-			SchedulingTopology schedulingTopology) {
+			SchedulingTopology schedulingTopology, Logger log) {
 			return new PinnedSchedulingStrategy(schedulerOperations, schedulingTopology);
 		}
 	}

@@ -103,8 +103,7 @@ public class JvmExitOnFatalErrorTest {
 		try {
 			testProcess.startProcess();
 			testProcess.waitFor();
-		}
-		finally {
+		} finally {
 			testProcess.destroy();
 		}
 	}
@@ -115,7 +114,8 @@ public class JvmExitOnFatalErrorTest {
 
 	private static final class KillOnFatalErrorProcess extends TestJvmProcess {
 
-		public KillOnFatalErrorProcess() throws Exception {}
+		public KillOnFatalErrorProcess() throws Exception {
+		}
 
 		@Override
 		public String getName() {
@@ -156,16 +156,25 @@ public class JvmExitOnFatalErrorTest {
 				final SerializedValue<ExecutionConfig> execConfig = new SerializedValue<>(new ExecutionConfig());
 
 				final JobInformation jobInformation = new JobInformation(
-						jid, "Test Job", execConfig, new Configuration(),
-						Collections.emptyList(), Collections.emptyList());
+					jid, "Test Job", execConfig, new Configuration(),
+					Collections.emptyList(), Collections.emptyList());
 
 				final TaskInformation taskInformation = new TaskInformation(
-						jobVertexId, "Test Task", 1, 1, OomInvokable.class.getName(), new Configuration());
+					jobVertexId,
+					"Test Task",
+					1,
+					1,
+					OomInvokable.class.getName(),
+					new Configuration());
 
-				final MemoryManager memoryManager = MemoryManagerBuilder.newBuilder().setMemorySize(1024 * 1024).build();
+				final MemoryManager memoryManager = MemoryManagerBuilder
+					.newBuilder()
+					.setMemorySize(1024 * 1024)
+					.build();
 				final IOManager ioManager = new IOManagerAsync();
 
-				final ShuffleEnvironment<?, ?> shuffleEnvironment = new NettyShuffleEnvironmentBuilder().build();
+				final ShuffleEnvironment<?, ?> shuffleEnvironment = new NettyShuffleEnvironmentBuilder()
+					.build();
 
 				final Configuration copiedConf = new Configuration(taskManagerConfig);
 				final TaskManagerRuntimeInfo tmInfo = TaskManagerConfiguration
@@ -194,43 +203,43 @@ public class JvmExitOnFatalErrorTest {
 						mock(CheckpointResponder.class));
 
 				Task task = new Task(
-						jobInformation,
-						taskInformation,
-						executionAttemptID,
-						slotAllocationId,
-						0,       // subtaskIndex
-						0,       // attemptNumber
-						Collections.<ResultPartitionDeploymentDescriptor>emptyList(),
-						Collections.<InputGateDeploymentDescriptor>emptyList(),
-						0,       // targetSlotNumber
-						false,
-						-1,
-						memoryManager,
-						ioManager,
-						shuffleEnvironment,
-						new KvStateService(new KvStateRegistry(), null, null),
-						new BroadcastVariableManager(),
-						new TaskEventDispatcher(),
-						ExternalResourceInfoProvider.NO_EXTERNAL_RESOURCES,
-						slotStateManager,
-						new NoOpTaskManagerActions(),
-						new NoOpInputSplitProvider(),
-						NoOpCheckpointResponder.INSTANCE,
-						new NoOpTaskOperatorEventGateway(),
-						new TestGlobalAggregateManager(),
-						TestingClassLoaderLease.newBuilder().build(),
-						new FileCache(tmInfo.getTmpDirectories(), VoidPermanentBlobService.INSTANCE),
-						tmInfo,
-						UnregisteredMetricGroups.createUnregisteredTaskMetricGroup(),
-						new NoOpResultPartitionConsumableNotifier(),
-						new NoOpPartitionProducerStateChecker(),
-						executor);
+					jobInformation,
+					taskInformation,
+					executionAttemptID,
+					slotAllocationId,
+					0,       // subtaskIndex
+					0,       // attemptNumber
+					Collections.<ResultPartitionDeploymentDescriptor>emptyList(),
+					Collections.<InputGateDeploymentDescriptor>emptyList(),
+					0,       // targetSlotNumber
+					false,
+					false,
+					-1,
+					memoryManager,
+					ioManager,
+					shuffleEnvironment,
+					new KvStateService(new KvStateRegistry(), null, null),
+					new BroadcastVariableManager(),
+					new TaskEventDispatcher(),
+					ExternalResourceInfoProvider.NO_EXTERNAL_RESOURCES,
+					slotStateManager,
+					new NoOpTaskManagerActions(),
+					new NoOpInputSplitProvider(),
+					NoOpCheckpointResponder.INSTANCE,
+					new NoOpTaskOperatorEventGateway(),
+					new TestGlobalAggregateManager(),
+					TestingClassLoaderLease.newBuilder().build(),
+					new FileCache(tmInfo.getTmpDirectories(), VoidPermanentBlobService.INSTANCE),
+					tmInfo,
+					UnregisteredMetricGroups.createUnregisteredTaskMetricGroup(),
+					new NoOpResultPartitionConsumableNotifier(),
+					new NoOpPartitionProducerStateChecker(),
+					executor);
 
 				System.err.println("starting task thread");
 
 				task.startTaskThread();
-			}
-			catch (Throwable t) {
+			} catch (Throwable t) {
 				System.err.println("ERROR STARTING TASK");
 				t.printStackTrace();
 			}

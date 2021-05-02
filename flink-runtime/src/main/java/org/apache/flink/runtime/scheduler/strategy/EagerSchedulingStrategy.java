@@ -24,6 +24,8 @@ import org.apache.flink.runtime.scheduler.DeploymentOption;
 import org.apache.flink.runtime.scheduler.ExecutionVertexDeploymentOption;
 import org.apache.flink.runtime.scheduler.SchedulerOperations;
 
+import org.slf4j.Logger;
+
 import java.util.List;
 import java.util.Set;
 
@@ -63,12 +65,19 @@ public class EagerSchedulingStrategy implements SchedulingStrategy {
 	}
 
 	@Override
+	public void setTaskPerCoreScheduling(boolean taskPerCoreScheduling) {
+		//ignored
+	}
+
+	@Override
 	public void restartTasks(Set<ExecutionVertexID> verticesToRestart) {
 		allocateSlotsAndDeploy(verticesToRestart);
 	}
 
 	@Override
-	public void onExecutionStateChange(ExecutionVertexID executionVertexId, ExecutionState executionState) {
+	public void onExecutionStateChange(
+		ExecutionVertexID executionVertexId,
+		ExecutionState executionState) {
 		// Will not react to these notifications.
 	}
 
@@ -93,8 +102,8 @@ public class EagerSchedulingStrategy implements SchedulingStrategy {
 
 		@Override
 		public SchedulingStrategy createInstance(
-				SchedulerOperations schedulerOperations,
-				SchedulingTopology schedulingTopology) {
+			SchedulerOperations schedulerOperations,
+			SchedulingTopology schedulingTopology, Logger log) {
 			return new EagerSchedulingStrategy(schedulerOperations, schedulingTopology);
 		}
 	}

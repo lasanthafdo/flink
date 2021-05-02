@@ -249,6 +249,7 @@ public class SynchronousCheckpointITCase {
 				Collections.<InputGateDeploymentDescriptor>emptyList(),
 				0,
 				false,
+				false,
 				-1,
 				mock(MemoryManager.class),
 				mock(IOManager.class),

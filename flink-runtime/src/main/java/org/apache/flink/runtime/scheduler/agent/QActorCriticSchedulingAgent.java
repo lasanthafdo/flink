@@ -69,7 +69,8 @@ public class QActorCriticSchedulingAgent extends AbstractSchedulingAgent {
 			schedulingStrategy,
 			waitTimeout,
 			numRetries,
-			maxParallelism);
+			maxParallelism,
+			taskPerCore);
 
 		this.executorService = checkNotNull(executorService);
 		this.updatePeriodInSeconds = updatePeriod;
@@ -109,10 +110,12 @@ public class QActorCriticSchedulingAgent extends AbstractSchedulingAgent {
 		nodes.forEach(ipAddress -> nodeSocketCounts.add(new Tuple2<>(
 			ipAddress,
 			cpuLayout.sockets())));
+		int nProcUnitsPerSocket = taskPerCore ? cpuLayout.coresPerSocket() :
+			cpuLayout.coresPerSocket() * cpuLayout.threadsPerCore();
 		this.qActorCriticModel = new QActorCriticModel(
 			nodeSocketCounts,
 			this.nVertices,
-			cpuLayout.coresPerSocket() * cpuLayout.threadsPerCore(),
+			nProcUnitsPerSocket,
 			log);
 	}
 

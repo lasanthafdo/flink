@@ -27,6 +27,8 @@ import org.apache.flink.runtime.scheduler.ExecutionVertexDeploymentOption;
 import org.apache.flink.runtime.scheduler.SchedulerOperations;
 import org.apache.flink.util.IterableUtils;
 
+import org.slf4j.Logger;
+
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -91,6 +93,11 @@ public class PipelinedRegionSchedulingStrategy implements SchedulingStrategy {
 	@Override
 	public void setTopLevelContainer(SchedulingExecutionContainer schedulingExecutionContainer) {
 
+	}
+
+	@Override
+	public void setTaskPerCoreScheduling(boolean taskPerCoreScheduling) {
+		//ignored
 	}
 
 	@Override
@@ -164,8 +171,8 @@ public class PipelinedRegionSchedulingStrategy implements SchedulingStrategy {
 	public static class Factory implements SchedulingStrategyFactory {
 		@Override
 		public SchedulingStrategy createInstance(
-				final SchedulerOperations schedulerOperations,
-				final SchedulingTopology schedulingTopology) {
+			final SchedulerOperations schedulerOperations,
+			final SchedulingTopology schedulingTopology, Logger log) {
 			return new PipelinedRegionSchedulingStrategy(schedulerOperations, schedulingTopology);
 		}
 	}

@@ -48,8 +48,12 @@ public final class TaskDeploymentDescriptor implements Serializable {
 		return pinnedToCpu;
 	}
 
-	public int getCpuId() {
-		return cpuId;
+	public int getProcUnitId() {
+		return procUnitId;
+	}
+
+	public boolean isTaskPerCore() {
+		return taskPerCore;
 	}
 
 	/**
@@ -153,7 +157,9 @@ public final class TaskDeploymentDescriptor implements Serializable {
 
 	private final boolean pinnedToCpu;
 
-	private final int cpuId;
+	private final int procUnitId;
+
+	private final boolean taskPerCore;
 
 	public TaskDeploymentDescriptor(
 		JobID jobId,
@@ -186,8 +192,9 @@ public final class TaskDeploymentDescriptor implements Serializable {
 			0 <= targetSlotNumber,
 			"The target slot number must be positive.");
 		this.targetSlotNumber = targetSlotNumber;
+		this.taskPerCore = false;
 		this.pinnedToCpu = false;
-		this.cpuId = -1;
+		this.procUnitId = -1;
 		this.taskRestore = taskRestore;
 
 		this.producedPartitions = Preconditions.checkNotNull(resultPartitionDeploymentDescriptors);
@@ -203,8 +210,9 @@ public final class TaskDeploymentDescriptor implements Serializable {
 		int subtaskIndex,
 		int attemptNumber,
 		int targetSlotNumber,
+		boolean taskPerCore,
 		boolean pinToCpu,
-		int cpuId,
+		int procUnitId,
 		@Nullable JobManagerTaskRestore taskRestore,
 		List<ResultPartitionDeploymentDescriptor> resultPartitionDeploymentDescriptors,
 		List<InputGateDeploymentDescriptor> inputGateDeploymentDescriptors) {
@@ -227,8 +235,9 @@ public final class TaskDeploymentDescriptor implements Serializable {
 			0 <= targetSlotNumber,
 			"The target slot number must be positive.");
 		this.targetSlotNumber = targetSlotNumber;
+		this.taskPerCore = taskPerCore;
 		this.pinnedToCpu = pinToCpu;
-		this.cpuId = cpuId;
+		this.procUnitId = procUnitId;
 		this.taskRestore = taskRestore;
 
 		this.producedPartitions = Preconditions.checkNotNull(resultPartitionDeploymentDescriptors);

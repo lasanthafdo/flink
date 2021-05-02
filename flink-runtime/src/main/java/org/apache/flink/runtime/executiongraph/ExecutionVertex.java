@@ -38,7 +38,7 @@ import org.apache.flink.runtime.jobgraph.JobEdge;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobmanager.scheduler.CoLocationConstraint;
 import org.apache.flink.runtime.jobmanager.scheduler.CoLocationGroup;
-import org.apache.flink.runtime.jobmanager.scheduler.DeploymentConstraint;
+import org.apache.flink.runtime.jobmanager.scheduler.DeploymentConstraints;
 import org.apache.flink.runtime.jobmanager.scheduler.LocationPreferenceConstraint;
 import org.apache.flink.runtime.jobmaster.LogicalSlot;
 import org.apache.flink.runtime.scheduler.strategy.ExecutionVertexID;
@@ -96,7 +96,7 @@ public class ExecutionVertex implements AccessExecutionVertex, Archiveable<Archi
 
 	private CoLocationConstraint locationConstraint;
 
-	private DeploymentConstraint deploymentConstraint;
+	private DeploymentConstraints deploymentConstraints;
 
 	/** The current or latest execution attempt of this vertex's task. */
 	private Execution currentExecution;    // this field must never be null
@@ -186,7 +186,7 @@ public class ExecutionVertex implements AccessExecutionVertex, Archiveable<Archi
 
 		this.timeout = timeout;
 		this.inputSplits = new ArrayList<>();
-		this.deploymentConstraint = new DeploymentConstraint(pinToCpu);
+		this.deploymentConstraints = new DeploymentConstraints(pinToCpu);
 	}
 
 
@@ -570,6 +570,18 @@ public class ExecutionVertex implements AccessExecutionVertex, Archiveable<Archi
 	public Optional<TaskManagerLocation> getPreferredLocationBasedOnState() {
 		if (currentExecution.getTaskRestore() != null) {
 			return Optional.ofNullable(getLatestPriorLocation());
+		}
+
+		return Optional.empty();
+	}
+
+	/**
+	 * Gets the preferred location to execute the current task execution attempt, based on the state
+	 * that the execution attempt will resume.
+	 */
+	public Optional<TaskManagerLocation> getPreferredLocationBasedOnSchedule() {
+		if (getExecutionPlacement() != null) {
+			return Optional.ofNullable(getExecutionPlacement().getTaskManagerLocation());
 		}
 
 		return Optional.empty();
@@ -968,7 +980,7 @@ public class ExecutionVertex implements AccessExecutionVertex, Archiveable<Archi
 		return getExecutionGraph().isLegacyScheduling();
 	}
 
-	public DeploymentConstraint getDeploymentConstraint() {
-		return deploymentConstraint;
+	public DeploymentConstraints getDeploymentConstraints() {
+		return deploymentConstraints;
 	}
 }

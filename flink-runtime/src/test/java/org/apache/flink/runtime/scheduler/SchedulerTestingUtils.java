@@ -515,7 +515,6 @@ public class SchedulerTestingUtils {
 				schedulingStrategyFactory,
 				failoverStrategyFactory,
 				restartBackoffTimeStrategy,
-				slotPool,
 				executionVertexOperations,
 				executionVertexVersioner,
 				executionSlotAllocatorFactory);

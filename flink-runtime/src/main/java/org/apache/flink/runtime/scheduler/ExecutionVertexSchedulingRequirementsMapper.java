@@ -40,16 +40,39 @@ public final class ExecutionVertexSchedulingRequirementsMapper {
 		final ExecutionVertexID executionVertexId = executionVertex.getID();
 
 		final AllocationID latestPriorAllocation = executionVertex.getLatestPriorAllocation();
-		final SlotSharingGroup slotSharingGroup = executionVertex.getJobVertex().getSlotSharingGroup();
+		final SlotSharingGroup slotSharingGroup = executionVertex
+			.getJobVertex()
+			.getSlotSharingGroup();
 
 		return new ExecutionVertexSchedulingRequirements.Builder()
 			.withExecutionVertexId(executionVertexId)
 			.withPreviousAllocationId(latestPriorAllocation)
 			.withTaskResourceProfile(executionVertex.getResourceProfile())
 			.withPhysicalSlotResourceProfile(getPhysicalSlotResourceProfile(executionVertex))
-			.withSlotSharingGroupId(slotSharingGroup == null ? null : slotSharingGroup.getSlotSharingGroupId())
+			.withSlotSharingGroupId(
+				slotSharingGroup == null ? null : slotSharingGroup.getSlotSharingGroupId())
 			.withCoLocationConstraint(executionVertex.getLocationConstraint())
 			.withPreferredLocations(getPreferredLocationBasedOnState(executionVertex)).build();
+	}
+
+	public static ExecutionVertexSchedulingRequirements fromSchedule(final ExecutionVertex executionVertex) {
+
+		final ExecutionVertexID executionVertexId = executionVertex.getID();
+
+		final AllocationID latestPriorAllocation = executionVertex.getLatestPriorAllocation();
+		final SlotSharingGroup slotSharingGroup = executionVertex
+			.getJobVertex()
+			.getSlotSharingGroup();
+
+		return new ExecutionVertexSchedulingRequirements.Builder()
+			.withExecutionVertexId(executionVertexId)
+			.withPreviousAllocationId(latestPriorAllocation)
+			.withTaskResourceProfile(executionVertex.getResourceProfile())
+			.withPhysicalSlotResourceProfile(getPhysicalSlotResourceProfile(executionVertex))
+			.withSlotSharingGroupId(
+				slotSharingGroup == null ? null : slotSharingGroup.getSlotSharingGroupId())
+			.withCoLocationConstraint(executionVertex.getLocationConstraint())
+			.withPreferredLocations(getPreferredLocationBasedOnSchedule(executionVertex)).build();
 	}
 
 	/**
@@ -61,10 +84,19 @@ public final class ExecutionVertexSchedulingRequirementsMapper {
 	 * @return resource profile of the physical slot to allocate a logical slot for the given vertex
 	 */
 	public static ResourceProfile getPhysicalSlotResourceProfile(final ExecutionVertex executionVertex) {
-		final SlotSharingGroup slotSharingGroup = executionVertex.getJobVertex().getSlotSharingGroup();
+		final SlotSharingGroup slotSharingGroup = executionVertex
+			.getJobVertex()
+			.getSlotSharingGroup();
 		return slotSharingGroup == null
 			? executionVertex.getResourceProfile()
 			: ResourceProfile.fromResourceSpec(slotSharingGroup.getResourceSpec(), MemorySize.ZERO);
+	}
+
+	private static Collection<TaskManagerLocation> getPreferredLocationBasedOnSchedule(final ExecutionVertex executionVertex) {
+		return executionVertex
+			.getPreferredLocationBasedOnSchedule()
+			.map(Collections::singleton)
+			.orElse(Collections.emptySet());
 	}
 
 	private static Collection<TaskManagerLocation> getPreferredLocationBasedOnState(final ExecutionVertex executionVertex) {

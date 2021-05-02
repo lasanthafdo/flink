@@ -91,6 +91,7 @@ import org.apache.flink.util.WrappingRuntimeException;
 
 import net.openhft.affinity.Affinity;
 import net.openhft.affinity.AffinityLock;
+import net.openhft.affinity.CpuLayout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -106,6 +107,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Future;
@@ -372,7 +374,9 @@ public class Task implements Runnable, TaskSlotPayload, TaskActions, PartitionPr
 
 	private int cpuId;
 
-	private SystemInformation systemInformation;
+	private final boolean taskPerCore;
+
+	private final CpuAffinity cpuAffinity;
 
 	/**
 	 * This class loader should be set as the context class loader for threads that may dynamically load user code.
@@ -393,6 +397,7 @@ public class Task implements Runnable, TaskSlotPayload, TaskActions, PartitionPr
 		List<ResultPartitionDeploymentDescriptor> resultPartitionDeploymentDescriptors,
 		List<InputGateDeploymentDescriptor> inputGateDeploymentDescriptors,
 		int targetSlotNumber,
+		boolean taskPerCore,
 		boolean pinToCpu,
 		int cpuId,
 		MemoryManager memManager,
@@ -525,9 +530,10 @@ public class Task implements Runnable, TaskSlotPayload, TaskActions, PartitionPr
 		}
 
 		invokableHasBeenCanceled = new AtomicBoolean(false);
+		this.taskPerCore = taskPerCore;
 		this.pinnedToCpu = pinToCpu;
 		this.cpuId = cpuId;
-		this.systemInformation = new SystemInformation();
+		this.cpuAffinity = new CpuAffinity();
 		// finally, create the executing thread, but do not start it
 
 		executingThread = new Thread(TASK_THREADS_GROUP, this, taskNameWithSubtask);
@@ -680,36 +686,46 @@ public class Task implements Runnable, TaskSlotPayload, TaskActions, PartitionPr
 		cpuIdGauge.setCpuIdSupplier(this::getCpuId);
 
 		if (pinnedToCpu) {
+			CpuLayout cpuLayout = AffinityLock.cpuLayout();
 			if (cpuId >= 0) {
-				BitSet oldCpuAffinity = systemInformation.getCpuAffinity();
+				if (taskPerCore && !isValidTaskPerCorePlacement(cpuLayout)) {
+					LOG.warn(
+						"Task {} placed on incorrect CPU core {} and CPU ID {}",
+						taskInfo.getTaskNameWithSubtasks(),
+						cpuLayout.coreId(cpuId),
+						cpuId);
+				}
+				BitSet oldCpuAffinity = cpuAffinity.getCpuAffinity();
 				try {
-					systemInformation.setCpuAffinity(cpuId);
-					int actualCpuId = systemInformation.getCpuId();
+					cpuAffinity.setCpuAffinity(cpuId);
+					int actualCpuId = cpuAffinity.getCpuId();
 					LOG.info(
 						"Task {} scheduled to run on CPU {} is running on CPU {}",
 						taskInfo.getTaskNameWithSubtasks(),
 						cpuId, actualCpuId);
-					cpuId = systemInformation.getCpuId();
+					cpuId = cpuAffinity.getCpuId();
 					doRun();
 				} finally {
-					systemInformation.setCpuAffinity(oldCpuAffinity);
+					cpuAffinity.setCpuAffinity(oldCpuAffinity);
 					terminationFuture.complete(executionState);
 				}
 			} else {
-				// This is a workaround to somehow assign a CPU ID when no scheduling information
-				// is available due to limitation in design
-				cpuId = Math.abs(cpuId) % AffinityLock.cpuLayout().cpus();
-				BitSet oldCpuAffinity = systemInformation.getCpuAffinity();
+				// This is a workaround to somehow assign a CPU ID when
+				// no scheduling information is available
+				int totalProcUnits = taskPerCore ?
+					cpuLayout.coresPerSocket() * cpuLayout.sockets() : cpuLayout.cpus();
+				cpuId = Math.abs(new Random().nextInt()) % totalProcUnits;
+				BitSet oldCpuAffinity = cpuAffinity.getCpuAffinity();
 				try {
-					systemInformation.setCpuAffinity(cpuId);
+					cpuAffinity.setCpuAffinity(cpuId);
 					LOG.info(
 						"Task {} scheduled to run by default on CPU {} is running on CPU {}",
 						taskInfo.getTaskNameWithSubtasks(),
-						cpuId, systemInformation.getCpuId());
-					cpuId = systemInformation.getCpuId();
+						cpuId, cpuAffinity.getCpuId());
+					cpuId = cpuAffinity.getCpuId();
 					doRun();
 				} finally {
-					systemInformation.setCpuAffinity(oldCpuAffinity);
+					cpuAffinity.setCpuAffinity(oldCpuAffinity);
 					terminationFuture.complete(executionState);
 				}
 			}
@@ -721,6 +737,12 @@ public class Task implements Runnable, TaskSlotPayload, TaskActions, PartitionPr
 				terminationFuture.complete(executionState);
 			}
 		}
+	}
+
+	private boolean isValidTaskPerCorePlacement(CpuLayout cpuLayout) {
+		int offsetCpuId = cpuId + cpuLayout.coresPerSocket();
+		return cpuLayout.coreId(cpuId) == cpuLayout.coreId(offsetCpuId)
+			&& cpuLayout.socketId(cpuId) == cpuLayout.socketId(offsetCpuId);
 	}
 
 	private void doRun() {

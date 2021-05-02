@@ -25,6 +25,8 @@ import org.apache.flink.runtime.scheduler.ExecutionVertexDeploymentOption;
 import org.apache.flink.runtime.scheduler.SchedulerOperations;
 import org.apache.flink.util.IterableUtils;
 
+import org.slf4j.Logger;
+
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -89,6 +91,11 @@ public class LazyFromSourcesSchedulingStrategy implements SchedulingStrategy {
 	@Override
 	public void setTopLevelContainer(SchedulingExecutionContainer schedulingExecutionContainer) {
 
+	}
+
+	@Override
+	public void setTaskPerCoreScheduling(boolean taskPerCoreScheduling) {
+		//ignored
 	}
 
 	@Override
@@ -161,8 +168,8 @@ public class LazyFromSourcesSchedulingStrategy implements SchedulingStrategy {
 	public static class Factory implements SchedulingStrategyFactory {
 		@Override
 		public SchedulingStrategy createInstance(
-				SchedulerOperations schedulerOperations,
-				SchedulingTopology schedulingTopology) {
+			SchedulerOperations schedulerOperations,
+			SchedulingTopology schedulingTopology, Logger log) {
 			return new LazyFromSourcesSchedulingStrategy(schedulerOperations, schedulingTopology);
 		}
 	}

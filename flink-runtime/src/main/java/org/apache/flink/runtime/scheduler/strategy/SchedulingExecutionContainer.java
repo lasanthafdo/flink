@@ -98,59 +98,65 @@ public interface SchedulingExecutionContainer {
 	void releaseAllExecutionVertices();
 
 	/**
-	 * @param schedulingExecutionVertex
+	 * @param schedulingExecutionVertex the {@link SchedulingExecutionVertex} to be checked for assignment
 	 *
-	 * @return
+	 * @return true if the vertex is scheduled, or false if not
 	 */
 	boolean isAssignedToContainer(SchedulingExecutionVertex schedulingExecutionVertex);
 
 	/**
-	 * @param schedulingExecutionVertex
-	 * @param cpuId
+	 * @param schedulingExecutionVertex the {@link SchedulingExecutionVertex} to be scheduled
+	 * @param cpuId a tuple that uniquely identifies a CPU
 	 *
-	 * @return
+	 * Forcefully schedules a {@link SchedulingExecutionVertex} to the specified node, socket and cpu ID
+	 *
+	 * @return the {@link SchedulingExecutionVertex} that was already scheduled in that CPU, or null if
+	 * the CPU was not running any vertex at the time for forceful scheduling
 	 */
 	SchedulingExecutionVertex forceSchedule(
 		SchedulingExecutionVertex schedulingExecutionVertex,
 		Tuple3<TaskManagerLocation, Integer, Integer> cpuId);
 
 	/**
-	 * @return
+	 * @return the remaining number of slots
 	 */
 	int getRemainingCapacity();
 
 	/**
-	 * @param type
+	 * @param type the type of resource usage information needed, which should be one of the
+	 * predefined string constants
 	 *
-	 * @return
+	 * @return the amount of resources used as a double value
 	 */
 	double getResourceUsage(String type);
 
 	/**
-	 * @param type
-	 * @param resourceUsageMetrics
+	 * @param type the type of resource usage to be updated, which should be one of the
+	 * 	 * predefined string constants
+	 * @param resourceUsageMetrics the <CPU ID, value> pairs that need to be updated
 	 */
 	void updateResourceUsageMetrics(String type, Map<String, Double> resourceUsageMetrics);
 
 	/**
-	 * @return
+	 * @return the ID of the {@link SchedulingExecutionContainer} as a String
 	 */
 	String getId();
 
 	/**
-	 * @return
+	 * @return the current assignment of each {@link SchedulingExecutionVertex} in this
+	 * {@link SchedulingExecutionContainer}
 	 */
 	Map<SchedulingExecutionVertex, Tuple3<TaskManagerLocation, Integer, Integer>> getCurrentCpuAssignment();
 
 	/**
-	 * @return
+	 * @return the status of the {@link SchedulingExecutionContainer} as a String
 	 */
 	String getStatus();
 
 	/**
-	 * @param cpuIdFQN
+	 * @param cpuIdFQN the fully qualified name of the CPU as an ID
 	 *
-	 * @return
+	 * @return the CPU ID derived from the FQN of the CPU
 	 */
 	static int getCpuIdFromFQN(String cpuIdFQN) {
 		String[] idParts = cpuIdFQN.split(CPU_ID_DELIMITER);

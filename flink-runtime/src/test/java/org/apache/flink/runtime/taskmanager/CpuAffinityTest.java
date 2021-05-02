@@ -16,35 +16,29 @@
  * limitations under the License.
  */
 
-package org.apache.flink.runtime.jobmanager.scheduler;
+package org.apache.flink.runtime.taskmanager;
+
+import org.junit.Before;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
 
 /**
- * DeploymentConstraint
+ * Correctness tests for hash/equals and serialization for the
+ * {@link TaskExecutionState}.
  */
-public class DeploymentConstraint {
+public class CpuAffinityTest {
 
-	private final Boolean pinToCpu;
+	private CpuAffinity sysInfo;
 
-	private final int cpuId;
-
-	public DeploymentConstraint(boolean pinToCpu) {
-		this.pinToCpu = pinToCpu;
-		this.cpuId = -1;
+	@Before
+	public void setup() {
+		sysInfo = new CpuAffinity();
 	}
 
-	// ------------------------------------------------------------------------
-	//  Utilities
-	// ------------------------------------------------------------------------
-
-	@Override
-	public String toString() {
-		return "DeploymentConstraint{" +
-			"pinToCpu=" + getPinToCpu() +
-			", cpuId=" + cpuId +
-			'}';
-	}
-
-	public Boolean getPinToCpu() {
-		return pinToCpu;
+	@Test
+	public void testGetCpuId() {
+		int cpuId = sysInfo.getCpuId();
+		assertEquals(-1, cpuId);
 	}
 }

@@ -71,7 +71,9 @@ public final class TestTaskBuilder {
 
 	private Class<? extends AbstractInvokable> invokable = AbstractInvokable.class;
 	private TaskManagerActions taskManagerActions = new NoOpTaskManagerActions();
-	private LibraryCacheManager.ClassLoaderHandle classLoaderHandle = TestingClassLoaderLease.newBuilder().build();
+	private LibraryCacheManager.ClassLoaderHandle classLoaderHandle = TestingClassLoaderLease
+		.newBuilder()
+		.build();
 	private ResultPartitionConsumableNotifier consumableNotifier = new NoOpResultPartitionConsumableNotifier();
 	private PartitionProducerStateChecker partitionProducerStateChecker = new NoOpPartitionProducerStateChecker();
 	private final ShuffleEnvironment<?, ?> shuffleEnvironment;
@@ -180,7 +182,8 @@ public final class TestTaskBuilder {
 	public Task build() throws Exception {
 		final JobVertexID jobVertexId = new JobVertexID();
 
-		final SerializedValue<ExecutionConfig> serializedExecutionConfig = new SerializedValue<>(executionConfig);
+		final SerializedValue<ExecutionConfig> serializedExecutionConfig = new SerializedValue<>(
+			executionConfig);
 
 		final JobInformation jobInformation = new JobInformation(
 			jobId,
@@ -211,6 +214,7 @@ public final class TestTaskBuilder {
 			inputGates,
 			0,
 			false,
+			false,
 			-1,
 			MemoryManagerBuilder.newBuilder().setMemorySize(1024 * 1024).build(),
 			mock(IOManager.class),
@@ -239,8 +243,7 @@ public final class TestTaskBuilder {
 			Field f = Task.class.getDeclaredField("executionState");
 			f.setAccessible(true);
 			f.set(task, state);
-		}
-		catch (Exception e) {
+		} catch (Exception e) {
 			throw new RuntimeException("Modifying the task state failed", e);
 		}
 	}

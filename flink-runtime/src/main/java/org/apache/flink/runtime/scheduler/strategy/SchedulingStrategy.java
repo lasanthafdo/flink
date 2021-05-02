@@ -32,8 +32,6 @@ import java.util.Set;
  */
 public interface SchedulingStrategy {
 
-	String DEFAULT_TASK_MANAGER_ADDRESS = "localhost:0";
-
 	/**
 	 * Called when the scheduling is started (initial scheduling operation).
 	 */
@@ -46,7 +44,19 @@ public interface SchedulingStrategy {
 	 */
 	void startScheduling(SchedulingRuntimeState runtimeState);
 
+	/**
+	 * Sets the top level {@link SchedulingExecutionContainer} for this scheduling strategy
+	 *
+	 * @param schedulingExecutionContainer the {@link SchedulingExecutionContainer} to be set
+	 */
 	void setTopLevelContainer(SchedulingExecutionContainer schedulingExecutionContainer);
+
+	/**
+	 * Sets whether task should be assigned per core or per logical PU
+	 *
+	 * @param taskPerCoreScheduling if true, schedules task per core
+	 */
+	void setTaskPerCoreScheduling(boolean taskPerCoreScheduling);
 
 	/**
 	 * Called whenever vertices need to be restarted (due to task failure).

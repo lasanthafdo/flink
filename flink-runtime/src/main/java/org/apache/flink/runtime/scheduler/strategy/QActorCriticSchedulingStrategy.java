@@ -26,9 +26,11 @@ import org.apache.flink.runtime.scheduler.DeploymentOption;
 import org.apache.flink.runtime.scheduler.ExecutionVertexDeploymentOption;
 import org.apache.flink.runtime.scheduler.SchedulerOperations;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
+import org.apache.flink.runtime.util.FatalExitExceptionHandler;
 import org.apache.flink.util.FlinkRuntimeException;
 
 import org.jetbrains.annotations.NotNull;
+import org.slf4j.Logger;
 
 import javax.annotation.Nullable;
 
@@ -44,18 +46,19 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
 public class QActorCriticSchedulingStrategy implements SchedulingStrategy {
 
 	private final SchedulerOperations schedulerOperations;
-
 	private final SchedulingTopology schedulingTopology;
-
 	private final DeploymentOption deploymentOption = new DeploymentOption(false);
-
+	private boolean taskPerCore = false;
+	private SchedulingExecutionContainer topLevelContainer = null;
+	private final Logger log;
 
 	public QActorCriticSchedulingStrategy(
 		SchedulerOperations schedulerOperations,
-		SchedulingTopology schedulingTopology) {
+		SchedulingTopology schedulingTopology, Logger log) {
 
 		this.schedulerOperations = checkNotNull(schedulerOperations);
 		this.schedulingTopology = checkNotNull(schedulingTopology);
+		this.log = checkNotNull(log);
 	}
 
 	@Override
@@ -72,7 +75,12 @@ public class QActorCriticSchedulingStrategy implements SchedulingStrategy {
 
 	@Override
 	public void setTopLevelContainer(SchedulingExecutionContainer schedulingExecutionContainer) {
+		this.topLevelContainer = schedulingExecutionContainer;
+	}
 
+	@Override
+	public void setTaskPerCoreScheduling(boolean taskPerCoreScheduling) {
+		this.taskPerCore = taskPerCoreScheduling;
 	}
 
 	@Override
@@ -95,28 +103,50 @@ public class QActorCriticSchedulingStrategy implements SchedulingStrategy {
 	private void allocateSlotsAndDeploy(
 		final Set<ExecutionVertexID> verticesToDeploy,
 		@Nullable SchedulingRuntimeState runtimeState) {
-		if (runtimeState == null || runtimeState.getPlacementSolution().isEmpty()) {
-			setupDefaultPlacement();
+		if (topLevelContainer == null) {
+			Runnable initialTaskDeployer = new InitialTaskDeployer();
+			Thread initTaskDeploymentThread = new Thread(
+				Thread.currentThread().getThreadGroup(),
+				initialTaskDeployer,
+				String.format(
+					"Initial task deployer for %s.",
+					this.getClass().getSimpleName()));
+			initTaskDeploymentThread.setDaemon(true);
+			initTaskDeploymentThread.setUncaughtExceptionHandler(FatalExitExceptionHandler.INSTANCE);
+			initTaskDeploymentThread.start();
 		} else {
-			setupDerivedPlacement(runtimeState);
+			if (runtimeState == null || runtimeState.getPlacementSolution().isEmpty()) {
+				setupDefaultPlacement();
+			} else {
+				setupDerivedPlacement(runtimeState);
+			}
+			final List<ExecutionVertexDeploymentOption> executionVertexDeploymentOptions =
+				SchedulingStrategyUtils.createExecutionVertexDeploymentOptionsInTopologicalOrder(
+					schedulingTopology,
+					verticesToDeploy,
+					id -> deploymentOption,
+					id -> schedulingTopology.getVertex(id).getExecutionPlacement());
+			schedulerOperations.allocateSlotsAndDeploy(executionVertexDeploymentOptions);
 		}
-		final List<ExecutionVertexDeploymentOption> executionVertexDeploymentOptions =
-			SchedulingStrategyUtils.createExecutionVertexDeploymentOptionsInTopologicalOrder(
-				schedulingTopology,
-				verticesToDeploy,
-				id -> deploymentOption,
-				id -> schedulingTopology.getVertex(id).getExecutionPlacement());
-		schedulerOperations.allocateSlotsAndDeploy(executionVertexDeploymentOptions);
 	}
 
 	private void setupDefaultPlacement() {
-		AtomicInteger cpuIndex = new AtomicInteger(0);
-		// We send negative CPU IDs to indicate this was a blind schedule
-		schedulingTopology
-			.getVertices()
-			.forEach(schedulingExecutionVertex -> schedulingExecutionVertex.setExecutionPlacement(
-				new ExecutionPlacement(
-					null, cpuIndex.decrementAndGet(), -1)));
+		if (topLevelContainer != null) {
+			schedulingTopology
+				.getVertices()
+				.forEach(schedulingExecutionVertex -> {
+					Tuple3<TaskManagerLocation, Integer, Integer> placementInfo = topLevelContainer.scheduleVertex(
+						schedulingExecutionVertex);
+					schedulingExecutionVertex.setExecutionPlacement(
+						new ExecutionPlacement(
+							placementInfo.f0, placementInfo.f1, placementInfo.f2, taskPerCore));
+				});
+		} else {
+			throw new FlinkRuntimeException(
+				"Could not obtain top level scheduling container for " + this
+					.getClass()
+					.getSimpleName());
+		}
 	}
 
 	private void setupDerivedPlacement(@NotNull SchedulingRuntimeState runtimeState) {
@@ -134,11 +164,36 @@ public class QActorCriticSchedulingStrategy implements SchedulingStrategy {
 					placementSuggestion.f0,
 					placementSuggestion.f2);
 				schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
-					placementInfo.f0, placementInfo.f1, placementInfo.f2));
+					placementInfo.f0, placementInfo.f1, placementInfo.f2, taskPerCore));
 			});
+			log.info(topLevelContainer.getStatus());
 		} else {
 			throw new FlinkRuntimeException(
 				"Suggested operator placement action " + placementAction + " is invalid");
+		}
+	}
+
+	private class InitialTaskDeployer implements Runnable {
+
+		@Override
+		public void run() {
+			try {
+				int retryCount = 0;
+				while (topLevelContainer == null && retryCount < 20) {
+					retryCount++;
+					try {
+						Thread.sleep(500);
+					} catch (InterruptedException ignore) {
+						//ignore
+					}
+				}
+				allocateSlotsAndDeploy(SchedulingStrategyUtils.getAllVertexIdsFromTopology(
+					schedulingTopology), null);
+			} catch (Throwable t) {
+				throw new FlinkRuntimeException(
+					"Unexpected error in Initial Task Deployer thread",
+					t);
+			}
 		}
 	}
 
@@ -150,8 +205,8 @@ public class QActorCriticSchedulingStrategy implements SchedulingStrategy {
 		@Override
 		public SchedulingStrategy createInstance(
 			SchedulerOperations schedulerOperations,
-			SchedulingTopology schedulingTopology) {
-			return new QActorCriticSchedulingStrategy(schedulerOperations, schedulingTopology);
+			SchedulingTopology schedulingTopology, Logger log) {
+			return new QActorCriticSchedulingStrategy(schedulerOperations, schedulingTopology, log);
 		}
 	}
 }

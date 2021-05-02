@@ -16,39 +16,34 @@
  * limitations under the License.
  */
 
-package org.apache.flink.runtime.taskmanager;
-
-import org.apache.flink.api.common.JobID;
-import org.apache.flink.core.testutils.CommonTestUtils;
-import org.apache.flink.runtime.execution.ExecutionState;
-import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
-
-import org.junit.Before;
-import org.junit.Test;
-
-import java.io.IOException;
-import java.io.PrintStream;
-import java.io.PrintWriter;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
+package org.apache.flink.runtime.jobmanager.scheduler;
 
 /**
- * Correctness tests for hash/equals and serialization for the
- * {@link TaskExecutionState}.
+ * DeploymentConstraints
  */
-public class SystemInformationTest {
+public class DeploymentConstraints {
 
-	private SystemInformation sysInfo;
+	private final boolean pinToCpu;
+	private final int cpuId;
 
-	@Before
-	public void setup() {
-		sysInfo = new SystemInformation();
+	public DeploymentConstraints(boolean pinToCpu) {
+		this.pinToCpu = pinToCpu;
+		this.cpuId = -1;
 	}
 
-	@Test
-	public void testGetCpuId() {
-		int cpuId = sysInfo.getCpuId();
-		assertEquals(-1, cpuId);
+	// ------------------------------------------------------------------------
+	//  Utilities
+	// ------------------------------------------------------------------------
+
+	@Override
+	public String toString() {
+		return "DeploymentConstraint{" +
+			"pinToCpu=" + getPinToCpu() +
+			", cpuId=" + cpuId +
+			'}';
+	}
+
+	public boolean getPinToCpu() {
+		return pinToCpu;
 	}
 }

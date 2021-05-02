@@ -168,6 +168,7 @@ public class StreamTaskTerminationTest extends TestLogger {
 			Collections.<InputGateDeploymentDescriptor>emptyList(),
 			0,
 			false,
+			false,
 			-1,
 			MemoryManagerBuilder.newBuilder().setMemorySize(32L * 1024L).build(),
 			new IOManagerAsync(),

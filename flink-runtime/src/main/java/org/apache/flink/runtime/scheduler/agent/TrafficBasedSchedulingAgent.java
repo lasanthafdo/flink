@@ -57,14 +57,15 @@ public class TrafficBasedSchedulingAgent extends AbstractSchedulingAgent {
 		long waitTimeout,
 		int numRetries,
 		int updatePeriod,
-		int maxParallelism) {
+		int maxParallelism,
+		boolean taskPerCore) {
 		super(
 			log,
 			triggerPeriod,
 			executionGraph,
 			schedulingStrategy,
 			waitTimeout,
-			numRetries, maxParallelism);
+			numRetries, maxParallelism, taskPerCore);
 
 		this.executorService = checkNotNull(executorService);
 		this.updatePeriodInSeconds = updatePeriod;

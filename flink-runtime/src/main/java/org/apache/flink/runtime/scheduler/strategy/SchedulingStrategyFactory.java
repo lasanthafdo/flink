@@ -20,12 +20,14 @@ package org.apache.flink.runtime.scheduler.strategy;
 
 import org.apache.flink.runtime.scheduler.SchedulerOperations;
 
+import org.slf4j.Logger;
+
 /**
  * Factory interface for {@link SchedulingStrategy}.
  */
 public interface SchedulingStrategyFactory {
 
 	SchedulingStrategy createInstance(
-			SchedulerOperations schedulerOperations,
-			SchedulingTopology schedulingTopology);
+		SchedulerOperations schedulerOperations,
+		SchedulingTopology schedulingTopology, Logger log);
 }

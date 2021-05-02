@@ -112,7 +112,6 @@ public class DefaultSchedulerFactory implements SchedulerNGFactory {
 			schedulingStrategyFactory,
 			FailoverStrategyFactoryLoader.loadFailoverStrategyFactory(jobMasterConfiguration),
 			restartBackoffTimeStrategy,
-			slotPool,
 			new DefaultExecutionVertexOperations(),
 			new ExecutionVertexVersioner(),
 			new DefaultExecutionSlotAllocatorFactory(slotProviderStrategy));

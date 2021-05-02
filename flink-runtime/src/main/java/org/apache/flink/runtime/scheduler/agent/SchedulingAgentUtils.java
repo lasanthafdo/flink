@@ -24,6 +24,7 @@ import org.apache.flink.configuration.IllegalConfigurationException;
 import org.apache.flink.runtime.executiongraph.ExecutionGraph;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.ScheduleMode;
+import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategy;
 
 import org.slf4j.Logger;
@@ -34,6 +35,14 @@ import java.util.concurrent.ScheduledExecutorService;
  * Utility class to help the scheduling agent.
  */
 public class SchedulingAgentUtils {
+
+	public static final String VERTEX_NAME_INDEX_DELIM = ":";
+
+	public static String getVertexName(SchedulingExecutionVertex schedulingExecutionVertex) {
+		return schedulingExecutionVertex.getTaskName() + VERTEX_NAME_INDEX_DELIM
+			+ schedulingExecutionVertex.getSubTaskIndex();
+	}
+
 	public static SchedulingAgent buildSchedulingAgent(
 		Logger log,
 		ExecutionGraph executionGraph,
@@ -90,7 +99,7 @@ public class SchedulingAgentUtils {
 							triggerPeriod,
 							waitTimeOut,
 							numRetries,
-							updatePeriod, jobGraph.getMaximumParallelism());
+							updatePeriod, jobGraph.getMaximumParallelism(), taskPerCore);
 					} else {
 						throw new IllegalConfigurationException(
 							"Incorrect number of arguments in the scheduling agent configuration string.");

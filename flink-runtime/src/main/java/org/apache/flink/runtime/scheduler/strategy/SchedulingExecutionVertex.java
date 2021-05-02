@@ -31,7 +31,9 @@ import org.apache.flink.runtime.topology.Vertex;
 public interface SchedulingExecutionVertex
 	extends Vertex<ExecutionVertexID, IntermediateResultPartitionID, SchedulingExecutionVertex, SchedulingResultPartition> {
 
-	ExecutionPlacement DEFAULT_EXECUTION_PLACEMENT = new ExecutionPlacement(null, -1, -1);
+	// TODO Deprecate the usage of this
+	@Deprecated
+	ExecutionPlacement DEFAULT_EXECUTION_PLACEMENT = new ExecutionPlacement(null, -1, -1, false);
 
 	String getTaskName();
 

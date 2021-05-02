@@ -24,6 +24,8 @@ import org.apache.flink.runtime.scheduler.DeploymentOption;
 import org.apache.flink.runtime.scheduler.ExecutionVertexDeploymentOption;
 import org.apache.flink.runtime.scheduler.SchedulerOperations;
 
+import org.slf4j.Logger;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -65,12 +67,19 @@ public class TestSchedulingStrategy implements SchedulingStrategy {
 	}
 
 	@Override
+	public void setTaskPerCoreScheduling(boolean taskPerCoreScheduling) {
+
+	}
+
+	@Override
 	public void restartTasks(final Set<ExecutionVertexID> verticesToRestart) {
 		this.receivedVerticesToRestart = verticesToRestart;
 	}
 
 	@Override
-	public void onExecutionStateChange(final ExecutionVertexID executionVertexId, final ExecutionState executionState) {
+	public void onExecutionStateChange(
+		final ExecutionVertexID executionVertexId,
+		final ExecutionState executionState) {
 	}
 
 	@Override
@@ -114,8 +123,8 @@ public class TestSchedulingStrategy implements SchedulingStrategy {
 
 		@Override
 		public SchedulingStrategy createInstance(
-				final SchedulerOperations schedulerOperations,
-				final SchedulingTopology schedulingTopology) {
+			final SchedulerOperations schedulerOperations,
+			final SchedulingTopology schedulingTopology, Logger log) {
 
 			lastInstance = new TestSchedulingStrategy(schedulerOperations, schedulingTopology);
 			return lastInstance;

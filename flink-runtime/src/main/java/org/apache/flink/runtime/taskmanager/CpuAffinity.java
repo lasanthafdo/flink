@@ -33,12 +33,12 @@ import java.util.List;
 /**
  * System information using syscalls
  */
-public class SystemInformation {
+public class CpuAffinity {
 
 	/*
-	 *  Copied from OpenHFT Java Affinity library
+	 *  Some of the functionality is based on code from OpenHFT Java Affinity library
+	 *	at https://github.com/OpenHFT/Java-Thread-Affinity
 	 *
-	 *  https://github.com/OpenHFT/Java-Thread-Affinity
 	 * */
 	public static class cpu_set_t extends Structure {
 		static final int __CPU_SETSIZE = 1024;
@@ -76,7 +76,7 @@ public class SystemInformation {
 
 	private final CStdLib cStdLib;
 
-	SystemInformation() {
+	CpuAffinity() {
 		cStdLib = Native.loadLibrary("c", CStdLib.class);
 	}
 
@@ -108,10 +108,12 @@ public class SystemInformation {
 		return cStdLib.sched_setaffinity(0, size, cpu_mask);
 	}
 
-	public int setCpuAffinity(int cpuId) {
+	public void setCpuAffinity(int cpuId) {
 		BitSet affinity = new BitSet(Runtime.getRuntime().availableProcessors());
 		affinity.set(cpuId);
-		return setCpuAffinity(affinity);
+		if (setCpuAffinity(affinity) != 0) {
+			throw new FlinkRuntimeException("Could not set CPU affinity for CPU ID " + cpuId);
+		}
 	}
 
 	public int getCpuId() {

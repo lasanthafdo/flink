@@ -28,7 +28,6 @@ import org.apache.flink.util.FlinkRuntimeException;
 import net.openhft.affinity.CpuLayout;
 import org.slf4j.Logger;
 
-import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -37,6 +36,7 @@ import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
+import static org.apache.flink.runtime.scheduler.agent.SchedulingAgentUtils.getVertexName;
 import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.flink.util.Preconditions.checkNotNull;
 import static org.apache.flink.util.Preconditions.checkState;
@@ -192,11 +192,10 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 			cpuAssignmentMap.put(cpuId.f1, schedulingExecutionVertex);
 			return currentlyAssignedVertex;
 		} else {
-			throw new FlinkRuntimeException(MessageFormat.format(
-				"Invalid placement : Socket {} of node {} does not contain CPU ID {}",
-				getId(),
-				cpuId.f0.address().getHostAddress(),
-				cpuId.f1));
+			throw new FlinkRuntimeException(
+				"Invalid placement : Socket " + getId() + " of node " +
+					(cpuId.f0 != null ? cpuId.f0.address().getHostAddress() : "null")
+					+ " does not contain CPU ID " + cpuId.f1);
 		}
 	}
 
@@ -288,12 +287,12 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 	@Override
 	public String getStatus() {
 		StringBuilder currentStatusMsg = new StringBuilder();
-		currentStatusMsg.append(" {Socket ID : ").append(getId())
-			.append(", Available CPUs : ").append(getRemainingCapacity())
-			.append(", Container CPU Usage : ").append(getResourceUsage(CPU))
-			.append(", Container CPU Freq : ").append(getResourceUsage(FREQ))
-			.append(", Operator CPU Usage : ").append(getResourceUsage(OPERATOR))
-			.append(", Assignment : [");
+		currentStatusMsg.append("Socket ").append(getId())
+			.append(" : (nProcUnits(Avail) : ").append(getRemainingCapacity())
+			.append(", totCPU : ").append(getResourceUsage(CPU))
+			.append(", freqCPU : ").append(getResourceUsage(FREQ))
+			.append(", operatorCPU : ").append(getResourceUsage(OPERATOR))
+			.append(") Assignment : [");
 		cpuAssignmentMap.forEach((cpuId, vertex) -> {
 			currentStatusMsg
 				.append("{CPU ID : ").append(cpuId)
@@ -301,14 +300,14 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 			if (vertex != null) {
 				currentStatusMsg
 					.append(vertex.getId())
-					.append(", Task Name : ")
-					.append(vertex.getTaskName())
+					.append(", Task : ")
+					.append(getVertexName(vertex))
 					.append("},");
 			} else {
 				currentStatusMsg.append("Unassigned},");
 			}
 		});
-		currentStatusMsg.append("]}");
+		currentStatusMsg.append("]");
 
 		return currentStatusMsg.toString();
 	}
