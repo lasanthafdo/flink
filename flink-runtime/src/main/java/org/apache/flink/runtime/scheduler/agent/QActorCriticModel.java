@@ -44,7 +44,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static org.paukov.combinatorics.CombinatoricsFactory.createSimpleCombinationGenerator;
+import static org.paukov.combinatorics.CombinatoricsFactory.createPermutationWithRepetitionGenerator;
 
 /**
  * Wrapper class for the actor-critic training.
@@ -127,23 +127,61 @@ public class QActorCriticModel {
 	}
 
 	@VisibleForTesting
-	Map<Integer, List<Integer>> generateStateActionSpace(int nVertices, int nCpusPerSocket) {
+	Map<Integer, List<Integer>> generateStateActionSpace(int nVertices, int nProcUnitsPerSocket) {
 		Map<Integer, List<Integer>> actionMap = new HashMap<>();
-		CombinatoricsVector<Integer> slotIds = new CombinatoricsVector<>();
-		socketScheduleIdMap.forEach((nodeSocketCountEntry, stateId) -> {
-			for (int i = 0; i < nCpusPerSocket; i++) {
-				//TODO Is this approach generating more states than necessary?
-				slotIds.addValue(stateId);
-			}
-		});
+		CombinatoricsVector<Integer> socketIds = new CombinatoricsVector<>();
+		socketScheduleIdMap.values().forEach(socketIds::addValue);
 		int actionId = 1;
-		Generator<Integer> gen = createSimpleCombinationGenerator(slotIds, nVertices);
+		Generator<Integer> gen = createPermutationWithRepetitionGenerator(socketIds, nVertices);
 		for (ICombinatoricsVector<Integer> cpuSelection : gen.generateAllObjects()) {
 			// Puts a state/action ID and state pair like <1, {3,1,1,4,2,2,1}>
 			List<Integer> stateIdVector = cpuSelection.getVector();
-			actionMap.put(actionId++, stateIdVector);
+			Map<Integer, Long> socketAssignmentCount = stateIdVector
+				.stream()
+				.collect(Collectors.groupingBy(socketId -> socketId, Collectors.counting()));
+			if (socketAssignmentCount
+				.values()
+				.stream()
+				.allMatch(count -> count <= nProcUnitsPerSocket)) {
+				actionMap.put(actionId++, stateIdVector);
+			}
 		}
+
 		return actionMap;
+	}
+
+	@VisibleForTesting
+	Map<Integer, List<Integer>> generateStateActionSpaceByElimination(
+		int nVertices,
+		int nProcUnitsPerSocket) {
+		Map<Integer, List<Integer>> actionMap = new HashMap<>();
+		CombinatoricsVector<Integer> socketIds = new CombinatoricsVector<>();
+		socketScheduleIdMap.values().forEach(socketIds::addValue);
+		int actionId = 1;
+		Generator<Integer> gen = createPermutationWithRepetitionGenerator(socketIds, nVertices);
+		for (ICombinatoricsVector<Integer> cpuSelection : gen.generateAllObjects()) {
+			// Puts a state/action ID and state pair like <1, {3,1,1,4,2,2,1}>
+			List<Integer> stateIdVector = cpuSelection.getVector();
+			Map<Integer, Long> socketAssignmentCount = stateIdVector
+				.stream()
+				.collect(Collectors.groupingBy(socketId -> socketId, Collectors.counting()));
+			if (socketAssignmentCount
+				.values()
+				.stream()
+				.allMatch(count -> count <= nProcUnitsPerSocket)) {
+				actionMap.put(actionId++, stateIdVector);
+			}
+		}
+
+		return actionMap;
+	}
+
+	public List<Integer> generateCombinationsFor(int nVertices, int nProcUnitsPerSocket) {
+		List<Integer> combinationList = new ArrayList<>();
+		for (int i = 0; i < socketScheduleIdMap.size(); i++) {
+
+		}
+		return combinationList;
 	}
 
 	public int getStateFor(List<Tuple3<TaskManagerLocation, Integer, Integer>> cpuAssignment) {

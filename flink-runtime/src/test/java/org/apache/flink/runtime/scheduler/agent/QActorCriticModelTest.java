@@ -33,13 +33,13 @@ import java.util.Map;
 public class QActorCriticModelTest extends TestLogger {
 
 	private QActorCriticModel qActorCriticModel;
-	private int nCpusPerSocket = 8;
+	private int nProcUnitsPerSocket = 4;
 	private int nVertices = 7;
 
 	@Before
 	public void setUp() {
 		List<Tuple2<InetAddress, Integer>> nodeSocketCounts = generateNodeSocketInfo();
-		qActorCriticModel = new QActorCriticModel(nodeSocketCounts, nVertices, nCpusPerSocket);
+		qActorCriticModel = new QActorCriticModel(nodeSocketCounts, nVertices, nProcUnitsPerSocket);
 	}
 
 	private List<Tuple2<InetAddress, Integer>> generateNodeSocketInfo() {
@@ -52,8 +52,8 @@ public class QActorCriticModelTest extends TestLogger {
 	public void testStateActionSpaceGenerationSingleNode() {
 		Map<Integer, List<Integer>> stateActionMap = qActorCriticModel.generateStateActionSpace(
 			nVertices,
-			nCpusPerSocket);
-		int expectedSize = 11440;
+			nProcUnitsPerSocket);
+		int expectedSize = 70;
 		Assert.assertEquals(expectedSize, stateActionMap.size());
 	}
 
@@ -61,13 +61,12 @@ public class QActorCriticModelTest extends TestLogger {
 	public void testStateActionSpaceGenerationMultiNode() {
 		qActorCriticModel.addToSocketScheduleIdMap("10.38.205.112:0");
 		qActorCriticModel.addToSocketScheduleIdMap("10.38.205.112:1");
-//		qActorCriticModel.addToSocketScheduleIdMap("10.38.205.61:0");
-//		qActorCriticModel.addToSocketScheduleIdMap("10.38.205.61:1");
-		nVertices = 40;
-		nCpusPerSocket = 12;
+		qActorCriticModel.addToSocketScheduleIdMap("10.38.205.61:0");
+		qActorCriticModel.addToSocketScheduleIdMap("10.38.205.61:1");
+		nVertices = 24;
+		nProcUnitsPerSocket = 6;
 		Map<Integer, List<Integer>> stateActionMap = qActorCriticModel.generateStateActionSpace(
-			nVertices,
-			nCpusPerSocket);
+			nVertices, nProcUnitsPerSocket);
 		int expectedSize = 0;
 		Assert.assertEquals(expectedSize, stateActionMap.size());
 	}

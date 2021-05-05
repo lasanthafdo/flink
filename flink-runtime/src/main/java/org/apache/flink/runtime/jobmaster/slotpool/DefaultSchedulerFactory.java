@@ -21,6 +21,7 @@ package org.apache.flink.runtime.jobmaster.slotpool;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.ClusterOptions;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.DeploymentOptions;
 
 import javax.annotation.Nonnull;
 
@@ -48,14 +49,19 @@ public class DefaultSchedulerFactory implements SchedulerFactory {
 
 		final SlotSelectionStrategy locationPreferenceSlotSelectionStrategy;
 
-		if (evenlySpreadOutSlots) {
+		String schedulingMode = configuration.getString(DeploymentOptions.RUNTIME_SCHEDULING_MODE);
+		if (schedulingMode != null
+			&& !schedulingMode.equals(DeploymentOptions.RUNTIME_SCHEDULING_MODE.defaultValue())) {
+			locationPreferenceSlotSelectionStrategy = new LocationForcedSlotSelectionStrategy();
+		} else if (evenlySpreadOutSlots) {
 			locationPreferenceSlotSelectionStrategy = LocationPreferenceSlotSelectionStrategy.createEvenlySpreadOut();
 		} else {
 			locationPreferenceSlotSelectionStrategy = LocationPreferenceSlotSelectionStrategy.createDefault();
 		}
 
 		if (configuration.getBoolean(CheckpointingOptions.LOCAL_RECOVERY)) {
-			return PreviousAllocationSlotSelectionStrategy.create(locationPreferenceSlotSelectionStrategy);
+			return PreviousAllocationSlotSelectionStrategy.create(
+				locationPreferenceSlotSelectionStrategy);
 		} else {
 			return locationPreferenceSlotSelectionStrategy;
 		}

@@ -361,7 +361,7 @@ under the License.
 		</dependency>
 
 		<!-- DL4J dependencies -->
-		<dependency>
+		<!--dependency>
 			<groupId>org.nd4j</groupId>
 			<artifactId>${nd4j.backend}</artifactId>
 			<version>${dl4j-master.version}</version>
@@ -370,7 +370,7 @@ under the License.
 			<groupId>org.deeplearning4j</groupId>
 			<artifactId>deeplearning4j-nn</artifactId>
 			<version>${dl4j-master.version}</version>
-		</dependency>
+		</dependency-->
 
 		<!--dependency>
 			<groupId>org.deeplearning4j</groupId>
