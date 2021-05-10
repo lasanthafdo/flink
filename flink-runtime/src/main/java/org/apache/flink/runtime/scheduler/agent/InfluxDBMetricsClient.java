@@ -101,16 +101,17 @@ public class InfluxDBMetricsClient {
 			int cpuId = i;
 			try {
 				QueryResult queryResult = influxDB.query(new Query(
-					"SELECT LAST(value) FROM taskmanager_System_CPU_UsageCPU" + i));
+					"SELECT host, LAST(value) FROM taskmanager_System_CPU_UsageCPU" + i
+						+ " GROUP BY host"));
 				List<QueryResult.Result> results = queryResult.getResults();
 				results.forEach(result -> {
 					List<QueryResult.Series> series = result.getSeries();
 					if (series != null && !series.isEmpty()) {
 						List<Object> record = series.get(0).getValues().get(0);
 						resultMap.put(
-							String.valueOf(cpuId),
+							record.get(1) + ":" + cpuId,
 							BigDecimal
-								.valueOf((Double) record.get(1) / 100.0)
+								.valueOf((Double) record.get(2) / 100.0)
 								.setScale(3, RoundingMode.HALF_UP)
 								.doubleValue());
 					}

@@ -33,6 +33,7 @@ import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -116,20 +117,25 @@ public class QActorCriticSchedulingAgent extends AbstractSchedulingAgent {
 			nodeSocketCounts,
 			this.nVertices,
 			nProcUnitsPerSocket,
+			orderedOperatorMap,
 			log);
 	}
 
 	@Override
 	protected void updatePlacementSolution() {
-		int currentStateId = qActorCriticModel.getStateFor(currentPlacementAction);
+		Map<String, Double> cpuUsageMetrics = getCpuUsageMetrics();
+		Tuple2<Integer, Integer> currentStateId = qActorCriticModel.getStateFor(
+			currentPlacementAction);
 		qActorCriticModel.updateState(
 			getOverallThroughput(),
 			currentStateId,
 			stateId -> -1.0
 				* getTopLevelContainer().getResourceUsage(SchedulingExecutionContainer.CPU));
-		int currentAction = qActorCriticModel.getSuggestedAction(currentStateId);
+		Tuple2<Integer, Integer> currentAction = qActorCriticModel.getSuggestedAction(
+			currentStateId.f0,
+			currentStateId.f1);
 		List<Tuple2<InetAddress, Integer>> modelSuggestedPlacementAction = qActorCriticModel.getPlacementSolution(
-			currentAction);
+			currentAction.f1);
 		setFromModelPlacementAction(modelSuggestedPlacementAction);
 		logPlacementAction(currentAction, suggestedPlacementAction);
 		if (!isValidPlacementAction(suggestedPlacementAction)) {

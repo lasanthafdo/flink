@@ -52,7 +52,7 @@ public class InfluxDBTransitionsClient {
 		}
 	}
 
-	public void writeQLearningActionToDB(
+	public void writeQacActionToDB(
 		String action,
 		String oldState,
 		String newState,

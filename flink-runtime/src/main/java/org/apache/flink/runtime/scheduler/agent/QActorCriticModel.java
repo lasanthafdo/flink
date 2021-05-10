@@ -21,22 +21,23 @@ package org.apache.flink.runtime.scheduler.agent;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
+import org.apache.flink.runtime.scheduler.strategy.ExecutionVertexID;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 
 import org.apache.flink.shaded.guava18.com.google.common.collect.BiMap;
 import org.apache.flink.shaded.guava18.com.google.common.collect.HashBiMap;
 
 import com.github.chen0040.rl.learning.actorcritic.ActorCriticLearner;
-import org.paukov.combinatorics.CombinatoricsVector;
-import org.paukov.combinatorics.Generator;
-import org.paukov.combinatorics.ICombinatoricsVector;
+import org.paukov.combinatorics3.Generator;
 import org.slf4j.Logger;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -44,38 +45,54 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static org.paukov.combinatorics.CombinatoricsFactory.createPermutationWithRepetitionGenerator;
-
 /**
  * Wrapper class for the actor-critic training.
  */
 public class QActorCriticModel {
 
 	private static final String INET_ADDR_SOCKET_COUNT_DELIM = ":";
-	private int stateCount;
-	private int actionCount;
-	private int previousStateId;
+	private final static String RETENTION_POLICY_NAME = "one_day";
 
-	private final ActorCriticLearner agent = new ActorCriticLearner(stateCount, actionCount);
+	private int topLevelStateCount;
+	private int topLevelActionCount;
+	private int previousTopLevelStateId;
+	private int previousNodeLevelStateId;
+	private int currentTopLevelStateId;
+	private int currentNodeLevelStateId;
+	private int currentTopLevelActionId;
+	private int currentNodeLevelActionId;
+
+	private final ActorCriticLearner topLevelAgent = new ActorCriticLearner(
+		topLevelStateCount,
+		topLevelActionCount);
+	private final ActorCriticLearner nodeLevelAgent = new ActorCriticLearner();
 	private final List<Transition> transitionList = new ArrayList<>();
 	private InfluxDBTransitionsClient influxDBTransitionsClient;
-	private final Map<Integer, List<Integer>> stateSpaceMap;
-	private final BiMap<String, Integer> socketScheduleIdMap;
+	private final BiMap<Integer, Map<Integer, Long>> topLevelStateSpaceMap;
+	private final BiMap<Integer, List<Integer>> nodeLevelStateSpaceMap;
+	private final BiMap<String, Integer> sockAddrToSockIdMap;
 	private final int nSchedulingSocketSlots;
+	private final int nVertices;
+	private final int nProcUnitsPerSocket;
+	private final Map<Tuple3<ExecutionVertexID, String, Integer>, Integer> orderedOperatorMap;
 	private final Logger log;
-	private int currentStateId;
-	private int currentActionId;
-	private final static String retentionPolicyName = "one_day";
 
 	public QActorCriticModel(
 		List<Tuple2<InetAddress, Integer>> nodeSocketCounts,
-		int nVertices, int nProcessorsPerSocket,
+		int nVertices,
+		int nProcessingUnitsPerSocket,
+		Map<Tuple3<ExecutionVertexID, String, Integer>, Integer> orderedOperatorMap,
 		Logger log) {
-		this.socketScheduleIdMap = HashBiMap.create();
+		this.sockAddrToSockIdMap = HashBiMap.create();
 		this.nSchedulingSocketSlots = getAvailableSlotsAfterDerivation(nodeSocketCounts);
-		this.stateSpaceMap = generateStateActionSpace(nVertices, nProcessorsPerSocket);
-		this.stateCount = stateSpaceMap.size();
-		this.actionCount = stateSpaceMap.size();
+		this.nVertices = nVertices;
+		this.nProcUnitsPerSocket = nProcessingUnitsPerSocket;
+		this.orderedOperatorMap = orderedOperatorMap;
+		this.topLevelStateSpaceMap = generateTopLevelActionSpace();
+		int topLevelStates = topLevelStateSpaceMap.size();
+		this.nodeLevelStateSpaceMap = HashBiMap.create();
+		this.topLevelStateCount = topLevelStates;
+		this.topLevelActionCount = topLevelStates;
 		this.log = log;
 
 		setupInfluxDBConnection();
@@ -84,12 +101,18 @@ public class QActorCriticModel {
 	@VisibleForTesting
 	QActorCriticModel(
 		List<Tuple2<InetAddress, Integer>> nodeSocketCounts,
-		int nVertices, int nCpusPerSocket) {
-		this.socketScheduleIdMap = HashBiMap.create();
+		int nVertices,
+		int nProcessingUnitsPerSocket,
+		Map<Tuple3<ExecutionVertexID, String, Integer>, Integer> orderedOperatorMap) {
+		this.sockAddrToSockIdMap = HashBiMap.create();
 		this.nSchedulingSocketSlots = getAvailableSlotsAfterDerivation(nodeSocketCounts);
-		this.stateSpaceMap = generateStateActionSpace(nVertices, nCpusPerSocket);
-		this.stateCount = stateSpaceMap.size();
-		this.actionCount = stateSpaceMap.size();
+		this.nVertices = nVertices;
+		this.nProcUnitsPerSocket = nProcessingUnitsPerSocket;
+		this.orderedOperatorMap = orderedOperatorMap;
+		this.topLevelStateSpaceMap = generateTopLevelActionSpace();
+		this.nodeLevelStateSpaceMap = HashBiMap.create();
+		this.topLevelStateCount = topLevelStateSpaceMap.size();
+		this.topLevelActionCount = topLevelStateSpaceMap.size();
 		this.log = null;
 	}
 
@@ -108,7 +131,7 @@ public class QActorCriticModel {
 		AtomicInteger scheduleIdCount = new AtomicInteger(0);
 		nodeSocketCounts.forEach(locSlotCount -> {
 			for (int i = 0; i < locSlotCount.f1; i++) {
-				socketScheduleIdMap.put(
+				sockAddrToSockIdMap.put(
 					getSocketAddress(locSlotCount.f0, i),
 					scheduleIdCount.incrementAndGet());
 			}
@@ -118,132 +141,191 @@ public class QActorCriticModel {
 
 	@VisibleForTesting
 	void addToSocketScheduleIdMap(String socketAddress) {
-		Integer currentMaxId = socketScheduleIdMap
+		Integer currentMaxId = sockAddrToSockIdMap
 			.values()
 			.stream()
 			.max(Comparator.naturalOrder())
 			.orElse(0);
-		socketScheduleIdMap.put(socketAddress, currentMaxId + 1);
+		sockAddrToSockIdMap.put(socketAddress, currentMaxId + 1);
 	}
 
 	@VisibleForTesting
 	Map<Integer, List<Integer>> generateStateActionSpace(int nVertices, int nProcUnitsPerSocket) {
 		Map<Integer, List<Integer>> actionMap = new HashMap<>();
-		CombinatoricsVector<Integer> socketIds = new CombinatoricsVector<>();
-		socketScheduleIdMap.values().forEach(socketIds::addValue);
-		int actionId = 1;
-		Generator<Integer> gen = createPermutationWithRepetitionGenerator(socketIds, nVertices);
-		for (ICombinatoricsVector<Integer> cpuSelection : gen.generateAllObjects()) {
-			// Puts a state/action ID and state pair like <1, {3,1,1,4,2,2,1}>
-			List<Integer> stateIdVector = cpuSelection.getVector();
-			Map<Integer, Long> socketAssignmentCount = stateIdVector
-				.stream()
-				.collect(Collectors.groupingBy(socketId -> socketId, Collectors.counting()));
-			if (socketAssignmentCount
-				.values()
-				.stream()
-				.allMatch(count -> count <= nProcUnitsPerSocket)) {
-				actionMap.put(actionId++, stateIdVector);
+		Set<List<Integer>> actionSet = new HashSet<>();
+		List<Integer> socketIds = new ArrayList<>();
+		sockAddrToSockIdMap.values().forEach(socketId -> {
+			for (int i = 0; i < nProcUnitsPerSocket; i++) {
+				socketIds.add(socketId);
 			}
-		}
+		});
+		AtomicInteger actionId = new AtomicInteger(1);
+		Generator
+			.combination(socketIds)
+			.simple(nVertices)
+			.stream()
+			.forEach(currentCombo -> Generator
+				.permutation(currentCombo)
+				.simple()
+				.forEach(actionSet::add));
 
+		actionSet.forEach(action -> actionMap.put(actionId.getAndIncrement(), action));
 		return actionMap;
 	}
 
 	@VisibleForTesting
-	Map<Integer, List<Integer>> generateStateActionSpaceByElimination(
-		int nVertices,
-		int nProcUnitsPerSocket) {
-		Map<Integer, List<Integer>> actionMap = new HashMap<>();
-		CombinatoricsVector<Integer> socketIds = new CombinatoricsVector<>();
-		socketScheduleIdMap.values().forEach(socketIds::addValue);
-		int actionId = 1;
-		Generator<Integer> gen = createPermutationWithRepetitionGenerator(socketIds, nVertices);
-		for (ICombinatoricsVector<Integer> cpuSelection : gen.generateAllObjects()) {
-			// Puts a state/action ID and state pair like <1, {3,1,1,4,2,2,1}>
-			List<Integer> stateIdVector = cpuSelection.getVector();
-			Map<Integer, Long> socketAssignmentCount = stateIdVector
+	BiMap<Integer, Map<Integer, Long>> generateTopLevelActionSpace() {
+		BiMap<Integer, Map<Integer, Long>> actionMap = HashBiMap.create();
+		List<List<Integer>> combinationList = generateCombinationsFor(
+			nVertices,
+			nProcUnitsPerSocket);
+		AtomicInteger actionId = new AtomicInteger(1);
+		combinationList.forEach(combination -> {
+			Map<Integer, Long> socketIdOpCount = combination
 				.stream()
 				.collect(Collectors.groupingBy(socketId -> socketId, Collectors.counting()));
-			if (socketAssignmentCount
-				.values()
-				.stream()
-				.allMatch(count -> count <= nProcUnitsPerSocket)) {
-				actionMap.put(actionId++, stateIdVector);
-			}
-		}
-
+			actionMap.put(actionId.getAndIncrement(), socketIdOpCount);
+		});
 		return actionMap;
 	}
 
-	public List<Integer> generateCombinationsFor(int nVertices, int nProcUnitsPerSocket) {
-		List<Integer> combinationList = new ArrayList<>();
-		for (int i = 0; i < socketScheduleIdMap.size(); i++) {
-
-		}
+	@VisibleForTesting
+	List<List<Integer>> generateCombinationsFor(int nVertices, int nProcUnitsPerSocket) {
+		Map<Integer, List<List<Integer>>> preCombinationMap = new HashMap<>();
+		List<List<Integer>> combinationList = new ArrayList<>();
+		sockAddrToSockIdMap.values().forEach(scheduleId -> {
+			List<List<Integer>> preCombinationList = new ArrayList<>();
+			for (int i = 0; i < nProcUnitsPerSocket; i++) {
+				List<Integer> socketContributionList = new ArrayList<>();
+				for (int j = 0; j <= i; j++) {
+					socketContributionList.add(scheduleId);
+				}
+				preCombinationList.add(socketContributionList);
+			}
+			preCombinationMap.put(scheduleId, preCombinationList);
+		});
+		getPossibleLists(
+			nVertices,
+			preCombinationMap,
+			sockAddrToSockIdMap.size(),
+			combinationList,
+			new ArrayList<>());
 		return combinationList;
 	}
 
-	public int getStateFor(List<Tuple3<TaskManagerLocation, Integer, Integer>> cpuAssignment) {
+	private void getPossibleLists(
+		int nVertices,
+		Map<Integer, List<List<Integer>>> preCombinationMap,
+		int socketId,
+		List<List<Integer>> resultList,
+		List<Integer> currentCombination) {
+		if (nVertices <= 0 || socketId <= 0) {
+			if (nVertices == 0 && socketId == 0) {
+				resultList.add(new ArrayList<>(currentCombination));
+			}
+			return;
+		}
+
+		preCombinationMap.get(socketId).forEach(preCombination -> {
+			int remainingVertices = nVertices - preCombination.size();
+			Map<Integer, List<List<Integer>>> remainingPreCombinations = preCombinationMap
+				.entrySet()
+				.stream()
+				.filter(entrySet -> entrySet.getKey() != socketId)
+				.collect(
+					Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+			List<Integer> nextCombination = new ArrayList<>(currentCombination);
+			nextCombination.addAll(preCombination);
+			getPossibleLists(
+				remainingVertices,
+				remainingPreCombinations,
+				socketId - 1,
+				resultList,
+				nextCombination);
+		});
+	}
+
+	void generateActionFor(
+		Map<Integer, Long> selectedCombination) {
+		List<Integer> currentAction = new ArrayList<>(nVertices);
+		selectedCombination.forEach((socketId, opCount) -> {
+			for (int i = 0; i < opCount; i++) {
+				currentAction.add(socketId);
+			}
+		});
+		int i = 0;
+		int nextKey = nodeLevelStateSpaceMap
+			.keySet()
+			.stream()
+			.mapToInt(actionId -> actionId)
+			.max()
+			.orElse(0) + 1;
+		while (i < 5) {
+			Collections.shuffle(currentAction);
+			if (isValidOperatorPlacement(currentAction) && !nodeLevelStateSpaceMap.containsValue(
+				currentAction)) {
+				nodeLevelStateSpaceMap.put(nextKey++, new ArrayList<>(currentAction));
+				i++;
+			}
+		}
+	}
+
+	public Tuple2<Integer, Integer> getStateFor(List<Tuple3<TaskManagerLocation, Integer, Integer>> cpuAssignment) {
 		List<Integer> cpuAssignmentStateVector = cpuAssignment
 			.stream()
-			.map(operatorLoc -> socketScheduleIdMap.get(getSocketAddress(
+			.map(operatorLoc -> sockAddrToSockIdMap.get(getSocketAddress(
 				operatorLoc.f0.address(),
 				operatorLoc.f2)))
 			.collect(Collectors.toList());
-		return stateSpaceMap
-			.entrySet()
-			.stream()
-			.filter(entry -> {
-				boolean condition = false;
-				if (entry != null && entry.getValue() != null) {
-					condition =
-						entry.getValue().size() == cpuAssignmentStateVector.size() && entry
-							.getValue()
-							.containsAll(cpuAssignmentStateVector);
-
-				} else {
-					if (entry == null) {
-						log.warn("Entry was null");
-					} else {
-						log.warn("Entry value for state {} was null", entry.getKey());
-					}
-				}
-				return condition;
-			})
-			.map(
-				Map.Entry::getKey)
-			.findFirst()
-			.orElse(-1);
+		Map<Integer, Long> sockIdOpCountMap = cpuAssignmentStateVector.stream()
+			.collect(Collectors.groupingBy(socketId -> socketId, Collectors.counting()));
+		int topLevelStateId = topLevelStateSpaceMap.inverse().get(sockIdOpCountMap);
+		int nodeLevelStateId = nodeLevelStateSpaceMap.inverse().get(cpuAssignmentStateVector);
+		return new Tuple2<>(topLevelStateId, nodeLevelStateId);
 	}
 
 	static class Transition {
-		int oldState;
-		int newState;
-		int action;
+		int oldTopLevelState;
+		int newTopLevelState;
+		int topLevelAction;
+		int oldNodeLevelState;
+		int newNodeLevelState;
+		int nodeLevelAction;
 		double reward;
 
-		public Transition(int oldState, int action, int newState, double reward) {
-			this.oldState = oldState;
-			this.newState = newState;
+		public Transition(
+			int oldTopLevelState,
+			int topLevelAction,
+			int newTopLevelState,
+			int oldNodeLevelState,
+			int nodeLevelAction,
+			int newNodeLevelState,
+			double reward) {
+
+			this.oldTopLevelState = oldTopLevelState;
+			this.newTopLevelState = newTopLevelState;
+			this.topLevelAction = topLevelAction;
+			this.oldNodeLevelState = oldNodeLevelState;
+			this.newNodeLevelState = newNodeLevelState;
+			this.nodeLevelAction = nodeLevelAction;
 			this.reward = reward;
-			this.action = action;
 		}
 	}
 
 	private void setupInfluxDBConnection() {
 		influxDBTransitionsClient = new InfluxDBTransitionsClient(
 			"http://127.0.0.1:8086",
-			"flink-transitions", retentionPolicyName, log);
+			"flink-transitions", RETENTION_POLICY_NAME, log);
 		influxDBTransitionsClient.setup();
 	}
 
-	public List<Tuple2<InetAddress, Integer>> getPlacementSolution(int action) {
+	public List<Tuple2<InetAddress, Integer>> getPlacementSolution(
+		int nodeLevelAction) {
 		List<Tuple2<InetAddress, Integer>> placementSolution = new ArrayList<>();
-		List<Integer> placementAction = stateSpaceMap.get(action);
+		List<Integer> placementAction = nodeLevelStateSpaceMap.get(nodeLevelAction);
 		placementAction.forEach(stateId -> {
 			try {
-				placementSolution.add(getSocketId(socketScheduleIdMap
+				placementSolution.add(getSocketId(sockAddrToSockIdMap
 					.inverse()
 					.get(stateId)));
 			} catch (UnknownHostException e) {
@@ -257,54 +339,84 @@ public class QActorCriticModel {
 
 	public void updateState(
 		double reward,
-		int currentStateId,
+		Tuple2<Integer, Integer> currentStateId,
 		Function<Integer, Double> stateRewardFunction) {
 
-		if (this.currentStateId != currentStateId) {
+		if (this.currentTopLevelStateId != currentStateId.f0) {
 			log.info("Updating agent state with received reward : " + reward);
 
-			this.previousStateId = this.currentStateId;
-			this.currentStateId = currentStateId;
+			this.previousTopLevelStateId = this.currentTopLevelStateId;
+			this.previousNodeLevelStateId = this.currentNodeLevelStateId;
+			this.currentTopLevelStateId = currentStateId.f0;
+			this.currentNodeLevelStateId = currentStateId.f1;
 
-			Set<Integer> actionsAtState = stateSpaceMap.keySet();
+			Set<Integer> topLevelActionsAtState = topLevelStateSpaceMap.keySet();
+			Set<Integer> nodeLevelActionsAtState = nodeLevelStateSpaceMap.keySet();
 			Transition currentTransition = new Transition(
-				previousStateId,
-				currentActionId,
-				currentStateId,
+				previousTopLevelStateId,
+				currentTopLevelActionId,
+				currentStateId.f0,
+				previousNodeLevelStateId,
+				currentNodeLevelActionId,
+				currentStateId.f1,
 				reward);
-			agent.update(
-				currentTransition.oldState,
-				currentTransition.action,
-				currentTransition.newState,
-				actionsAtState,
+			topLevelAgent.update(
+				currentTransition.oldTopLevelState,
+				currentTransition.topLevelAction,
+				currentTransition.newTopLevelState,
+				topLevelActionsAtState,
 				currentTransition.reward,
 				stateRewardFunction);
+			nodeLevelAgent.update(
+				currentTransition.oldNodeLevelState,
+				currentTransition.nodeLevelAction,
+				currentTransition.newNodeLevelState,
+				nodeLevelActionsAtState,
+				currentTransition.reward,
+				stateRewardFunction
+			);
 			transitionList.add(currentTransition);
-			if (isValidAction(currentTransition.action) && isValidState(currentTransition.oldState)
-				&& isValidState(currentTransition.newState)) {
+			if (isValidAction(currentTransition.topLevelAction)
+				&& isValidState(currentTransition.oldTopLevelState)
+				&& isValidState(currentTransition.newTopLevelState)) {
 				flushToDB(currentTransition);
 			}
 		}
 	}
 
-	public int getSuggestedAction(int currentStateId) {
-		Set<Integer> actionsAtState = stateSpaceMap.keySet();
-		this.currentActionId = agent.selectAction(currentStateId, actionsAtState);
-		return currentActionId;
+	public Tuple2<Integer, Integer> getSuggestedAction(
+		int currentTopLevelStateId,
+		int currentNodeLevelStateId) {
+
+		Set<Integer> topLevelActionsAtState = topLevelStateSpaceMap.keySet();
+		this.currentTopLevelActionId = topLevelAgent.selectAction(
+			currentTopLevelStateId,
+			topLevelActionsAtState);
+		generateActionFor(topLevelStateSpaceMap.get(currentTopLevelActionId));
+		Set<Integer> nodeLevelActionsAtState = nodeLevelStateSpaceMap.keySet();
+		this.currentNodeLevelActionId = nodeLevelAgent.selectAction(
+			currentNodeLevelStateId,
+			nodeLevelActionsAtState);
+		return new Tuple2<>(this.currentTopLevelActionId, this.currentNodeLevelActionId);
 	}
 
 	private boolean isValidAction(int actionId) {
-		return stateSpaceMap.containsKey(actionId);
+		return topLevelStateSpaceMap.containsKey(actionId);
+	}
+
+	private boolean isValidOperatorPlacement(List<Integer> operatorPlacement) {
+		boolean validSize = operatorPlacement.size() == orderedOperatorMap.size();
+		return validSize;
 	}
 
 	private boolean isValidState(int stateId) {
-		return stateSpaceMap.containsKey(stateId);
+		return topLevelStateSpaceMap.containsKey(stateId);
 	}
 
 	private void flushToDB(Transition transition) {
-		List<Integer> actionAsList = stateSpaceMap.get(transition.action);
-		List<Integer> oldStateAsList = stateSpaceMap.get(transition.oldState);
-		List<Integer> newStateAsList = stateSpaceMap.get(transition.newState);
+		List<Integer> actionAsList = nodeLevelStateSpaceMap.get(transition.nodeLevelAction);
+		List<Integer> oldStateAsList = nodeLevelStateSpaceMap.get(transition.oldNodeLevelState);
+		List<Integer> newStateAsList = nodeLevelStateSpaceMap.get(transition.newNodeLevelState);
 
 		if (actionAsList != null && oldStateAsList != null && newStateAsList != null) {
 			StringBuilder actionStr = new StringBuilder();
@@ -329,7 +441,7 @@ public class QActorCriticModel {
 			oldStateStr.deleteCharAt(oldStateStr.length() - 1);
 			newStateStr.deleteCharAt(newStateStr.length() - 1);
 
-			influxDBTransitionsClient.writeQLearningActionToDB(
+			influxDBTransitionsClient.writeQacActionToDB(
 				actionStr.toString(),
 				oldStateStr.toString(),
 				newStateStr.toString(),

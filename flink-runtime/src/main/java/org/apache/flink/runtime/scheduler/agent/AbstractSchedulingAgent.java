@@ -85,6 +85,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	protected List<Tuple3<TaskManagerLocation, Integer, Integer>> currentPlacementAction;
 	protected ScheduledFuture<?> updateExecutor;
 	protected final ExecutionGraph executionGraph;
+	protected final Map<Tuple3<ExecutionVertexID, String, Integer>, Integer> orderedOperatorMap = new HashMap<>();
 	protected List<SchedulingExecutionEdge> orderedEdgeList;
 	protected CompletableFuture<Collection<Acknowledge>> previousRescheduleFuture;
 	protected final Map<String, Tuple2<TaskManagerLocation, Integer>> taskManLocSlotCountMap = new HashMap<>();
@@ -92,7 +93,6 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 
 	private final Map<String, Double> interOpEdgeThroughput;
 	private final Map<String, SchedulingExecutionEdge> edgeMap;
-	private final Map<String, Integer> orderedOperatorMap = new HashMap<>();
 	private final Map<String, Double> maxPhysicalEdgeThroughput = new HashMap<>();
 	private final Map<String, Double> maxLogicalEdgeThroughput = new HashMap<>();
 	private final List<SchedulingExecutionVertex> sourceVertices = new ArrayList<>();
@@ -228,7 +228,8 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		if (taskPerCore) {
 			List<Integer> visitedCoreIdList = new ArrayList<>();
 			for (int cpuId = 0; cpuId < cpuLayout.cpus(); cpuId++) {
-				int currentCoreId = cpuLayout.coreId(cpuId);
+				int currentCoreId = cpuLayout.socketId(cpuId) * cpuLayout.coresPerSocket()
+					* cpuLayout.threadsPerCore() + cpuLayout.coreId(cpuId);
 				if (!visitedCoreIdList.contains(currentCoreId)) {
 					cpuIdList.add(cpuId);
 					visitedCoreIdList.add(currentCoreId);
@@ -248,7 +249,10 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		AtomicInteger operatorCount = new AtomicInteger(0);
 		schedulingTopology.getVertices().forEach(schedulingExecutionVertex -> {
 			orderedOperatorMap.put(
-				schedulingExecutionVertex.getId().toString(),
+				new Tuple3<>(
+					schedulingExecutionVertex.getId(),
+					schedulingExecutionVertex.getTaskName(),
+					schedulingExecutionVertex.getSubTaskIndex()),
 				operatorCount.getAndIncrement());
 			AtomicInteger consumerCount = new AtomicInteger(0);
 			schedulingExecutionVertex.getConsumedResults().forEach(schedulingResultPartition -> {
@@ -650,7 +654,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 
 	@Override
 	public void logPlacementAction(
-		int actionId,
+		Tuple2<Integer, Integer> actionId,
 		List<Tuple3<TaskManagerLocation, Integer, Integer>> placementAction) {
 		if (placementAction != null && !placementAction.isEmpty()) {
 			StringBuilder logMessage = new StringBuilder();

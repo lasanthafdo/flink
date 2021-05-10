@@ -39,7 +39,11 @@ public class QActorCriticModelTest extends TestLogger {
 	@Before
 	public void setUp() {
 		List<Tuple2<InetAddress, Integer>> nodeSocketCounts = generateNodeSocketInfo();
-		qActorCriticModel = new QActorCriticModel(nodeSocketCounts, nVertices, nProcUnitsPerSocket);
+		qActorCriticModel = new QActorCriticModel(
+			nodeSocketCounts,
+			nVertices,
+			nProcUnitsPerSocket,
+			null);
 	}
 
 	private List<Tuple2<InetAddress, Integer>> generateNodeSocketInfo() {
@@ -50,10 +54,32 @@ public class QActorCriticModelTest extends TestLogger {
 
 	@Test
 	public void testStateActionSpaceGenerationSingleNode() {
+		Map<Integer, Map<Integer, Long>> stateActionMap = qActorCriticModel.generateTopLevelActionSpace(
+		);
+		int expectedSize = 70;
+		Assert.assertEquals(expectedSize, stateActionMap.size());
+	}
+
+	@Test
+	public void testAltStateActionSpaceGenerationSingleNode() {
 		Map<Integer, List<Integer>> stateActionMap = qActorCriticModel.generateStateActionSpace(
 			nVertices,
 			nProcUnitsPerSocket);
 		int expectedSize = 70;
+		Assert.assertEquals(expectedSize, stateActionMap.size());
+	}
+
+	@Test
+	public void testAltStateActionSpaceGenerationMultiNode() {
+		qActorCriticModel.addToSocketScheduleIdMap("10.38.205.112:0");
+		qActorCriticModel.addToSocketScheduleIdMap("10.38.205.112:1");
+		qActorCriticModel.addToSocketScheduleIdMap("10.38.205.61:0");
+		qActorCriticModel.addToSocketScheduleIdMap("10.38.205.61:1");
+		nVertices = 34;
+		nProcUnitsPerSocket = 6;
+		Map<Integer, List<Integer>> stateActionMap = qActorCriticModel.generateStateActionSpace(
+			nVertices, nProcUnitsPerSocket);
+		int expectedSize = 0;
 		Assert.assertEquals(expectedSize, stateActionMap.size());
 	}
 
@@ -63,11 +89,26 @@ public class QActorCriticModelTest extends TestLogger {
 		qActorCriticModel.addToSocketScheduleIdMap("10.38.205.112:1");
 		qActorCriticModel.addToSocketScheduleIdMap("10.38.205.61:0");
 		qActorCriticModel.addToSocketScheduleIdMap("10.38.205.61:1");
-		nVertices = 24;
+		nVertices = 34;
 		nProcUnitsPerSocket = 6;
-		Map<Integer, List<Integer>> stateActionMap = qActorCriticModel.generateStateActionSpace(
-			nVertices, nProcUnitsPerSocket);
+		Map<Integer, Map<Integer, Long>> stateActionMap = qActorCriticModel.generateTopLevelActionSpace(
+		);
 		int expectedSize = 0;
 		Assert.assertEquals(expectedSize, stateActionMap.size());
 	}
+
+	@Test
+	public void testCombinationGenerationMultiNode() {
+		qActorCriticModel.addToSocketScheduleIdMap("10.38.205.112:0");
+		qActorCriticModel.addToSocketScheduleIdMap("10.38.205.112:1");
+		qActorCriticModel.addToSocketScheduleIdMap("10.38.205.61:0");
+		qActorCriticModel.addToSocketScheduleIdMap("10.38.205.61:1");
+		nVertices = 34;
+		nProcUnitsPerSocket = 6;
+		List<List<Integer>> combinationList = qActorCriticModel.generateCombinationsFor(
+			nVertices, nProcUnitsPerSocket);
+		int expectedSize = 0;
+		Assert.assertEquals(expectedSize, combinationList.size());
+	}
+
 }
