@@ -24,6 +24,9 @@ import org.apache.flink.runtime.clusterframework.types.SlotProfile;
 import org.apache.flink.runtime.jobmanager.scheduler.Locality;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import javax.annotation.Nonnull;
 
 import java.util.Collection;
@@ -35,6 +38,8 @@ import java.util.Optional;
  * This class implements a {@link SlotSelectionStrategy} that is based on location preference hints.
  */
 public class LocationForcedSlotSelectionStrategy implements SlotSelectionStrategy {
+
+	private static final Logger log = LoggerFactory.getLogger(LocationForcedSlotSelectionStrategy.class);
 
 	LocationForcedSlotSelectionStrategy() {
 	}
@@ -103,6 +108,11 @@ public class LocationForcedSlotSelectionStrategy implements SlotSelectionStrateg
 			}
 		}
 
+		if (bestCandidate == null || !locationPreferences.contains(bestCandidate
+			.getSlotInfo()
+			.getTaskManagerLocation())) {
+			log.warn("Could not find slot for resource profile {}", resourceProfile);
+		}
 		// at the end of the iteration, we return the candidate with best possible locality or null.
 		return bestCandidate != null ?
 			Optional.of(SlotInfoAndLocality.of(

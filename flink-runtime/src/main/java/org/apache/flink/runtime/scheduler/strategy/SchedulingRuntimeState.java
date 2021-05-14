@@ -18,7 +18,6 @@
 
 package org.apache.flink.runtime.scheduler.strategy;
 
-import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.runtime.executiongraph.ExecutionVertex;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
@@ -44,10 +43,6 @@ public interface SchedulingRuntimeState {
 	double getArrivalRate();
 
 	List<Tuple3<TaskManagerLocation, Integer, Integer>> getPlacementSolution();
-
-	void logPlacementAction(
-		Tuple2<Integer, Integer> actionId,
-		List<Tuple3<TaskManagerLocation, Integer, Integer>> placementAction);
 
 	boolean isValidPlacementAction(List<Tuple3<TaskManagerLocation, Integer, Integer>> suggestedPlacementAction);
 }

@@ -28,6 +28,7 @@ import org.apache.flink.shaded.guava18.com.google.common.collect.BiMap;
 import org.apache.flink.shaded.guava18.com.google.common.collect.HashBiMap;
 
 import com.github.chen0040.rl.learning.actorcritic.ActorCriticLearner;
+import com.github.chen0040.rl.models.QModel;
 import org.paukov.combinatorics3.Generator;
 import org.slf4j.Logger;
 
@@ -50,8 +51,10 @@ import java.util.stream.Collectors;
  */
 public class QActorCriticModel {
 
-	private static final String INET_ADDR_SOCKET_COUNT_DELIM = ":";
-	private final static String RETENTION_POLICY_NAME = "one_day";
+	private static final String INET_ADDR_SOCKET_DELIM = ":";
+	private static final String RETENTION_POLICY_NAME = "one_day";
+	public static final int DEFAULT_NUM_STATES_INCREMENTED = 5;
+	private final Map<String, Tuple2<TaskManagerLocation, Integer>> taskManLocSlotCountMap;
 
 	private int topLevelStateCount;
 	private int topLevelActionCount;
@@ -65,7 +68,7 @@ public class QActorCriticModel {
 	private final ActorCriticLearner topLevelAgent = new ActorCriticLearner(
 		topLevelStateCount,
 		topLevelActionCount);
-	private final ActorCriticLearner nodeLevelAgent = new ActorCriticLearner();
+	private final ActorCriticLearner nodeLevelAgent = new ActorCriticLearner(1, 1);
 	private final List<Transition> transitionList = new ArrayList<>();
 	private InfluxDBTransitionsClient influxDBTransitionsClient;
 	private final BiMap<Integer, Map<Integer, Long>> topLevelStateSpaceMap;
@@ -74,7 +77,7 @@ public class QActorCriticModel {
 	private final int nSchedulingSocketSlots;
 	private final int nVertices;
 	private final int nProcUnitsPerSocket;
-	private final Map<Tuple3<ExecutionVertexID, String, Integer>, Integer> orderedOperatorMap;
+	private final BiMap<Tuple3<ExecutionVertexID, String, Integer>, Integer> orderedOperatorMap;
 	private final Logger log;
 
 	public QActorCriticModel(
@@ -82,18 +85,20 @@ public class QActorCriticModel {
 		int nVertices,
 		int nProcessingUnitsPerSocket,
 		Map<Tuple3<ExecutionVertexID, String, Integer>, Integer> orderedOperatorMap,
+		Map<String, Tuple2<TaskManagerLocation, Integer>> taskManLocSlotCountMap,
 		Logger log) {
 		this.sockAddrToSockIdMap = HashBiMap.create();
 		this.nSchedulingSocketSlots = getAvailableSlotsAfterDerivation(nodeSocketCounts);
 		this.nVertices = nVertices;
 		this.nProcUnitsPerSocket = nProcessingUnitsPerSocket;
-		this.orderedOperatorMap = orderedOperatorMap;
+		this.orderedOperatorMap = HashBiMap.create(orderedOperatorMap);
 		this.topLevelStateSpaceMap = generateTopLevelActionSpace();
-		int topLevelStates = topLevelStateSpaceMap.size();
 		this.nodeLevelStateSpaceMap = HashBiMap.create();
-		this.topLevelStateCount = topLevelStates;
-		this.topLevelActionCount = topLevelStates;
+		int topLevelStateActionCount = topLevelStateSpaceMap.size();
+		this.topLevelStateCount = topLevelStateActionCount;
+		this.topLevelActionCount = topLevelStateActionCount;
 		this.log = log;
+		this.taskManLocSlotCountMap = taskManLocSlotCountMap;
 
 		setupInfluxDBConnection();
 	}
@@ -108,20 +113,26 @@ public class QActorCriticModel {
 		this.nSchedulingSocketSlots = getAvailableSlotsAfterDerivation(nodeSocketCounts);
 		this.nVertices = nVertices;
 		this.nProcUnitsPerSocket = nProcessingUnitsPerSocket;
-		this.orderedOperatorMap = orderedOperatorMap;
+		this.orderedOperatorMap = HashBiMap.create(orderedOperatorMap);
 		this.topLevelStateSpaceMap = generateTopLevelActionSpace();
 		this.nodeLevelStateSpaceMap = HashBiMap.create();
 		this.topLevelStateCount = topLevelStateSpaceMap.size();
 		this.topLevelActionCount = topLevelStateSpaceMap.size();
+		this.taskManLocSlotCountMap = null;
 		this.log = null;
 	}
 
 	private String getSocketAddress(InetAddress node, Integer socket) {
-		return node.getHostAddress() + INET_ADDR_SOCKET_COUNT_DELIM + socket;
+		return node.getHostAddress() + INET_ADDR_SOCKET_DELIM + socket;
+	}
+
+	private String getNodeIpAddress(String socketAddress) {
+		String[] socketIdParts = socketAddress.split(INET_ADDR_SOCKET_DELIM);
+		return socketIdParts[0];
 	}
 
 	private Tuple2<InetAddress, Integer> getSocketId(String socketAddress) throws UnknownHostException {
-		String[] socketIdParts = socketAddress.split(INET_ADDR_SOCKET_COUNT_DELIM);
+		String[] socketIdParts = socketAddress.split(INET_ADDR_SOCKET_DELIM);
 		return new Tuple2<>(
 			InetAddress.getByName(socketIdParts[0]),
 			Integer.valueOf(socketIdParts[1]));
@@ -254,20 +265,33 @@ public class QActorCriticModel {
 			}
 		});
 		int i = 0;
-		int nextKey = nodeLevelStateSpaceMap
-			.keySet()
-			.stream()
-			.mapToInt(actionId -> actionId)
-			.max()
-			.orElse(0) + 1;
-		while (i < 5) {
+		int j = 0;
+		while (i < DEFAULT_NUM_STATES_INCREMENTED && j < DEFAULT_NUM_STATES_INCREMENTED * 2) {
+			j++;
 			Collections.shuffle(currentAction);
-			if (isValidOperatorPlacement(currentAction) && !nodeLevelStateSpaceMap.containsValue(
-				currentAction)) {
-				nodeLevelStateSpaceMap.put(nextKey++, new ArrayList<>(currentAction));
+			if (isValidOperatorPlacement(currentAction) && insertStateOrAction(currentAction)) {
 				i++;
 			}
 		}
+	}
+
+	private boolean insertStateOrAction(List<Integer> currentStateOrAction) {
+		boolean insertSuccess = false;
+		if (!nodeLevelStateSpaceMap.containsValue(currentStateOrAction)) {
+			int nextKey = nodeLevelStateSpaceMap
+				.keySet()
+				.stream()
+				.mapToInt(actionId -> actionId)
+				.max()
+				.orElse(0) + 1;
+			nodeLevelStateSpaceMap.put(nextKey, new ArrayList<>(currentStateOrAction));
+			int stateOrActionCount = nodeLevelStateSpaceMap.size();
+			QModel nodeLevelQModel = nodeLevelAgent.getP();
+			nodeLevelQModel.setStateCount(stateOrActionCount);
+			nodeLevelQModel.setActionCount(stateOrActionCount);
+			insertSuccess = true;
+		}
+		return insertSuccess;
 	}
 
 	public Tuple2<Integer, Integer> getStateFor(List<Tuple3<TaskManagerLocation, Integer, Integer>> cpuAssignment) {
@@ -280,6 +304,12 @@ public class QActorCriticModel {
 		Map<Integer, Long> sockIdOpCountMap = cpuAssignmentStateVector.stream()
 			.collect(Collectors.groupingBy(socketId -> socketId, Collectors.counting()));
 		int topLevelStateId = topLevelStateSpaceMap.inverse().get(sockIdOpCountMap);
+		// Insert should only succeed if the state is not already there
+		if (insertStateOrAction(cpuAssignmentStateVector)) {
+			log.info(
+				"New state {} inserted into node-level state space map",
+				cpuAssignmentStateVector);
+		}
 		int nodeLevelStateId = nodeLevelStateSpaceMap.inverse().get(cpuAssignmentStateVector);
 		return new Tuple2<>(topLevelStateId, nodeLevelStateId);
 	}
@@ -342,7 +372,8 @@ public class QActorCriticModel {
 		Tuple2<Integer, Integer> currentStateId,
 		Function<Integer, Double> stateRewardFunction) {
 
-		if (this.currentTopLevelStateId != currentStateId.f0) {
+		if (this.currentTopLevelStateId != currentStateId.f0
+			|| this.currentNodeLevelStateId != currentStateId.f1) {
 			log.info("Updating agent state with received reward : " + reward);
 
 			this.previousTopLevelStateId = this.currentTopLevelStateId;
@@ -406,7 +437,34 @@ public class QActorCriticModel {
 
 	private boolean isValidOperatorPlacement(List<Integer> operatorPlacement) {
 		boolean validSize = operatorPlacement.size() == orderedOperatorMap.size();
-		return validSize;
+		List<Tuple2<String, String>> operatorHostPlacement = new ArrayList<>();
+		Map<Integer, String> sockIdToSockAddr = sockAddrToSockIdMap.inverse();
+		Map<Integer, Tuple3<ExecutionVertexID, String, Integer>> inverseOrderedOperatorMap = orderedOperatorMap
+			.inverse();
+		for (int i = 0; i < operatorPlacement.size(); i++) {
+			operatorHostPlacement.add(new Tuple2<>(
+				getNodeIpAddress(sockIdToSockAddr.get(operatorPlacement.get(i))),
+				inverseOrderedOperatorMap.get(i).f1));
+		}
+		int opPlacementMaxNodeLevelParallelism = operatorHostPlacement
+			.stream()
+			.collect(Collectors.groupingBy(
+				opNodeAssignment -> opNodeAssignment,
+				Collectors.counting()))
+			.values()
+			.stream()
+			.mapToInt(Long::intValue).max().orElse(0);
+		int maxParallelism = taskManLocSlotCountMap
+			.values()
+			.stream()
+			.mapToInt(tuple -> tuple.f1)
+			.max()
+			.orElse(0);
+		boolean validParallelism = opPlacementMaxNodeLevelParallelism <= maxParallelism;
+		if (!validParallelism) {
+			log.warn("Invalid parallelism for node level operator placement {}", operatorPlacement);
+		}
+		return validSize && validParallelism;
 	}
 
 	private boolean isValidState(int stateId) {

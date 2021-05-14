@@ -79,8 +79,8 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	protected final SchedulingTopology schedulingTopology;
 	protected final Logger log;
 	protected final int nProcessingUnits;
-	protected int nSchedulingSlots;
 	protected final int nVertices;
+	protected int nSchedulingSlots;
 	protected List<Tuple3<TaskManagerLocation, Integer, Integer>> suggestedPlacementAction;
 	protected List<Tuple3<TaskManagerLocation, Integer, Integer>> currentPlacementAction;
 	protected ScheduledFuture<?> updateExecutor;
@@ -90,6 +90,8 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	protected CompletableFuture<Collection<Acknowledge>> previousRescheduleFuture;
 	protected final Map<String, Tuple2<TaskManagerLocation, Integer>> taskManLocSlotCountMap = new HashMap<>();
 	protected final CpuLayout cpuLayout;
+	protected final boolean taskPerCore;
+	protected final int maxParallelism;
 
 	private final Map<String, Double> interOpEdgeThroughput;
 	private final Map<String, SchedulingExecutionEdge> edgeMap;
@@ -99,8 +101,6 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	private final long triggerPeriod;
 	private final long waitTimeout;
 	private final int numRetries;
-	private final int maxParallelism;
-	protected final boolean taskPerCore;
 	private final SchedulingStrategy schedulingStrategy;
 	private SchedulingCluster schedulingCluster;
 	private ResourceManagerGateway resourceManagerGateway;
@@ -303,11 +303,27 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	}
 
 	protected Map<String, Double> getCpuUsageMetrics() {
-		return influxDBMetricsClient.getCpuUsageMetrics(nProcessingUnits);
+		List<String> nodeList = schedulingCluster
+			.getSubContainers()
+			.stream()
+			.map(SchedulingExecutionContainer::getId)
+			.collect(
+				Collectors.toList());
+		return influxDBMetricsClient.getCpuUsageMetrics(nProcessingUnits, nodeList);
 	}
 
 	protected Map<String, Double> getCpuFrequencyMetrics() {
-		return influxDBMetricsClient.getCpuFrequencyMetrics(nProcessingUnits);
+		List<String> nodeList = schedulingCluster
+			.getSubContainers()
+			.stream()
+			.map(SchedulingExecutionContainer::getId)
+			.collect(
+				Collectors.toList());
+		return influxDBMetricsClient.getCpuFrequencyMetrics(nProcessingUnits, nodeList);
+	}
+
+	protected Map<String, Double> getOperatorUsageMetrics() {
+		return influxDBMetricsClient.getOperatorUsageMetrics();
 	}
 
 	protected void updateStateInformation() {
@@ -316,11 +332,6 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 			"taskmanager_job_task_edge_numRecordsProcessedPerSecond",
 			"edge_id",
 			"rate");
-		Map<String, Double> cpuUsageMetrics = influxDBMetricsClient.getCpuUsageMetrics(
-			nProcessingUnits);
-		Map<String, Double> cpuFrequencyMetrics = influxDBMetricsClient.getCpuFrequencyMetrics(
-			nProcessingUnits);
-		Map<String, Double> operatorUsageMetrics = influxDBMetricsClient.getOperatorUsageMetrics();
 		if (!waitingForResourceManager) {
 			Map<String, SchedulingExecutionVertex> currentOperators = StreamSupport
 				.stream(schedulingTopology.getVertices().spliterator(), false)
@@ -361,13 +372,16 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 						}
 					});
 			}
-			schedulingCluster.updateResourceUsageMetrics(
+			Map<String, Double> operatorUsageMetrics = getOperatorUsageMetrics();
+			Map<String, Double> cpuUsageMetrics = getCpuUsageMetrics();
+			Map<String, Double> cpuFrequencyMetrics = getCpuFrequencyMetrics();
+			schedulingCluster.updateResourceUsage(
 				SchedulingExecutionContainer.CPU,
 				cpuUsageMetrics);
-			schedulingCluster.updateResourceUsageMetrics(
+			schedulingCluster.updateResourceUsage(
 				SchedulingExecutionContainer.FREQ,
 				cpuFrequencyMetrics);
-			schedulingCluster.updateResourceUsageMetrics(
+			schedulingCluster.updateResourceUsage(
 				SchedulingExecutionContainer.OPERATOR,
 				operatorUsageMetrics);
 		}
@@ -652,7 +666,6 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		});
 	}
 
-	@Override
 	public void logPlacementAction(
 		Tuple2<Integer, Integer> actionId,
 		List<Tuple3<TaskManagerLocation, Integer, Integer>> placementAction) {

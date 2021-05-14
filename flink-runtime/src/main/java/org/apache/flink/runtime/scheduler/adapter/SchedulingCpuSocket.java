@@ -239,7 +239,7 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 	}
 
 	@Override
-	public void updateResourceUsageMetrics(String type, Map<String, Double> resourceUsageMetrics) {
+	public void updateResourceUsage(String type, Map<String, Double> resourceUsageMetrics) {
 		if (CPU.equals(type)) {
 			cpuAssignmentMap
 				.keySet()

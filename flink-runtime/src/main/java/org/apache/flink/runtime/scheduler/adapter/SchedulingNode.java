@@ -347,10 +347,10 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 	}
 
 	@Override
-	public void updateResourceUsageMetrics(String type, Map<String, Double> resourceUsageMetrics) {
+	public void updateResourceUsage(String type, Map<String, Double> resourceUsageMetrics) {
 		cpuSockets
 			.values()
-			.forEach(cpuSocket -> cpuSocket.updateResourceUsageMetrics(type, resourceUsageMetrics));
+			.forEach(cpuSocket -> cpuSocket.updateResourceUsage(type, resourceUsageMetrics));
 	}
 
 	@Override

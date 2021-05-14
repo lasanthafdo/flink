@@ -33,7 +33,6 @@ import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -118,12 +117,12 @@ public class QActorCriticSchedulingAgent extends AbstractSchedulingAgent {
 			this.nVertices,
 			nProcUnitsPerSocket,
 			orderedOperatorMap,
+			taskManLocSlotCountMap,
 			log);
 	}
 
 	@Override
 	protected void updatePlacementSolution() {
-		Map<String, Double> cpuUsageMetrics = getCpuUsageMetrics();
 		Tuple2<Integer, Integer> currentStateId = qActorCriticModel.getStateFor(
 			currentPlacementAction);
 		qActorCriticModel.updateState(

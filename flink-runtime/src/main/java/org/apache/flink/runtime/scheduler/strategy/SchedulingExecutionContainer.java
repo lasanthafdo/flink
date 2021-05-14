@@ -132,10 +132,10 @@ public interface SchedulingExecutionContainer {
 
 	/**
 	 * @param type the type of resource usage to be updated, which should be one of the
-	 * 	 * predefined string constants
+	 * 	* predefined string constants
 	 * @param resourceUsageMetrics the <CPU ID, value> pairs that need to be updated
 	 */
-	void updateResourceUsageMetrics(String type, Map<String, Double> resourceUsageMetrics);
+	void updateResourceUsage(String type, Map<String, Double> resourceUsageMetrics);
 
 	/**
 	 * @return the ID of the {@link SchedulingExecutionContainer} as a String

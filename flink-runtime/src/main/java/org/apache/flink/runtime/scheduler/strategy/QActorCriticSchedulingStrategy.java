@@ -18,7 +18,6 @@
 
 package org.apache.flink.runtime.scheduler.strategy;
 
-import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.runtime.execution.ExecutionPlacement;
 import org.apache.flink.runtime.execution.ExecutionState;
@@ -27,7 +26,6 @@ import org.apache.flink.runtime.scheduler.DeploymentOption;
 import org.apache.flink.runtime.scheduler.ExecutionVertexDeploymentOption;
 import org.apache.flink.runtime.scheduler.SchedulerOperations;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
-import org.apache.flink.runtime.util.FatalExitExceptionHandler;
 import org.apache.flink.util.FlinkRuntimeException;
 
 import org.jetbrains.annotations.NotNull;
@@ -35,6 +33,7 @@ import org.slf4j.Logger;
 
 import javax.annotation.Nullable;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -113,7 +112,12 @@ public class QActorCriticSchedulingStrategy implements SchedulingStrategy {
 					"Initial task deployer for %s.",
 					this.getClass().getSimpleName()));
 			initTaskDeploymentThread.setDaemon(true);
-			initTaskDeploymentThread.setUncaughtExceptionHandler(FatalExitExceptionHandler.INSTANCE);
+			initTaskDeploymentThread.setUncaughtExceptionHandler((t, e) -> log.error(
+				"Uncaught exception {} in thread {} of {}",
+				e.getMessage(),
+				t.getName(),
+				QActorCriticSchedulingStrategy.class.getName(),
+				e));
 			initTaskDeploymentThread.start();
 		} else {
 			if (runtimeState == null || runtimeState.getPlacementSolution().isEmpty()) {
@@ -133,6 +137,7 @@ public class QActorCriticSchedulingStrategy implements SchedulingStrategy {
 
 	private void setupDefaultPlacement() {
 		if (topLevelContainer != null) {
+			List<Tuple3<TaskManagerLocation, Integer, Integer>> resolvedPlacementAction = new ArrayList<>();
 			schedulingTopology
 				.getVertices()
 				.forEach(schedulingExecutionVertex -> {
@@ -141,7 +146,9 @@ public class QActorCriticSchedulingStrategy implements SchedulingStrategy {
 					schedulingExecutionVertex.setExecutionPlacement(
 						new ExecutionPlacement(
 							placementInfo.f0, placementInfo.f1, placementInfo.f2, taskPerCore));
+					resolvedPlacementAction.add(placementInfo);
 				});
+			logPlacementAction(resolvedPlacementAction);
 		} else {
 			throw new FlinkRuntimeException(
 				"Could not obtain top level scheduling container for " + this
@@ -153,7 +160,7 @@ public class QActorCriticSchedulingStrategy implements SchedulingStrategy {
 	private void setupDerivedPlacement(@NotNull SchedulingRuntimeState runtimeState) {
 		SchedulingExecutionContainer topLevelContainer = runtimeState.getTopLevelContainer();
 		List<Tuple3<TaskManagerLocation, Integer, Integer>> placementAction = runtimeState.getPlacementSolution();
-		runtimeState.logPlacementAction(new Tuple2<>(-1, -1), placementAction);
+		List<Tuple3<TaskManagerLocation, Integer, Integer>> resolvedPlacementAction = new ArrayList<>();
 		if (runtimeState.isValidPlacementAction(placementAction)) {
 			topLevelContainer.releaseAllExecutionVertices();
 			AtomicInteger placementIndex = new AtomicInteger(0);
@@ -164,13 +171,39 @@ public class QActorCriticSchedulingStrategy implements SchedulingStrategy {
 					schedulingExecutionVertex,
 					placementSuggestion.f0,
 					placementSuggestion.f2);
+				resolvedPlacementAction.add(placementInfo);
 				schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
 					placementInfo.f0, placementInfo.f1, placementInfo.f2, taskPerCore));
 			});
+			logPlacementAction(resolvedPlacementAction);
 			log.info(topLevelContainer.getStatus());
 		} else {
 			throw new FlinkRuntimeException(
 				"Suggested operator placement action " + placementAction + " is invalid");
+		}
+	}
+
+	private void logPlacementAction(
+		List<Tuple3<TaskManagerLocation, Integer, Integer>> placementAction) {
+		if (placementAction != null && !placementAction.isEmpty()) {
+			StringBuilder logMessage = new StringBuilder();
+			for (int i = 0; i < placementAction.size(); i++) {
+				Tuple3<TaskManagerLocation, Integer, Integer> currentOpPlacement = placementAction.get(
+					i);
+				logMessage
+					.append("[")
+					.append(i)
+					.append("->")
+					.append(currentOpPlacement.f0 != null ? currentOpPlacement.f0
+						.address()
+						.getHostAddress() : "null")
+					.append(":")
+					.append(currentOpPlacement.f2)
+					.append(":")
+					.append(currentOpPlacement.f1)
+					.append("], ");
+			}
+			log.info("Placement action : {} ", logMessage);
 		}
 	}
 

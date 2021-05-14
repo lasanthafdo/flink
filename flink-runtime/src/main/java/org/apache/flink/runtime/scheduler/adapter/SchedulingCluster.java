@@ -45,6 +45,7 @@ public class SchedulingCluster implements SchedulingExecutionContainer {
 	private static final String DEFAULT_CLUSTER_ID = "DEFAULT_CLUSTER_ID";
 
 	private final Map<String, SchedulingExecutionContainer> nodes;
+	private final Map<String, Integer> slotCount;
 	private final List<TaskManagerLocation> taskManagerLocations;
 	private final CpuLayout cpuLayout;
 	private final Integer maxParallelism;
@@ -60,6 +61,7 @@ public class SchedulingCluster implements SchedulingExecutionContainer {
 		this.nodes = new HashMap<>();
 		this.taskManagerLocations = new ArrayList<>();
 		this.taskManagerLocations.addAll(taskManagerLocations);
+		this.slotCount = new HashMap<>();
 		this.cpuLayout = cpuLayout;
 		this.maxParallelism = maxParallelism;
 		this.taskPerCore = taskPerCore;
@@ -81,6 +83,7 @@ public class SchedulingCluster implements SchedulingExecutionContainer {
 		String nodeIp = cpuIdParts[0];
 		if (!nodes.containsKey(nodeIp)) {
 			nodes.put(nodeIp, new SchedulingNode(nodeIp, cpuLayout, maxParallelism, log));
+			slotCount.put(nodeIp, 0);
 		}
 		nodes.get(nodeIp).addCpu(cpuIdString);
 	}
@@ -93,15 +96,29 @@ public class SchedulingCluster implements SchedulingExecutionContainer {
 		String nodeIp = slotInfo.getTaskManagerLocation().address().getHostAddress();
 		if (!nodes.containsKey(nodeIp)) {
 			nodes.put(nodeIp, new SchedulingNode(nodeIp, cpuLayout, maxParallelism, log));
+			slotCount.put(nodeIp, 0);
 		}
 		nodes.get(nodeIp).addTaskSlot(slotInfo);
+		slotCount.put(nodeIp, slotCount.get(nodeIp) + 1);
 	}
 
 	@Override
 	public Tuple3<TaskManagerLocation, Integer, Integer> scheduleVertex(
 		SchedulingExecutionVertex schedulingExecutionVertex) {
 		Optional<SchedulingExecutionContainer> targetNode = nodes.values()
-			.stream().filter(node -> node.getRemainingCapacity() >= 1)
+			.stream().filter(node -> {
+				boolean hasRemainingSlots = node.getRemainingCapacity() >= 1;
+				long opReplicationCount = node
+					.getCurrentCpuAssignment()
+					.keySet()
+					.stream()
+					.filter(scheduledVertex -> scheduledVertex
+						.getTaskName()
+						.equals(schedulingExecutionVertex.getTaskName()))
+					.count();
+				boolean maxParallelismReached = opReplicationCount >= slotCount.get(node.getId());
+				return hasRemainingSlots && !maxParallelismReached;
+			})
 			.min(Comparator.comparing(sec -> sec.getResourceUsage(OPERATOR)));
 		Tuple3<TaskManagerLocation, Integer, Integer> vertexAssignment = NULL_PLACEMENT;
 		if (targetNode.isPresent()) {
@@ -122,7 +139,19 @@ public class SchedulingCluster implements SchedulingExecutionContainer {
 		Integer targetSocket) {
 		Optional<SchedulingExecutionContainer> targetNode = nodes
 			.values()
-			.stream().filter(node -> node.getRemainingCapacity() >= 1)
+			.stream().filter(node -> {
+				boolean hasRemainingSlots = node.getRemainingCapacity() >= 1;
+				long opReplicationCount = node
+					.getCurrentCpuAssignment()
+					.keySet()
+					.stream()
+					.filter(scheduledVertex -> scheduledVertex
+						.getTaskName()
+						.equals(schedulingExecutionVertex.getTaskName()))
+					.count();
+				boolean maxParallelismReached = opReplicationCount >= slotCount.get(node.getId());
+				return hasRemainingSlots && !maxParallelismReached;
+			})
 			.filter(node -> node.getId().equals(targetTaskMan.address().getHostAddress()))
 			.findFirst();
 		return targetNode
@@ -140,7 +169,28 @@ public class SchedulingCluster implements SchedulingExecutionContainer {
 
 		//Try to schedule in a socket with two available CPU slots
 		Optional<SchedulingExecutionContainer> firstPreferenceTargetNode = nodes.values()
-			.stream().filter(node -> node.getRemainingCapacity() >= 2)
+			.stream().filter(node -> {
+				boolean hasRemainingSlots = node.getRemainingCapacity() >= 2;
+				long srcReplicationCount = node
+					.getCurrentCpuAssignment()
+					.keySet()
+					.stream()
+					.filter(scheduledVertex -> scheduledVertex
+						.getTaskName()
+						.equals(sourceVertex.getTaskName()))
+					.count();
+				long targetReplicationCount = node
+					.getCurrentCpuAssignment()
+					.keySet()
+					.stream()
+					.filter(scheduledVertex -> scheduledVertex
+						.getTaskName()
+						.equals(sourceVertex.getTaskName()))
+					.count();
+				boolean maxParallelismReached = srcReplicationCount >= slotCount.get(node.getId())
+					|| targetReplicationCount >= slotCount.get(node.getId());
+				return hasRemainingSlots && !maxParallelismReached;
+			})
 			.min(Comparator.comparing(sec -> sec.getResourceUsage(OPERATOR)));
 		List<Tuple3<TaskManagerLocation, Integer, Integer>> tmLocCpuIdPairList = new ArrayList<>();
 		if (firstPreferenceTargetNode.isPresent()) {
@@ -170,7 +220,6 @@ public class SchedulingCluster implements SchedulingExecutionContainer {
 				return true;
 			}
 		}
-
 		return false;
 	}
 
@@ -207,10 +256,24 @@ public class SchedulingCluster implements SchedulingExecutionContainer {
 	}
 
 	@Override
-	public void updateResourceUsageMetrics(String type, Map<String, Double> resourceUsageMetrics) {
-		nodes
-			.values()
-			.forEach(node -> node.updateResourceUsageMetrics(type, resourceUsageMetrics));
+	public void updateResourceUsage(String type, Map<String, Double> resourceUsageMetrics) {
+		if (CPU.equals(type) || FREQ.equals(type)) {
+			Map<String, Map<String, Double>> resourceUsageMap = new HashMap<>();
+			nodes.keySet().forEach(ip -> resourceUsageMap.put(ip, new HashMap<>()));
+			resourceUsageMetrics.forEach((ipCpuId, val) -> {
+				String[] ipCpuIdParts = ipCpuId.split(CPU_ID_DELIMITER);
+				if (ipCpuIdParts.length >= 2 && resourceUsageMap.containsKey(ipCpuIdParts[0])) {
+					resourceUsageMap.get(ipCpuIdParts[0]).put(ipCpuIdParts[1], val);
+				}
+			});
+			resourceUsageMap.forEach((ip, resValMap) -> {
+				nodes.get(ip).updateResourceUsage(type, resValMap);
+			});
+		} else {
+			nodes
+				.values()
+				.forEach(node -> node.updateResourceUsage(type, resourceUsageMetrics));
+		}
 	}
 
 	@Override
