@@ -22,6 +22,7 @@ import org.apache.flink.api.common.time.Time;
 import org.apache.flink.configuration.AkkaOptions;
 import org.apache.flink.configuration.ClusterOptions;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.DeploymentOptions;
 import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.configuration.ResourceManagerOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
@@ -39,6 +40,7 @@ import org.slf4j.LoggerFactory;
 public class SlotManagerConfiguration {
 
 	private static final Logger LOGGER = LoggerFactory.getLogger(SlotManagerConfiguration.class);
+	public static final String Q_ACTOR_CRITIC_SCHEDULING_MODE = "q-actor-critic";
 
 	private final Time taskManagerRequestTimeout;
 	private final Time slotRequestTimeout;
@@ -50,14 +52,14 @@ public class SlotManagerConfiguration {
 	private final int maxSlotNum;
 
 	public SlotManagerConfiguration(
-			Time taskManagerRequestTimeout,
-			Time slotRequestTimeout,
-			Time taskManagerTimeout,
-			boolean waitResultConsumedBeforeRelease,
-			SlotMatchingStrategy slotMatchingStrategy,
-			WorkerResourceSpec defaultWorkerResourceSpec,
-			int numSlotsPerWorker,
-			int maxSlotNum) {
+		Time taskManagerRequestTimeout,
+		Time slotRequestTimeout,
+		Time taskManagerTimeout,
+		boolean waitResultConsumedBeforeRelease,
+		SlotMatchingStrategy slotMatchingStrategy,
+		WorkerResourceSpec defaultWorkerResourceSpec,
+		int numSlotsPerWorker,
+		int maxSlotNum) {
 
 		this.taskManagerRequestTimeout = Preconditions.checkNotNull(taskManagerRequestTimeout);
 		this.slotRequestTimeout = Preconditions.checkNotNull(slotRequestTimeout);
@@ -104,8 +106,8 @@ public class SlotManagerConfiguration {
 	}
 
 	public static SlotManagerConfiguration fromConfiguration(
-			Configuration configuration,
-			WorkerResourceSpec defaultWorkerResourceSpec) throws ConfigurationException {
+		Configuration configuration,
+		WorkerResourceSpec defaultWorkerResourceSpec) throws ConfigurationException {
 
 		final Time rpcTimeout;
 		try {
@@ -117,14 +119,17 @@ public class SlotManagerConfiguration {
 
 		final Time slotRequestTimeout = getSlotRequestTimeout(configuration);
 		final Time taskManagerTimeout = Time.milliseconds(
-				configuration.getLong(ResourceManagerOptions.TASK_MANAGER_TIMEOUT));
+			configuration.getLong(ResourceManagerOptions.TASK_MANAGER_TIMEOUT));
 
 		boolean waitResultConsumedBeforeRelease =
 			configuration.getBoolean(ResourceManagerOptions.TASK_MANAGER_RELEASE_WHEN_RESULT_CONSUMED);
 
+		String schedulingMode = configuration.getString(DeploymentOptions.RUNTIME_SCHEDULING_MODE);
+		boolean qacScheduleMode = Q_ACTOR_CRITIC_SCHEDULING_MODE.equals(schedulingMode);
 		boolean evenlySpreadOutSlots = configuration.getBoolean(ClusterOptions.EVENLY_SPREAD_OUT_SLOTS_STRATEGY);
 		final SlotMatchingStrategy slotMatchingStrategy = evenlySpreadOutSlots ?
-			LeastUtilizationSlotMatchingStrategy.INSTANCE : AnyMatchingSlotMatchingStrategy.INSTANCE;
+			LeastUtilizationSlotMatchingStrategy.INSTANCE : qacScheduleMode ?
+			LocationBasedSlotMatchingStrategy.INSTANCE : AnyMatchingSlotMatchingStrategy.INSTANCE;
 
 		int numSlotsPerWorker = configuration.getInteger(TaskManagerOptions.NUM_TASK_SLOTS);
 
@@ -144,7 +149,8 @@ public class SlotManagerConfiguration {
 	private static Time getSlotRequestTimeout(final Configuration configuration) {
 		final long slotRequestTimeoutMs;
 		if (configuration.contains(ResourceManagerOptions.SLOT_REQUEST_TIMEOUT)) {
-			LOGGER.warn("Config key {} is deprecated; use {} instead.",
+			LOGGER.warn(
+				"Config key {} is deprecated; use {} instead.",
 				ResourceManagerOptions.SLOT_REQUEST_TIMEOUT,
 				JobManagerOptions.SLOT_REQUEST_TIMEOUT);
 			slotRequestTimeoutMs = configuration.getLong(ResourceManagerOptions.SLOT_REQUEST_TIMEOUT);

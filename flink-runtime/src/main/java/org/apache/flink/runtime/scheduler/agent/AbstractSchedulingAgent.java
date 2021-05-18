@@ -681,8 +681,6 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 					.append(currentOpPlacement.f0.address().getHostAddress())
 					.append(":")
 					.append(currentOpPlacement.f2)
-					.append(":")
-					.append(currentOpPlacement.f1)
 					.append("], ");
 			}
 			log.info("Placement action for state ID {} is {} ", actionId, logMessage);

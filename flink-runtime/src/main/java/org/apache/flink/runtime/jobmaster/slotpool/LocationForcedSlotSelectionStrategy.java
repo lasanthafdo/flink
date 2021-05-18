@@ -33,6 +33,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * This class implements a {@link SlotSelectionStrategy} that is based on location preference hints.
@@ -60,11 +61,11 @@ public class LocationForcedSlotSelectionStrategy implements SlotSelectionStrateg
 		// if we have no location preferences, we can only filter by the additional requirements.
 		return locationPreferences.isEmpty() ?
 			selectWithoutLocationPreference(availableSlots, resourceProfile) :
-			selectWitLocationPreference(availableSlots, locationPreferences, resourceProfile);
+			selectWithLocationPreference(availableSlots, locationPreferences, resourceProfile);
 	}
 
 	@Nonnull
-	private Optional<SlotInfoAndLocality> selectWitLocationPreference(
+	private Optional<SlotInfoAndLocality> selectWithLocationPreference(
 		@Nonnull Collection<SlotInfoAndResources> availableSlots,
 		@Nonnull Collection<TaskManagerLocation> locationPreferences,
 		@Nonnull ResourceProfile resourceProfile) {
@@ -81,8 +82,14 @@ public class LocationForcedSlotSelectionStrategy implements SlotSelectionStrateg
 		SlotInfoAndResources bestCandidate = null;
 		Locality bestCandidateLocality = Locality.UNKNOWN;
 		double bestCandidateScore = Double.NEGATIVE_INFINITY;
-
-		for (SlotInfoAndResources candidate : availableSlots) {
+		Collection<SlotInfoAndResources> prunedAvailableSlots = availableSlots
+			.stream()
+			.filter(slotInfoAndResources -> locationPreferences.contains(slotInfoAndResources
+				.getSlotInfo()
+				.getTaskManagerLocation()))
+			.collect(
+				Collectors.toList());
+		for (SlotInfoAndResources candidate : prunedAvailableSlots) {
 
 			if (candidate.getRemainingResources().isMatching(resourceProfile)) {
 

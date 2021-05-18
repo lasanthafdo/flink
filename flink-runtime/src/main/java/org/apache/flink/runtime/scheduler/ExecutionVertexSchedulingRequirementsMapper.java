@@ -63,7 +63,16 @@ public final class ExecutionVertexSchedulingRequirementsMapper {
 		final SlotSharingGroup slotSharingGroup = executionVertex
 			.getJobVertex()
 			.getSlotSharingGroup();
-
+		String ipAddress = executionVertex
+			.getExecutionPlacement()
+			.getTaskManagerLocation() == null ?
+			"" : executionVertex
+			.getExecutionPlacement()
+			.getTaskManagerLocation().address()
+			.getHostAddress();
+		executionVertex
+			.getResourceProfile()
+			.setResourceLocation(ipAddress);
 		return new ExecutionVertexSchedulingRequirements.Builder()
 			.withExecutionVertexId(executionVertexId)
 			.withPreviousAllocationId(latestPriorAllocation)

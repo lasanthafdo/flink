@@ -121,6 +121,7 @@ import org.apache.flink.runtime.taskmanager.CheckpointResponder;
 import org.apache.flink.runtime.taskmanager.Task;
 import org.apache.flink.runtime.taskmanager.TaskExecutionState;
 import org.apache.flink.runtime.taskmanager.TaskManagerActions;
+import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 import org.apache.flink.runtime.taskmanager.UnresolvedTaskManagerLocation;
 import org.apache.flink.runtime.util.JvmUtils;
 import org.apache.flink.types.SerializableOptional;
@@ -142,6 +143,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.lang.management.ThreadInfo;
 import java.net.InetSocketAddress;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -1290,10 +1292,25 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 		InstanceID taskExecutorRegistrationId,
 		ClusterInformation clusterInformation) {
 
+		SlotReport slotReport = taskSlotTable.createSlotReport(getResourceID());
+		String ipAddress;
+		try {
+			ipAddress = TaskManagerLocation
+				.fromUnresolvedLocation(unresolvedTaskManagerLocation)
+				.address()
+				.getHostAddress();
+			for (SlotStatus slotStatus : slotReport) {
+				slotStatus
+					.getResourceProfile()
+					.setResourceLocation(ipAddress);
+			}
+		} catch (UnknownHostException e) {
+			log.warn("Could not resolve host address of task manager location", e);
+		}
 		final CompletableFuture<Acknowledge> slotReportResponseFuture = resourceManagerGateway.sendSlotReport(
 			getResourceID(),
 			taskExecutorRegistrationId,
-			taskSlotTable.createSlotReport(getResourceID()),
+			slotReport,
 			taskManagerConfiguration.getTimeout());
 
 		slotReportResponseFuture.whenCompleteAsync(

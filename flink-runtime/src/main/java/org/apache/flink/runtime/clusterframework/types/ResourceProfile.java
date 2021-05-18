@@ -109,6 +109,7 @@ public class ResourceProfile implements Serializable {
 	/** A extensible field for user specified resources from {@link ResourceSpec}. */
 	private final Map<String, Resource> extendedResources = new HashMap<>(1);
 
+	private String resourceLocation;
 	// ------------------------------------------------------------------------
 
 	/**
@@ -122,12 +123,12 @@ public class ResourceProfile implements Serializable {
 	 * @param extendedResources The extended resources such as GPU and FPGA
 	 */
 	private ResourceProfile(
-			final Resource cpuCores,
-			final MemorySize taskHeapMemory,
-			final MemorySize taskOffHeapMemory,
-			final MemorySize managedMemory,
-			final MemorySize networkMemory,
-			final Map<String, Resource> extendedResources) {
+		final Resource cpuCores,
+		final MemorySize taskHeapMemory,
+		final MemorySize taskOffHeapMemory,
+		final MemorySize managedMemory,
+		final MemorySize networkMemory,
+		final Map<String, Resource> extendedResources) {
 
 		checkNotNull(cpuCores);
 		checkArgument(cpuCores instanceof CPUResource, "cpuCores must be CPUResource");
@@ -231,7 +232,6 @@ public class ResourceProfile implements Serializable {
 	 * @return The extended resources
 	 */
 	public Map<String, Resource> getExtendedResources() {
-		throwUnsupportedOperationExecptionIfUnknown();
 		return Collections.unmodifiableMap(extendedResources);
 	}
 
@@ -245,6 +245,7 @@ public class ResourceProfile implements Serializable {
 	 * Check whether required resource profile can be matched.
 	 *
 	 * @param required the required resource profile
+	 *
 	 * @return true if the requirement is matched, otherwise false
 	 */
 	public boolean isMatching(final ResourceProfile required) {
@@ -274,7 +275,10 @@ public class ResourceProfile implements Serializable {
 
 			for (Map.Entry<String, Resource> resource : required.extendedResources.entrySet()) {
 				if (!extendedResources.containsKey(resource.getKey()) ||
-					extendedResources.get(resource.getKey()).getValue().compareTo(resource.getValue().getValue()) < 0) {
+					extendedResources
+						.get(resource.getKey())
+						.getValue()
+						.compareTo(resource.getValue().getValue()) < 0) {
 					return false;
 				}
 			}
@@ -316,6 +320,7 @@ public class ResourceProfile implements Serializable {
 	 * Calculates the sum of two resource profiles.
 	 *
 	 * @param other The other resource profile to add.
+	 *
 	 * @return The merged resource profile.
 	 */
 	@Nonnull
@@ -350,6 +355,7 @@ public class ResourceProfile implements Serializable {
 	 * Subtracts another piece of resource profile from this one.
 	 *
 	 * @param other The other resource profile to subtract.
+	 *
 	 * @return The subtracted resource profile.
 	 */
 	public ResourceProfile subtract(final ResourceProfile other) {
@@ -363,14 +369,17 @@ public class ResourceProfile implements Serializable {
 			return UNKNOWN;
 		}
 
-		checkArgument(isMatching(other), "Try to subtract an unmatched resource profile from this one.");
+		checkArgument(
+			isMatching(other),
+			"Try to subtract an unmatched resource profile from this one.");
 
 		Map<String, Resource> resultExtendedResource = new HashMap<>(extendedResources);
 
 		other.extendedResources.forEach((String name, Resource resource) -> {
 			resultExtendedResource.compute(name, (ignored, oldResource) -> {
 				Resource resultResource = oldResource.subtract(resource);
-				return resultResource.getValue().compareTo(BigDecimal.ZERO) == 0 ? null : resultResource;
+				return resultResource.getValue().compareTo(BigDecimal.ZERO)
+					== 0 ? null : resultResource;
 			});
 		});
 
@@ -422,14 +431,19 @@ public class ResourceProfile implements Serializable {
 
 		final StringBuilder extendedResourceStr = new StringBuilder(extendedResources.size() * 10);
 		for (Map.Entry<String, Resource> resource : extendedResources.entrySet()) {
-			extendedResourceStr.append(", ").append(resource.getKey()).append('=').append(resource.getValue().getValue());
+			extendedResourceStr
+				.append(", ")
+				.append(resource.getKey())
+				.append('=')
+				.append(resource.getValue().getValue());
 		}
 		return "ResourceProfile{" + getResourceString() + extendedResourceStr + '}';
 	}
 
 	private String getResourceString() {
-		String resourceStr = cpuCores == null || cpuCores.getValue().compareTo(MAX_CPU_CORE_NUMBER_TO_LOG) > 0 ?
-			"" : "cpuCores=" + cpuCores.getValue();
+		String resourceStr =
+			cpuCores == null || cpuCores.getValue().compareTo(MAX_CPU_CORE_NUMBER_TO_LOG) > 0 ?
+				"" : "cpuCores=" + cpuCores.getValue();
 		resourceStr = addMemorySizeString(resourceStr, "taskHeapMemory", taskHeapMemory);
 		resourceStr = addMemorySizeString(resourceStr, "taskOffHeapMemory", taskOffHeapMemory);
 		resourceStr = addMemorySizeString(resourceStr, "managedMemory", managedMemory);
@@ -471,7 +485,9 @@ public class ResourceProfile implements Serializable {
 		return fromResourceSpec(resourceSpec, MemorySize.ZERO);
 	}
 
-	public static ResourceProfile fromResourceSpec(ResourceSpec resourceSpec, MemorySize networkMemory) {
+	public static ResourceProfile fromResourceSpec(
+		ResourceSpec resourceSpec,
+		MemorySize networkMemory) {
 		if (ResourceSpec.UNKNOWN.equals(resourceSpec)) {
 			return UNKNOWN;
 		}
@@ -496,6 +512,14 @@ public class ResourceProfile implements Serializable {
 
 	public static Builder newBuilder() {
 		return new Builder();
+	}
+
+	public String getResourceLocation() {
+		return resourceLocation;
+	}
+
+	public void setResourceLocation(String resourceLocation) {
+		this.resourceLocation = resourceLocation;
 	}
 
 	/**
