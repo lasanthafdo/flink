@@ -18,8 +18,9 @@
 
 package org.apache.flink.runtime.scheduler.agent;
 
-import org.apache.flink.api.java.tuple.Tuple3;
+import org.apache.flink.api.java.tuple.Tuple4;
 import org.apache.flink.runtime.executiongraph.ExecutionGraph;
+import org.apache.flink.runtime.instance.SlotSharingGroupId;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionContainer;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategy;
@@ -73,11 +74,13 @@ public class TrafficBasedSchedulingAgent extends AbstractSchedulingAgent {
 	}
 
 	private void setupUpdateTriggerThread() {
-		updateExecutor = executorService.scheduleAtFixedRate(
-			this::executeUpdateProcess,
-			updatePeriodInSeconds,
-			updatePeriodInSeconds,
-			TimeUnit.SECONDS);
+		if (updatePeriodInSeconds > 0) {
+			updateExecutor = executorService.scheduleAtFixedRate(
+				this::executeUpdateProcess,
+				updatePeriodInSeconds,
+				updatePeriodInSeconds,
+				TimeUnit.SECONDS);
+		}
 	}
 
 	private void executeUpdateProcess() {
@@ -130,12 +133,12 @@ public class TrafficBasedSchedulingAgent extends AbstractSchedulingAgent {
 		}
 	}
 
-	private List<Tuple3<TaskManagerLocation, Integer, Integer>> getTrafficBasedPlacementAction() {
+	private List<Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> getTrafficBasedPlacementAction() {
 		SchedulingExecutionContainer topLevelContainer = getTopLevelContainer();
 		topLevelContainer.releaseAllExecutionVertices();
 		Set<SchedulingExecutionVertex> unassignedVertices = new HashSet<>();
 		Set<SchedulingExecutionVertex> assignedVertices = new HashSet<>();
-		Map<Integer, Tuple3<TaskManagerLocation, Integer, Integer>> placementAction = new HashMap<>();
+		Map<Integer, Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> placementAction = new HashMap<>();
 		AtomicInteger placementIndex = new AtomicInteger(1);
 
 		orderedEdgeList.forEach(schedulingExecutionEdge -> {
@@ -146,8 +149,9 @@ public class TrafficBasedSchedulingAgent extends AbstractSchedulingAgent {
 			boolean targetVertexAssigned = assignedVertices.contains(targetVertex);
 
 			if (!sourceVertexAssigned && !targetVertexAssigned) {
-				List<Tuple3<TaskManagerLocation, Integer, Integer>> cpuIds = topLevelContainer.tryScheduleInSameContainer(
-					sourceVertex, targetVertex);
+				List<Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> cpuIds = topLevelContainer
+					.tryScheduleInSameContainer(
+						sourceVertex, targetVertex);
 				if (cpuIds.size() >= 2) {
 					placementAction.put(placementIndex.getAndIncrement(), cpuIds.get(0));
 					placementAction.put(placementIndex.getAndIncrement(), cpuIds.get(1));
@@ -160,30 +164,17 @@ public class TrafficBasedSchedulingAgent extends AbstractSchedulingAgent {
 					unassignedVertices.add(targetVertex);
 				}
 			} else if (!targetVertexAssigned) {
-				Tuple3<TaskManagerLocation, Integer, Integer> cpuId = topLevelContainer.scheduleVertex(
-					targetVertex);
-				if (cpuId.f0 != null) {
-					placementAction.put(placementIndex.getAndIncrement(), cpuId);
-					assignedVertices.add(targetVertex);
-					unassignedVertices.remove(targetVertex);
-				} else {
-					unassignedVertices.add(targetVertex);
-				}
+				executeSchedulingProcess(topLevelContainer, unassignedVertices, assignedVertices,
+					placementAction, placementIndex, targetVertex);
 			} else if (!sourceVertexAssigned) {
-				Tuple3<TaskManagerLocation, Integer, Integer> cpuId = topLevelContainer.scheduleVertex(
-					sourceVertex);
-				if (cpuId.f0 != null) {
-					placementAction.put(placementIndex.getAndIncrement(), cpuId);
-					assignedVertices.add(sourceVertex);
-					unassignedVertices.remove(sourceVertex);
-				} else {
-					unassignedVertices.add(sourceVertex);
-				}
+				executeSchedulingProcess(topLevelContainer, unassignedVertices, assignedVertices,
+					placementAction, placementIndex, sourceVertex);
 			}
 		});
 		unassignedVertices.forEach(schedulingExecutionVertex -> {
-			Tuple3<TaskManagerLocation, Integer, Integer> cpuId = topLevelContainer.scheduleVertex(
-				schedulingExecutionVertex);
+			Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> cpuId = topLevelContainer
+				.scheduleVertex(
+					schedulingExecutionVertex);
 			if (cpuId.f0 == null) {
 				throw new FlinkRuntimeException(
 					"Cannot allocate a CPU for executing operator with ID "
@@ -200,5 +191,24 @@ public class TrafficBasedSchedulingAgent extends AbstractSchedulingAgent {
 			.map(Map.Entry::getValue)
 			.collect(
 				Collectors.toList());
+	}
+
+	private void executeSchedulingProcess(
+		SchedulingExecutionContainer topLevelContainer,
+		Set<SchedulingExecutionVertex> unassignedVertices,
+		Set<SchedulingExecutionVertex> assignedVertices,
+		Map<Integer, Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> placementAction,
+		AtomicInteger placementIndex,
+		SchedulingExecutionVertex sourceVertex) {
+		Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> operatorPlacementInfo = topLevelContainer
+			.scheduleVertex(
+				sourceVertex);
+		if (operatorPlacementInfo.f0 != null) {
+			placementAction.put(placementIndex.getAndIncrement(), operatorPlacementInfo);
+			assignedVertices.add(sourceVertex);
+			unassignedVertices.remove(sourceVertex);
+		} else {
+			unassignedVertices.add(sourceVertex);
+		}
 	}
 }

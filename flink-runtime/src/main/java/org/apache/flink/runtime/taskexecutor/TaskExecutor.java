@@ -20,6 +20,7 @@ package org.apache.flink.runtime.taskexecutor;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
+import org.apache.flink.api.common.resources.LocationResource;
 import org.apache.flink.api.common.time.Time;
 import org.apache.flink.runtime.accumulators.AccumulatorSnapshot;
 import org.apache.flink.runtime.blob.BlobCacheService;
@@ -1078,6 +1079,18 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 		AllocationID allocationId,
 		ResourceProfile resourceProfile) throws SlotAllocationException {
 		if (taskSlotTable.isSlotFree(slotId.getSlotNumber())) {
+			try {
+				TaskManagerLocation taskManagerLocation = TaskManagerLocation.fromUnresolvedLocation(
+					unresolvedTaskManagerLocation);
+				resourceProfile = ResourceProfile.newBuilder(resourceProfile)
+					.setResourceLocation(new LocationResource(taskManagerLocation
+						.address()
+						.getHostAddress(), 0.0))
+					.build();
+			} catch (UnknownHostException e) {
+				log.error("Error in resolving task manager location", e);
+			}
+
 			if (taskSlotTable.allocateSlot(
 				slotId.getSlotNumber(),
 				jobId,
@@ -1293,20 +1306,6 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 		ClusterInformation clusterInformation) {
 
 		SlotReport slotReport = taskSlotTable.createSlotReport(getResourceID());
-		String ipAddress;
-		try {
-			ipAddress = TaskManagerLocation
-				.fromUnresolvedLocation(unresolvedTaskManagerLocation)
-				.address()
-				.getHostAddress();
-			for (SlotStatus slotStatus : slotReport) {
-				slotStatus
-					.getResourceProfile()
-					.setResourceLocation(ipAddress);
-			}
-		} catch (UnknownHostException e) {
-			log.warn("Could not resolve host address of task manager location", e);
-		}
 		final CompletableFuture<Acknowledge> slotReportResponseFuture = resourceManagerGateway.sendSlotReport(
 			getResourceID(),
 			taskExecutorRegistrationId,

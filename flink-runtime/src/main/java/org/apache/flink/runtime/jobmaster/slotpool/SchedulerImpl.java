@@ -242,7 +242,12 @@ public class SchedulerImpl implements Scheduler {
 		if (allocationTimeout == null) {
 			return slotPool.requestNewAllocatedBatchSlot(slotRequestId, slotProfile.getPhysicalSlotResourceProfile());
 		} else {
-			return slotPool.requestNewAllocatedSlot(slotRequestId, slotProfile.getPhysicalSlotResourceProfile(), allocationTimeout);
+			log.debug("Requesting slot at {} for slot request id {}",
+				slotProfile.getPhysicalSlotResourceProfile().getResourceLocation(), slotRequestId);
+			return slotPool.requestNewAllocatedSlot(
+				slotRequestId,
+				slotProfile.getPhysicalSlotResourceProfile(),
+				allocationTimeout);
 		}
 	}
 
@@ -461,26 +466,38 @@ public class SchedulerImpl implements Scheduler {
 				slotSharingManager.listResolvedRootSlotInfo(groupId);
 
 		SlotSelectionStrategy.SlotInfoAndLocality bestResolvedRootSlotWithLocality =
-			slotSelectionStrategy.selectBestSlotForProfile(resolvedRootSlotsInfo, slotProfile).orElse(null);
+			slotSelectionStrategy
+				.selectBestSlotForProfile(resolvedRootSlotsInfo, slotProfile)
+				.orElse(null);
 
-		final SlotSharingManager.MultiTaskSlotLocality multiTaskSlotLocality = bestResolvedRootSlotWithLocality != null ?
-			new SlotSharingManager.MultiTaskSlotLocality(
-				slotSharingManager.getResolvedRootSlot(bestResolvedRootSlotWithLocality.getSlotInfo()),
-				bestResolvedRootSlotWithLocality.getLocality()) :
-			null;
+		final SlotSharingManager.MultiTaskSlotLocality multiTaskSlotLocality =
+			bestResolvedRootSlotWithLocality != null ?
+				new SlotSharingManager.MultiTaskSlotLocality(
+					slotSharingManager.getResolvedRootSlot(bestResolvedRootSlotWithLocality.getSlotInfo()),
+					bestResolvedRootSlotWithLocality.getLocality()) :
+				null;
 
-		if (multiTaskSlotLocality != null && multiTaskSlotLocality.getLocality() == Locality.LOCAL) {
+		if (multiTaskSlotLocality != null
+			&& multiTaskSlotLocality.getLocality() == Locality.LOCAL) {
 			return multiTaskSlotLocality;
 		}
 
 		final SlotRequestId allocatedSlotRequestId = new SlotRequestId();
 		final SlotRequestId multiTaskSlotRequestId = new SlotRequestId();
+		log.debug(
+			"Created allocated slot request id {} and multi-task slot request id {} for group id {}",
+			allocatedSlotRequestId,
+			multiTaskSlotRequestId,
+			groupId);
 
-		Optional<SlotAndLocality> optionalPoolSlotAndLocality = tryAllocateFromAvailable(allocatedSlotRequestId, slotProfile);
+		Optional<SlotAndLocality> optionalPoolSlotAndLocality = tryAllocateFromAvailable(
+			allocatedSlotRequestId,
+			slotProfile);
 
 		if (optionalPoolSlotAndLocality.isPresent()) {
 			SlotAndLocality poolSlotAndLocality = optionalPoolSlotAndLocality.get();
-			if (poolSlotAndLocality.getLocality() == Locality.LOCAL || bestResolvedRootSlotWithLocality == null) {
+			if (poolSlotAndLocality.getLocality() == Locality.LOCAL
+				|| bestResolvedRootSlotWithLocality == null) {
 
 				final PhysicalSlot allocatedSlot = poolSlotAndLocality.getSlot();
 				final SlotSharingManager.MultiTaskSlot multiTaskSlot = slotSharingManager.createRootSlot(
@@ -489,7 +506,9 @@ public class SchedulerImpl implements Scheduler {
 					allocatedSlotRequestId);
 
 				if (allocatedSlot.tryAssignPayload(multiTaskSlot)) {
-					return SlotSharingManager.MultiTaskSlotLocality.of(multiTaskSlot, poolSlotAndLocality.getLocality());
+					return SlotSharingManager.MultiTaskSlotLocality.of(
+						multiTaskSlot,
+						poolSlotAndLocality.getLocality());
 				} else {
 					multiTaskSlot.release(new FlinkException("Could not assign payload to allocated slot " +
 						allocatedSlot.getAllocationId() + '.'));

@@ -57,7 +57,7 @@ class SchedulingStrategyUtils {
 			topology,
 			verticesToDeploy,
 			deploymentOptionRetriever,
-			executionVertexID -> SchedulingExecutionVertex.DEFAULT_EXECUTION_PLACEMENT);
+			executionVertexID -> null);
 	}
 
 	static List<ExecutionVertexDeploymentOption> createExecutionVertexDeploymentOptionsInTopologicalOrder(

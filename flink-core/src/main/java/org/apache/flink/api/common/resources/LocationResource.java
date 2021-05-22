@@ -32,16 +32,16 @@ public class LocationResource extends Resource {
 
 	public static final String NAME = "LOCATION";
 
-	private final String stringValue;
+	private final String location;
 
-	public LocationResource(String stringValue, double value) {
+	public LocationResource(String location, double value) {
 		super(NAME, value);
-		this.stringValue = stringValue;
+		this.location = location;
 	}
 
 	private LocationResource(BigDecimal value) {
 		super(NAME, value);
-		this.stringValue = "";
+		this.location = "";
 	}
 
 	@Override
@@ -49,7 +49,7 @@ public class LocationResource extends Resource {
 		return new LocationResource(value);
 	}
 
-	public String getStringValue() {
-		return stringValue;
+	public String getLocation() {
+		return location;
 	}
 }

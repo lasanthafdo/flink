@@ -19,7 +19,7 @@
 package org.apache.flink.runtime.scheduler.agent;
 
 import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.api.java.tuple.Tuple3;
+import org.apache.flink.api.java.tuple.Tuple4;
 import org.apache.flink.runtime.executiongraph.ExecutionGraph;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionContainer;
@@ -78,11 +78,13 @@ public class QActorCriticSchedulingAgent extends AbstractSchedulingAgent {
 	}
 
 	private void setupUpdateTriggerThread() {
-		updateExecutor = executorService.scheduleAtFixedRate(
-			this::executeUpdateProcess,
-			updatePeriodInSeconds,
-			updatePeriodInSeconds,
-			TimeUnit.SECONDS);
+		if (updatePeriodInSeconds > 0) {
+			updateExecutor = executorService.scheduleAtFixedRate(
+				this::executeUpdateProcess,
+				updatePeriodInSeconds,
+				updatePeriodInSeconds,
+				TimeUnit.SECONDS);
+		}
 	}
 
 	private void executeUpdateProcess() {
@@ -151,16 +153,17 @@ public class QActorCriticSchedulingAgent extends AbstractSchedulingAgent {
 				taskManSlots.add(new Tuple2<>(taskManSlotCountElem.f0, i));
 			}
 		});
-		modelSuggestedPlacementAction.forEach(operatorPlacement -> {
+		modelSuggestedPlacementAction.forEach(placementSubAction -> {
 			Tuple2<TaskManagerLocation, Integer> suitableTaskMan = taskManSlots
 				.stream()
 				.filter(taskManLocSlotCountElem -> taskManLocSlotCountElem.f0
 					.address()
-					.equals(operatorPlacement.f0)).findFirst().orElse(new Tuple2<>(null, -1));
-			suggestedPlacementAction.add(new Tuple3<>(
+					.equals(placementSubAction.f0)).findFirst().orElse(new Tuple2<>(null, -1));
+			suggestedPlacementAction.add(new Tuple4<>(
 				suitableTaskMan.f0,
+				null,
 				-1,
-				operatorPlacement.f1));
+				placementSubAction.f1));
 		});
 	}
 

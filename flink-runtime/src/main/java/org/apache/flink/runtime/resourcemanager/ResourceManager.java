@@ -448,8 +448,10 @@ public abstract class ResourceManager<WorkerType extends ResourceIDRetrievable>
 
 		if (null != jobManagerRegistration) {
 			if (Objects.equals(jobMasterId, jobManagerRegistration.getJobMasterId())) {
-				log.info("Request slot with profile {} for job {} with allocation id {}.",
+				log.info(
+					"Request slot with profile {} and location {} for job {} with allocation id {}.",
 					slotRequest.getResourceProfile(),
+					slotRequest.getResourceProfile().getResourceLocation(),
 					slotRequest.getJobId(),
 					slotRequest.getAllocationId());
 

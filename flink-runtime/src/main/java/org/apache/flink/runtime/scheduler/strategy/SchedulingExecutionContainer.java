@@ -19,7 +19,9 @@
 package org.apache.flink.runtime.scheduler.strategy;
 
 import org.apache.flink.api.java.tuple.Tuple3;
+import org.apache.flink.api.java.tuple.Tuple4;
 import org.apache.flink.runtime.executiongraph.ExecutionVertex;
+import org.apache.flink.runtime.instance.SlotSharingGroupId;
 import org.apache.flink.runtime.jobmaster.SlotInfo;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 
@@ -36,7 +38,8 @@ public interface SchedulingExecutionContainer {
 	String FREQ = "FREQ";
 	String CPU_ID_DELIMITER = ":";
 
-	Tuple3<TaskManagerLocation, Integer, Integer> NULL_PLACEMENT = new Tuple3<>(
+	Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> NULL_PLACEMENT = new Tuple4<>(
+		null,
 		null,
 		-1,
 		-1);
@@ -64,14 +67,15 @@ public interface SchedulingExecutionContainer {
 	 *
 	 * @return a {@link Tuple3} consisting of the TaskManagerLocation, CPU ID, and socket ID
 	 */
-	Tuple3<TaskManagerLocation, Integer, Integer> scheduleVertex(SchedulingExecutionVertex schedulingExecutionVertex);
+	Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> scheduleVertex(
+		SchedulingExecutionVertex schedulingExecutionVertex);
 
 	/**
 	 * @param schedulingExecutionVertex the execution vertex to be scheduled
 	 *
 	 * @return a {@link Tuple3} consisting of the TaskManagerLocation, CPU ID, and socket ID
 	 */
-	Tuple3<TaskManagerLocation, Integer, Integer> scheduleVertex(
+	Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> scheduleVertex(
 		SchedulingExecutionVertex schedulingExecutionVertex,
 		TaskManagerLocation targetTaskMan,
 		Integer targetSocket);
@@ -80,10 +84,10 @@ public interface SchedulingExecutionContainer {
 	 * @param sourceVertex execution vertex that acts as the source of a stream edge
 	 * @param targetVertex execution vertex that acts as the target/sink of the considered stream edge
 	 *
-	 * @return a list of {@link Tuple3} objects that include the task manager location, CPU ID,
-	 * 	and socket ID in the case of a successful schedule
+	 * @return a list of {@link Tuple4} objects that include the task manager location,
+	 * 	slot sharing group id, CPU ID, and socket ID in the case of a successful schedule
 	 */
-	List<Tuple3<TaskManagerLocation, Integer, Integer>> tryScheduleInSameContainer(
+	List<Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> tryScheduleInSameContainer(
 		SchedulingExecutionVertex sourceVertex,
 		SchedulingExecutionVertex targetVertex);
 
@@ -107,15 +111,15 @@ public interface SchedulingExecutionContainer {
 	/**
 	 * @param schedulingExecutionVertex the {@link SchedulingExecutionVertex} to be scheduled
 	 * @param cpuId a tuple that uniquely identifies a CPU
-	 *
-	 * Forcefully schedules a {@link SchedulingExecutionVertex} to the specified node, socket and cpu ID
+	 * 	<p>
+	 * 	Forcefully schedules a {@link SchedulingExecutionVertex} to the specified node, socket and cpu ID
 	 *
 	 * @return the {@link SchedulingExecutionVertex} that was already scheduled in that CPU, or null if
-	 * the CPU was not running any vertex at the time for forceful scheduling
+	 * 	the CPU was not running any vertex at the time for forceful scheduling
 	 */
 	SchedulingExecutionVertex forceSchedule(
 		SchedulingExecutionVertex schedulingExecutionVertex,
-		Tuple3<TaskManagerLocation, Integer, Integer> cpuId);
+		Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> cpuId);
 
 	/**
 	 * @return the remaining number of slots
@@ -124,7 +128,7 @@ public interface SchedulingExecutionContainer {
 
 	/**
 	 * @param type the type of resource usage information needed, which should be one of the
-	 * predefined string constants
+	 * 	predefined string constants
 	 *
 	 * @return the amount of resources used as a double value
 	 */
@@ -144,9 +148,9 @@ public interface SchedulingExecutionContainer {
 
 	/**
 	 * @return the current assignment of each {@link SchedulingExecutionVertex} in this
-	 * {@link SchedulingExecutionContainer}
+	 *    {@link SchedulingExecutionContainer}
 	 */
-	Map<SchedulingExecutionVertex, Tuple3<TaskManagerLocation, Integer, Integer>> getCurrentCpuAssignment();
+	Map<SchedulingExecutionVertex, Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> getCurrentCpuAssignment();
 
 	/**
 	 * @return the status of the {@link SchedulingExecutionContainer} as a String

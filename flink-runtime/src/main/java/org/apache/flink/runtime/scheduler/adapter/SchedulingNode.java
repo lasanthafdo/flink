@@ -18,7 +18,9 @@
 
 package org.apache.flink.runtime.scheduler.adapter;
 
-import org.apache.flink.api.java.tuple.Tuple3;
+import org.apache.flink.api.java.tuple.Tuple4;
+import org.apache.flink.runtime.instance.SlotSharingGroupId;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobmaster.SlotInfo;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionContainer;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
@@ -82,17 +84,27 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 	}
 
 	@Override
-	public Tuple3<TaskManagerLocation, Integer, Integer> scheduleVertex(
+	public Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> scheduleVertex(
 		SchedulingExecutionVertex schedulingExecutionVertex) {
 		// TODO Find an optimal slot
 		SlotInfo candidateSlot = slotAssignmentMap
 			.entrySet()
 			.stream()
-			.filter(entry -> entry.getValue().size() < maxParallelism)    // Find a free slot
+			.filter(entry -> {
+				boolean hasVertexWithSameSlotSharingGroupId = entry
+					.getValue()
+					.stream()
+					.anyMatch(slotVertex -> slotVertex
+						.getId()
+						.getJobVertexId()
+						.equals(schedulingExecutionVertex.getId().getJobVertexId()));
+				return !hasVertexWithSameSlotSharingGroupId
+					&& entry.getValue().size() < maxParallelism;
+			})    // Find a free slot
 			.map(
 				Map.Entry::getKey)
 			.findAny().orElse(null);
-		Tuple3<TaskManagerLocation, Integer, Integer> scheduledCpuInfo = NULL_PLACEMENT;
+		Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> scheduledCpuInfo = NULL_PLACEMENT;
 		if (candidateSlot != null) {
 			SchedulingExecutionContainer targetSocket = cpuSockets.values()
 				.stream().filter(cpuSocket -> cpuSocket.getRemainingCapacity() >= 1)
@@ -113,27 +125,37 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 	}
 
 	@Override
-	public Tuple3<TaskManagerLocation, Integer, Integer> scheduleVertex(
+	public Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> scheduleVertex(
 		SchedulingExecutionVertex schedulingExecutionVertex,
-		TaskManagerLocation targetTaskMan,
-		Integer socketId) {
+		TaskManagerLocation targetTaskManager,
+		Integer targetSocketId) {
 		SlotInfo candidateSlot = slotAssignmentMap
 			.entrySet()
 			.stream()
-			.filter(entry -> entry.getValue().size() < maxParallelism)    // Find a free slot
-			.filter(entry -> entry
-				.getKey()
-				.getTaskManagerLocation()
-				.address()
-				.equals(targetTaskMan.address()))
+			.filter(entry -> {  // Find a free slot
+				boolean isTargetedTaskManager = entry
+					.getKey()
+					.getTaskManagerLocation()
+					.address()
+					.equals(targetTaskManager.address());
+				boolean hasVertexWithSameSlotSharingGroupId = entry
+					.getValue()
+					.stream()
+					.anyMatch(slotVertex -> slotVertex
+						.getId()
+						.getJobVertexId()
+						.equals(schedulingExecutionVertex.getId().getJobVertexId()));
+				return isTargetedTaskManager && !hasVertexWithSameSlotSharingGroupId
+					&& entry.getValue().size() < maxParallelism;
+			})
 			.map(
 				Map.Entry::getKey)
 			.findAny().orElse(null);
-		Tuple3<TaskManagerLocation, Integer, Integer> scheduledCpuInfo = NULL_PLACEMENT;
+		Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> scheduledCpuInfo = NULL_PLACEMENT;
 		if (candidateSlot != null) {
 			SchedulingExecutionContainer targetSocket = cpuSockets.values()
 				.stream().filter(cpuSocket -> cpuSocket.getRemainingCapacity() >= 1)
-				.filter(cpuSocket -> Integer.parseInt(cpuSocket.getId()) == socketId)
+				.filter(cpuSocket -> Integer.parseInt(cpuSocket.getId()) == targetSocketId)
 				.findFirst().orElse(null);
 			if (targetSocket != null) {
 				scheduledCpuInfo = executeSocketScheduling(
@@ -146,28 +168,16 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 	}
 
 	@NotNull
-	private Tuple3<TaskManagerLocation, Integer, Integer> executeSocketScheduling(
+	private Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> executeSocketScheduling(
 		SchedulingExecutionVertex schedulingExecutionVertex,
 		SlotInfo candidateSlot,
 		SchedulingExecutionContainer targetSocket) {
-		Tuple3<TaskManagerLocation, Integer, Integer> scheduledCpuInfo = targetSocket.scheduleVertex(
-			schedulingExecutionVertex);
+		Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> scheduledCpuInfo = targetSocket
+			.scheduleVertex(
+				schedulingExecutionVertex);
 		if (scheduledCpuInfo != NULL_PLACEMENT) {
 			scheduledCpuInfo.f0 = candidateSlot.getTaskManagerLocation();
-			Set<SchedulingExecutionVertex> assignedVertexList = slotAssignmentMap.get(
-				candidateSlot);
-			if (assignedVertexList != null && assignedVertexList.size() < maxParallelism) {
-				assignedVertexList.add(schedulingExecutionVertex);
-			} else {
-				log.warn(
-					"Attempt to assign execution vertex {} to non-existent slot {} "
-						+ "or slot already contains the maximum allowed {} tasks",
-					schedulingExecutionVertex.getTaskName() + ":"
-						+ schedulingExecutionVertex.getSubTaskIndex(),
-					candidateSlot.getTaskManagerLocation().address().getHostAddress() + ":"
-						+ candidateSlot.getPhysicalSlotNumber(),
-					maxParallelism);
-			}
+			addVertexToSlot(candidateSlot, schedulingExecutionVertex);
 		} else {
 			log.warn(
 				"Scheduling {} on target socket {} failed",
@@ -179,7 +189,7 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 	}
 
 	@Override
-	public List<Tuple3<TaskManagerLocation, Integer, Integer>> tryScheduleInSameContainer(
+	public List<Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> tryScheduleInSameContainer(
 		SchedulingExecutionVertex sourceVertex,
 		SchedulingExecutionVertex targetVertex) {
 
@@ -187,57 +197,71 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 		Optional<SchedulingExecutionContainer> firstPreferenceTargetSocket = cpuSockets.values()
 			.stream().filter(cpuSocket -> cpuSocket.getRemainingCapacity() >= 2)
 			.min(Comparator.comparing(sec -> sec.getResourceUsage(OPERATOR)));
-		List<Tuple3<TaskManagerLocation, Integer, Integer>> tmLocCpuIdList = new ArrayList<>();
+		List<Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> tmLocCpuIdList = new ArrayList<>();
 		if (firstPreferenceTargetSocket.isPresent()) {
 			SchedulingExecutionContainer cpuSocket = firstPreferenceTargetSocket.get();
-			List<Tuple3<TaskManagerLocation, Integer, Integer>> cpuIds = cpuSocket.tryScheduleInSameContainer(
-				sourceVertex,
-				targetVertex);
+			List<Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> connectedVerticesPlacementInfo =
+				cpuSocket.tryScheduleInSameContainer(sourceVertex, targetVertex);
 			// Try to find matching task slots and assign them
-			for (int i = 0; i < cpuIds.size(); i++) {
-				Tuple3<TaskManagerLocation, Integer, Integer> tuple = cpuIds.get(i);
+			for (int i = 0; i < connectedVerticesPlacementInfo.size(); i++) {
+				Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> tuple = connectedVerticesPlacementInfo
+					.get(i);
 				Integer cpuId = tuple.getField(1);
 				Integer socketId = tuple.getField(2);
-				Tuple3<TaskManagerLocation, Integer, Integer> tmLocCpuIdPair = new Tuple3<>(
-					null,
-					-1,
-					-1);
+				Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> tmLocCpuIdPair = NULL_PLACEMENT;
 				int cpuIdIndex = i;
 				//TODO Find an optimal slot
 				slotAssignmentMap
 					.entrySet()
 					.stream()
-					.filter(entry -> entry.getValue().size() < maxParallelism)
+					.filter(entry -> {
+						boolean hasVertexWithSameSlotSharingGroupId = entry
+							.getValue()
+							.stream()
+							.anyMatch(slotVertex -> slotVertex
+								.getId()
+								.getJobVertexId()
+								.equals(sourceVertex.getId().getJobVertexId()));
+						return entry.getValue().size() < maxParallelism;
+					})
 					.map(
 						Map.Entry::getKey)
 					.findAny()
 					.ifPresent(targetSlot -> {
+						JobVertexID sourceJobVertexID = sourceVertex.getId().getJobVertexId();
 						tmLocCpuIdPair.setFields(
 							targetSlot.getTaskManagerLocation(),
+							new SlotSharingGroupId(
+								sourceJobVertexID.getLowerPart(),
+								sourceJobVertexID.getUpperPart()),
 							cpuId, socketId);
 						SchedulingExecutionVertex selectedVertex = sourceVertex;
 						if (cpuIdIndex != 0) {
 							selectedVertex = targetVertex;
 						}
-						Set<SchedulingExecutionVertex> targetSlotList = slotAssignmentMap.get(
-							targetSlot);
-						if (targetSlotList != null && targetSlotList.size() < maxParallelism) {
-							targetSlotList.add(selectedVertex);
-						} else {
-							log.warn(
-								"Attempt to assign execution vertex {} to non-existent slot {} "
-									+ "or slot already contains the maximum allowed {} tasks",
-								selectedVertex.getTaskName() + ":"
-									+ selectedVertex.getSubTaskIndex(),
-								targetSlot.getTaskManagerLocation().address().getHostAddress() + ":"
-									+ targetSlot.getPhysicalSlotNumber(),
-								maxParallelism);
-						}
+						addVertexToSlot(targetSlot, selectedVertex);
 					});
 				tmLocCpuIdList.add(tmLocCpuIdPair);
 			}
 		}
 		return tmLocCpuIdList;
+	}
+
+	private void addVertexToSlot(SlotInfo targetSlot, SchedulingExecutionVertex selectedVertex) {
+		Set<SchedulingExecutionVertex> targetSlotList = slotAssignmentMap.get(
+			targetSlot);
+		if (targetSlotList != null && targetSlotList.size() < maxParallelism) {
+			targetSlotList.add(selectedVertex);
+		} else {
+			log.warn(
+				"Attempt to assign execution vertex {} to non-existent slot {} "
+					+ "or slot already contains the maximum allowed {} tasks",
+				selectedVertex.getTaskName() + ":"
+					+ selectedVertex.getSubTaskIndex(),
+				targetSlot.getTaskManagerLocation().address().getHostAddress() + ":"
+					+ targetSlot.getPhysicalSlotNumber(),
+				maxParallelism);
+		}
 	}
 
 	@Override
@@ -286,7 +310,7 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 	@Override
 	public SchedulingExecutionVertex forceSchedule(
 		SchedulingExecutionVertex schedulingExecutionVertex,
-		Tuple3<TaskManagerLocation, Integer, Integer> cpuId) {
+		Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> cpuId) {
 		boolean alreadyScheduledInNode = slotAssignmentMap
 			.values()
 			.stream()
@@ -359,10 +383,10 @@ public class SchedulingNode implements SchedulingExecutionContainer {
 	}
 
 	@Override
-	public Map<SchedulingExecutionVertex, Tuple3<TaskManagerLocation, Integer, Integer>> getCurrentCpuAssignment() {
-		Map<SchedulingExecutionVertex, Tuple3<TaskManagerLocation, Integer, Integer>> currentlyAssignedCpus = new HashMap<>();
+	public Map<SchedulingExecutionVertex, Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> getCurrentCpuAssignment() {
+		Map<SchedulingExecutionVertex, Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> currentlyAssignedCpus = new HashMap<>();
 		getSubContainers().forEach(subContainer -> {
-			Map<SchedulingExecutionVertex, Tuple3<TaskManagerLocation, Integer, Integer>> socketAssignment = subContainer
+			Map<SchedulingExecutionVertex, Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> socketAssignment = subContainer
 				.getCurrentCpuAssignment();
 			socketAssignment.forEach((sev, cpuIdTuple) -> slotAssignmentMap
 				.entrySet()

@@ -27,6 +27,7 @@ import org.slf4j.LoggerFactory;
 import java.util.Collection;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * {@link SlotMatchingStrategy} which picks the first matching slot with requested location.
@@ -54,7 +55,22 @@ public enum LocationBasedSlotMatchingStrategy implements SlotMatchingStrategy {
 				.filter(slot -> slot.isMatchingRequirement(requestedProfile)
 					&& requestedLocation.equals(slot.getResourceProfile().getResourceLocation()))
 				.findAny();
-			log.debug("Found matching free slot {}", matchingFreeSlot);
+			if (log.isDebugEnabled()) {
+				if (matchingFreeSlot.isPresent()) {
+					log.debug(
+						"Found matching free slot at {} for request at {}",
+						matchingFreeSlot.get().getResourceProfile().getResourceLocation(),
+						requestedLocation);
+				} else {
+					log.warn(
+						"Could not find matching slot for request at {}. Free slots {}",
+						requestedLocation,
+						freeSlots.stream().collect(
+							Collectors.toMap(
+								TaskManagerSlotInformation::getSlotId,
+								slot -> slot.getResourceProfile().getResourceLocation())));
+				}
+			}
 			return matchingFreeSlot;
 		}
 	}

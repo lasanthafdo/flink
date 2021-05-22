@@ -74,4 +74,11 @@ public class ExecutionVertexID implements VertexID {
 	public String toString() {
 		return jobVertexId + "_" + subtaskIndex;
 	}
+
+	public static ExecutionVertexID fromHexString(String hexString) {
+		String[] idParts = hexString.split("_");
+		return new ExecutionVertexID(
+			JobVertexID.fromHexString(idParts[0]),
+			Integer.parseInt(idParts[1]));
+	}
 }

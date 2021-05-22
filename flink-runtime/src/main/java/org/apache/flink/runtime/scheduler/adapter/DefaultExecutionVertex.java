@@ -62,16 +62,9 @@ class DefaultExecutionVertex implements SchedulingExecutionVertex {
 		Supplier<ExecutionState> stateSupplier,
 		InputDependencyConstraint constraint) {
 
-		this(
-			executionVertexId,
-			"UNKNOWN",
-			0,
-			producedPartitions,
-			stateSupplier,
-			() -> SchedulingExecutionVertex.DEFAULT_EXECUTION_PLACEMENT,
-			executionPlacement -> {
-			},
-			constraint);
+		this(executionVertexId, "UNKNOWN", 0, producedPartitions,
+			stateSupplier, () -> null, executionPlacement -> {
+			}, constraint);
 	}
 
 	DefaultExecutionVertex(

@@ -19,6 +19,7 @@
 
 package org.apache.flink.runtime.scheduler;
 
+import org.apache.flink.api.common.resources.LocationResource;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
@@ -70,14 +71,18 @@ public final class ExecutionVertexSchedulingRequirementsMapper {
 			.getExecutionPlacement()
 			.getTaskManagerLocation().address()
 			.getHostAddress();
-		executionVertex
-			.getResourceProfile()
-			.setResourceLocation(ipAddress);
+
+		ResourceProfile existingResourceProfile = executionVertex.getResourceProfile();
+		ResourceProfile updatedResourceProfile = ResourceProfile.newBuilder(existingResourceProfile)
+			.setResourceLocation(new LocationResource(ipAddress, 0.0))
+			.build();
 		return new ExecutionVertexSchedulingRequirements.Builder()
 			.withExecutionVertexId(executionVertexId)
 			.withPreviousAllocationId(latestPriorAllocation)
-			.withTaskResourceProfile(executionVertex.getResourceProfile())
-			.withPhysicalSlotResourceProfile(getPhysicalSlotResourceProfile(executionVertex))
+			.withTaskResourceProfile(updatedResourceProfile)
+			.withPhysicalSlotResourceProfile(getPhysicalSlotResourceProfile(
+				executionVertex,
+				updatedResourceProfile))
 			.withSlotSharingGroupId(
 				slotSharingGroup == null ? null : slotSharingGroup.getSlotSharingGroupId())
 			.withCoLocationConstraint(executionVertex.getLocationConstraint())
@@ -99,6 +104,28 @@ public final class ExecutionVertexSchedulingRequirementsMapper {
 		return slotSharingGroup == null
 			? executionVertex.getResourceProfile()
 			: ResourceProfile.fromResourceSpec(slotSharingGroup.getResourceSpec(), MemorySize.ZERO);
+	}
+
+	public static ResourceProfile getPhysicalSlotResourceProfile(
+		final ExecutionVertex executionVertex,
+		final ResourceProfile updatedResourceProfile) {
+		final SlotSharingGroup slotSharingGroup = executionVertex
+			.getJobVertex()
+			.getSlotSharingGroup();
+		if (slotSharingGroup == null) {
+			return updatedResourceProfile;
+		} else {
+			ResourceProfile intermediatePhysicalResourceProfile = ResourceProfile.fromResourceSpec(
+				slotSharingGroup.getResourceSpec(),
+				MemorySize.ZERO);
+			LocationResource locationResource = new LocationResource(
+				updatedResourceProfile.getResourceLocation(),
+				0.0);
+			return ResourceProfile
+				.newBuilder(intermediatePhysicalResourceProfile)
+				.setResourceLocation(locationResource)
+				.build();
+		}
 	}
 
 	private static Collection<TaskManagerLocation> getPreferredLocationBasedOnSchedule(final ExecutionVertex executionVertex) {

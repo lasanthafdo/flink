@@ -86,7 +86,7 @@ public class TestingSchedulingExecutionVertex implements SchedulingExecutionVert
 
 	@Override
 	public ExecutionPlacement getExecutionPlacement() {
-		return DEFAULT_EXECUTION_PLACEMENT;
+		return new ExecutionPlacement(null, null, -1, -1, false);
 	}
 
 	@Override

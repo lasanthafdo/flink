@@ -144,7 +144,17 @@ public class SlotSharingManager {
 			SlotRequestId slotRequestId,
 			CompletableFuture<? extends SlotContext> slotContextFuture,
 			SlotRequestId allocatedSlotRequestId) {
-		LOG.debug("Create multi task slot [{}] in slot [{}].", slotRequestId, allocatedSlotRequestId);
+		if (slotContextFuture.isDone()) {
+			LOG.debug(
+				"Creating multi task slot from already allocated [{}] in slot [{}].",
+				slotRequestId,
+				allocatedSlotRequestId);
+		} else {
+			LOG.debug(
+				"Creating multi task slot from yet to be allocated [{}] in slot [{}].",
+				slotRequestId,
+				allocatedSlotRequestId);
+		}
 
 		final CompletableFuture<SlotContext> slotContextFutureAfterRootSlotResolution = new CompletableFuture<>();
 		final MultiTaskSlot rootMultiTaskSlot = createAndRegisterRootSlot(

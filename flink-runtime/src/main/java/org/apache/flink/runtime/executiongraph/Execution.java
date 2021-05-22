@@ -57,7 +57,6 @@ import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.messages.TaskBackPressureResponse;
 import org.apache.flink.runtime.operators.coordination.OperatorEvent;
 import org.apache.flink.runtime.operators.coordination.TaskNotRunningException;
-import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
 import org.apache.flink.runtime.shuffle.NettyShuffleMaster;
 import org.apache.flink.runtime.shuffle.PartitionDescriptor;
 import org.apache.flink.runtime.shuffle.ProducerDescriptor;
@@ -247,7 +246,7 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 		this.terminalStateFuture = new CompletableFuture<>();
 		this.releaseFuture = new CompletableFuture<>();
 		this.taskManagerLocationFuture = new CompletableFuture<>();
-		this.placement = SchedulingExecutionVertex.DEFAULT_EXECUTION_PLACEMENT;
+		this.placement = null;
 
 		this.assignedResource = null;
 	}
@@ -786,11 +785,29 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 			}
 
 			if (LOG.isInfoEnabled()) {
-				LOG.info(String.format(
-					"Deploying %s (attempt #%d) to %s",
-					vertex.getTaskNameWithSubtaskIndex(),
-					attemptNumber,
-					getAssignedResourceLocation()));
+				if (getAssignedResourceLocation().address().getHostAddress()
+					.equals(vertex
+						.getExecutionPlacement()
+						.getTaskManagerLocation()
+						.address()
+						.getHostAddress())) {
+					LOG.info(String.format(
+						"Deploying %s (attempt #%d) to %s",
+						vertex.getTaskNameWithSubtaskIndex(),
+						attemptNumber,
+						getAssignedResourceLocation()));
+				} else {
+					LOG.warn(String.format(
+						"Deploying %s (attempt #%d) to %s (scheduled for %s)",
+						vertex.getTaskNameWithSubtaskIndex(),
+						attemptNumber,
+						getAssignedResourceLocation().address().getHostAddress(),
+						vertex
+							.getExecutionPlacement()
+							.getTaskManagerLocation()
+							.address()
+							.getHostAddress()));
+				}
 			}
 
 			final TaskDeploymentDescriptor deployment = TaskDeploymentDescriptorFactory
@@ -1269,7 +1286,8 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 	}
 
 	private void finishPartitionsAndScheduleOrUpdateConsumers() {
-		final List<IntermediateResultPartition> newlyFinishedResults = getVertex().finishAllBlockingPartitions();
+		final List<IntermediateResultPartition> newlyFinishedResults = getVertex()
+			.finishAllBlockingPartitions();
 		if (newlyFinishedResults.isEmpty()) {
 			return;
 		}

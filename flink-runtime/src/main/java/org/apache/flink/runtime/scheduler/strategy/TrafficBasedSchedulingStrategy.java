@@ -18,9 +18,10 @@
 
 package org.apache.flink.runtime.scheduler.strategy;
 
-import org.apache.flink.api.java.tuple.Tuple3;
+import org.apache.flink.api.java.tuple.Tuple4;
 import org.apache.flink.runtime.execution.ExecutionPlacement;
 import org.apache.flink.runtime.execution.ExecutionState;
+import org.apache.flink.runtime.instance.SlotSharingGroupId;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 import org.apache.flink.runtime.scheduler.DeploymentOption;
 import org.apache.flink.runtime.scheduler.ExecutionVertexDeploymentOption;
@@ -117,7 +118,8 @@ public class TrafficBasedSchedulingStrategy implements SchedulingStrategy {
 
 	private void setupDerivedPlacement(SchedulingRuntimeState runtimeState) {
 		SchedulingExecutionContainer topLevelContainer = runtimeState.getTopLevelContainer();
-		List<Tuple3<TaskManagerLocation, Integer, Integer>> placementAction = runtimeState.getPlacementSolution();
+		List<Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> placementAction = runtimeState
+			.getPlacementSolution();
 		if (runtimeState.isValidPlacementAction(placementAction)) {
 			topLevelContainer.releaseAllExecutionVertices();
 			AtomicInteger placementIndex = new AtomicInteger(0);
@@ -125,12 +127,14 @@ public class TrafficBasedSchedulingStrategy implements SchedulingStrategy {
 				topLevelContainer.forceSchedule(
 					schedulingExecutionVertex,
 					placementAction.get(placementIndex.get()));
-				Tuple3<TaskManagerLocation, Integer, Integer> placementInfoTuple = placementAction.get(
-					placementIndex.getAndIncrement());
+				Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> placementInfoTuple = placementAction
+					.get(
+						placementIndex.getAndIncrement());
 				schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
 					placementInfoTuple.f0,
 					placementInfoTuple.f1,
 					placementInfoTuple.f2,
+					placementInfoTuple.f3,
 					taskPerCore));
 			});
 		} else {

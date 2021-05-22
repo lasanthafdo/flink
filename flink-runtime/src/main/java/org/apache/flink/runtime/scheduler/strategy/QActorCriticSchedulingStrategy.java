@@ -18,9 +18,10 @@
 
 package org.apache.flink.runtime.scheduler.strategy;
 
-import org.apache.flink.api.java.tuple.Tuple3;
+import org.apache.flink.api.java.tuple.Tuple4;
 import org.apache.flink.runtime.execution.ExecutionPlacement;
 import org.apache.flink.runtime.execution.ExecutionState;
+import org.apache.flink.runtime.instance.SlotSharingGroupId;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 import org.apache.flink.runtime.scheduler.DeploymentOption;
 import org.apache.flink.runtime.scheduler.ExecutionVertexDeploymentOption;
@@ -37,6 +38,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
@@ -137,15 +140,17 @@ public class QActorCriticSchedulingStrategy implements SchedulingStrategy {
 
 	private void setupDefaultPlacement() {
 		if (topLevelContainer != null) {
-			List<Tuple3<TaskManagerLocation, Integer, Integer>> resolvedPlacementAction = new ArrayList<>();
+			List<Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> resolvedPlacementAction = new ArrayList<>();
 			schedulingTopology
 				.getVertices()
 				.forEach(schedulingExecutionVertex -> {
-					Tuple3<TaskManagerLocation, Integer, Integer> placementInfo = topLevelContainer.scheduleVertex(
-						schedulingExecutionVertex);
+					Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> placementInfo = topLevelContainer
+						.scheduleVertex(
+							schedulingExecutionVertex);
 					schedulingExecutionVertex.setExecutionPlacement(
 						new ExecutionPlacement(
-							placementInfo.f0, placementInfo.f1, placementInfo.f2, taskPerCore));
+							placementInfo.f0, placementInfo.f1, placementInfo.f2,
+							placementInfo.f3, taskPerCore));
 					resolvedPlacementAction.add(placementInfo);
 				});
 			logPlacementAction(resolvedPlacementAction);
@@ -159,21 +164,28 @@ public class QActorCriticSchedulingStrategy implements SchedulingStrategy {
 
 	private void setupDerivedPlacement(@NotNull SchedulingRuntimeState runtimeState) {
 		SchedulingExecutionContainer topLevelContainer = runtimeState.getTopLevelContainer();
-		List<Tuple3<TaskManagerLocation, Integer, Integer>> placementAction = runtimeState.getPlacementSolution();
-		List<Tuple3<TaskManagerLocation, Integer, Integer>> resolvedPlacementAction = new ArrayList<>();
+		List<Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> placementAction = runtimeState
+			.getPlacementSolution();
+		List<Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> resolvedPlacementAction = new ArrayList<>();
 		if (runtimeState.isValidPlacementAction(placementAction)) {
 			topLevelContainer.releaseAllExecutionVertices();
 			AtomicInteger placementIndex = new AtomicInteger(0);
 			schedulingTopology.getVertices().forEach(schedulingExecutionVertex -> {
-				Tuple3<TaskManagerLocation, Integer, Integer> placementSuggestion = placementAction.get(
-					placementIndex.getAndIncrement());
-				Tuple3<TaskManagerLocation, Integer, Integer> placementInfo = topLevelContainer.scheduleVertex(
-					schedulingExecutionVertex,
-					placementSuggestion.f0,
-					placementSuggestion.f2);
+				Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> placementSuggestion = placementAction
+					.get(
+						placementIndex.getAndIncrement());
+				Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> placementInfo = topLevelContainer
+					.scheduleVertex(
+						schedulingExecutionVertex,
+						placementSuggestion.f0,
+						placementSuggestion.f3);
 				resolvedPlacementAction.add(placementInfo);
 				schedulingExecutionVertex.setExecutionPlacement(new ExecutionPlacement(
-					placementInfo.f0, placementInfo.f1, placementInfo.f2, taskPerCore));
+					placementInfo.f0,
+					placementInfo.f1,
+					placementInfo.f2,
+					placementInfo.f3,
+					taskPerCore));
 			});
 			logPlacementAction(resolvedPlacementAction);
 			log.info(topLevelContainer.getStatus());
@@ -184,24 +196,25 @@ public class QActorCriticSchedulingStrategy implements SchedulingStrategy {
 	}
 
 	private void logPlacementAction(
-		List<Tuple3<TaskManagerLocation, Integer, Integer>> placementAction) {
+		List<Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> placementAction) {
 		if (placementAction != null && !placementAction.isEmpty()) {
 			StringBuilder logMessage = new StringBuilder();
+			List<SchedulingExecutionVertex> executionVertices = StreamSupport
+				.stream(schedulingTopology.getVertices().spliterator(), false)
+				.collect(
+					Collectors.toList());
 			for (int i = 0; i < placementAction.size(); i++) {
-				Tuple3<TaskManagerLocation, Integer, Integer> currentOpPlacement = placementAction.get(
-					i);
-				logMessage
-					.append("[")
-					.append(i)
-					.append("->")
-					.append(currentOpPlacement.f0 != null ? currentOpPlacement.f0
-						.address()
-						.getHostAddress() : "null")
-					.append(":")
-					.append(currentOpPlacement.f2)
-					.append(":")
-					.append(currentOpPlacement.f1)
-					.append("], ");
+				Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> currentOpPlacement =
+					placementAction.get(i);
+				logMessage.append("\n[").append(executionVertices.get(i).getTaskName())
+					.append(" / ").append(executionVertices.get(i).getSubTaskIndex())
+					.append("(").append(executionVertices.get(i).getId()).append(")")
+					.append(" -> ")
+					.append(currentOpPlacement.f0 != null ?
+						currentOpPlacement.f0.address().getHostAddress() : "null")
+					.append(":").append(currentOpPlacement.f1)
+					.append(":").append(currentOpPlacement.f3)
+					.append(":").append(currentOpPlacement.f2).append("], ");
 			}
 			log.info("Placement action : {} ", logMessage);
 		}

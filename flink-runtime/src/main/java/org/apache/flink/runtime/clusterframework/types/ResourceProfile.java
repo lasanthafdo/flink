@@ -21,6 +21,7 @@ package org.apache.flink.runtime.clusterframework.types;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.operators.ResourceSpec;
 import org.apache.flink.api.common.resources.CPUResource;
+import org.apache.flink.api.common.resources.LocationResource;
 import org.apache.flink.api.common.resources.Resource;
 import org.apache.flink.configuration.MemorySize;
 
@@ -106,10 +107,11 @@ public class ResourceProfile implements Serializable {
 	@Nullable // can be null only for UNKNOWN
 	private final MemorySize networkMemory;
 
+	private final Resource resourceLocation;
+
 	/** A extensible field for user specified resources from {@link ResourceSpec}. */
 	private final Map<String, Resource> extendedResources = new HashMap<>(1);
 
-	private String resourceLocation;
 	// ------------------------------------------------------------------------
 
 	/**
@@ -138,6 +140,40 @@ public class ResourceProfile implements Serializable {
 		this.taskOffHeapMemory = checkNotNull(taskOffHeapMemory);
 		this.managedMemory = checkNotNull(managedMemory);
 		this.networkMemory = checkNotNull(networkMemory);
+		this.resourceLocation = null;
+		if (extendedResources != null) {
+			this.extendedResources.putAll(extendedResources);
+		}
+	}
+
+	/**
+	 * Creates a new ResourceProfile.
+	 *
+	 * @param cpuCores The number of CPU cores (possibly fractional, i.e., 0.2 cores)
+	 * @param taskHeapMemory The size of the task heap memory.
+	 * @param taskOffHeapMemory The size of the task off-heap memory.
+	 * @param managedMemory The size of the managed memory.
+	 * @param networkMemory The size of the network memory.
+	 * @param extendedResources The extended resources such as GPU and FPGA
+	 */
+	private ResourceProfile(
+		final Resource cpuCores,
+		final MemorySize taskHeapMemory,
+		final MemorySize taskOffHeapMemory,
+		final MemorySize managedMemory,
+		final MemorySize networkMemory,
+		final Resource locationResource,
+		final Map<String, Resource> extendedResources) {
+
+		checkNotNull(cpuCores);
+		checkArgument(cpuCores instanceof CPUResource, "cpuCores must be CPUResource");
+
+		this.cpuCores = cpuCores;
+		this.taskHeapMemory = checkNotNull(taskHeapMemory);
+		this.taskOffHeapMemory = checkNotNull(taskOffHeapMemory);
+		this.managedMemory = checkNotNull(managedMemory);
+		this.networkMemory = checkNotNull(networkMemory);
+		this.resourceLocation = checkNotNull(locationResource);
 		if (extendedResources != null) {
 			this.extendedResources.putAll(extendedResources);
 		}
@@ -152,8 +188,21 @@ public class ResourceProfile implements Serializable {
 		this.taskOffHeapMemory = null;
 		this.managedMemory = null;
 		this.networkMemory = null;
+		this.resourceLocation = null;
 	}
 
+	/**
+	 * Creates a special ResourceProfile with null values, indicating resources are unspecified.
+	 * The location is still specified
+	 */
+	private ResourceProfile(Resource resourceLocation) {
+		this.cpuCores = null;
+		this.taskHeapMemory = null;
+		this.taskOffHeapMemory = null;
+		this.managedMemory = null;
+		this.networkMemory = null;
+		this.resourceLocation = resourceLocation;
+	}
 	// ------------------------------------------------------------------------
 
 	/**
@@ -224,6 +273,10 @@ public class ResourceProfile implements Serializable {
 	public MemorySize getOperatorsMemory() {
 		throwUnsupportedOperationExecptionIfUnknown();
 		return taskHeapMemory.add(taskOffHeapMemory).add(managedMemory);
+	}
+
+	public String getResourceLocation() {
+		return ((LocationResource) resourceLocation).getLocation();
 	}
 
 	/**
@@ -514,12 +567,8 @@ public class ResourceProfile implements Serializable {
 		return new Builder();
 	}
 
-	public String getResourceLocation() {
-		return resourceLocation;
-	}
-
-	public void setResourceLocation(String resourceLocation) {
-		this.resourceLocation = resourceLocation;
+	public static Builder newBuilder(ResourceProfile otherResourceProfile) {
+		return new Builder(otherResourceProfile);
 	}
 
 	/**
@@ -532,9 +581,27 @@ public class ResourceProfile implements Serializable {
 		private MemorySize taskOffHeapMemory = MemorySize.ZERO;
 		private MemorySize managedMemory = MemorySize.ZERO;
 		private MemorySize networkMemory = MemorySize.ZERO;
+		private Resource resourceLocation = new LocationResource("", 0.0);
 		private Map<String, Resource> extendedResources = new HashMap<>();
+		private ResourceProfile otherResourceProfile = null;
 
 		private Builder() {
+		}
+
+		private Builder(final ResourceProfile otherResourceProfile) {
+			checkNotNull(otherResourceProfile);
+
+			if (UNKNOWN.equals(otherResourceProfile)) {
+				this.otherResourceProfile = otherResourceProfile;
+			} else {
+				this.cpuCores = otherResourceProfile.cpuCores;
+				this.taskHeapMemory = otherResourceProfile.taskHeapMemory;
+				this.taskOffHeapMemory = otherResourceProfile.taskOffHeapMemory;
+				this.managedMemory = otherResourceProfile.managedMemory;
+				this.networkMemory = otherResourceProfile.networkMemory;
+				this.extendedResources.putAll(otherResourceProfile.extendedResources);
+			}
+			this.resourceLocation = otherResourceProfile.resourceLocation;
 		}
 
 		public Builder setCpuCores(Resource cpuCores) {
@@ -587,6 +654,11 @@ public class ResourceProfile implements Serializable {
 			return this;
 		}
 
+		public Builder setResourceLocation(Resource resourceLocation) {
+			this.resourceLocation = resourceLocation;
+			return this;
+		}
+
 		public Builder addExtendedResource(String name, Resource extendedResource) {
 			this.extendedResources.put(name, extendedResource);
 			return this;
@@ -600,13 +672,19 @@ public class ResourceProfile implements Serializable {
 		}
 
 		public ResourceProfile build() {
-			return new ResourceProfile(
-				cpuCores,
-				taskHeapMemory,
-				taskOffHeapMemory,
-				managedMemory,
-				networkMemory,
-				extendedResources);
+			if (otherResourceProfile != null && otherResourceProfile.equals(UNKNOWN)) {
+				return new ResourceProfile(resourceLocation);
+			} else {
+				return new ResourceProfile(
+					cpuCores,
+					taskHeapMemory,
+					taskOffHeapMemory,
+					managedMemory,
+					networkMemory,
+					resourceLocation,
+					extendedResources);
+			}
 		}
+
 	}
 }

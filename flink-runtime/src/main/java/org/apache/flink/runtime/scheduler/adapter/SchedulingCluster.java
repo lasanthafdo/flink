@@ -18,7 +18,8 @@
 
 package org.apache.flink.runtime.scheduler.adapter;
 
-import org.apache.flink.api.java.tuple.Tuple3;
+import org.apache.flink.api.java.tuple.Tuple4;
+import org.apache.flink.runtime.instance.SlotSharingGroupId;
 import org.apache.flink.runtime.jobmaster.SlotInfo;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionContainer;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
@@ -103,7 +104,7 @@ public class SchedulingCluster implements SchedulingExecutionContainer {
 	}
 
 	@Override
-	public Tuple3<TaskManagerLocation, Integer, Integer> scheduleVertex(
+	public Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> scheduleVertex(
 		SchedulingExecutionVertex schedulingExecutionVertex) {
 		Optional<SchedulingExecutionContainer> targetNode = nodes.values()
 			.stream().filter(node -> {
@@ -120,7 +121,7 @@ public class SchedulingCluster implements SchedulingExecutionContainer {
 				return hasRemainingSlots && !maxParallelismReached;
 			})
 			.min(Comparator.comparing(sec -> sec.getResourceUsage(OPERATOR)));
-		Tuple3<TaskManagerLocation, Integer, Integer> vertexAssignment = NULL_PLACEMENT;
+		Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> vertexAssignment = NULL_PLACEMENT;
 		if (targetNode.isPresent()) {
 			vertexAssignment = targetNode.get().scheduleVertex(schedulingExecutionVertex);
 		} else {
@@ -133,9 +134,9 @@ public class SchedulingCluster implements SchedulingExecutionContainer {
 	}
 
 	@Override
-	public Tuple3<TaskManagerLocation, Integer, Integer> scheduleVertex(
+	public Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> scheduleVertex(
 		SchedulingExecutionVertex schedulingExecutionVertex,
-		TaskManagerLocation targetTaskMan,
+		TaskManagerLocation targetTaskManager,
 		Integer targetSocket) {
 		Optional<SchedulingExecutionContainer> targetNode = nodes
 			.values()
@@ -152,18 +153,18 @@ public class SchedulingCluster implements SchedulingExecutionContainer {
 				boolean maxParallelismReached = opReplicationCount >= slotCount.get(node.getId());
 				return hasRemainingSlots && !maxParallelismReached;
 			})
-			.filter(node -> node.getId().equals(targetTaskMan.address().getHostAddress()))
+			.filter(node -> node.getId().equals(targetTaskManager.address().getHostAddress()))
 			.findFirst();
 		return targetNode
 			.map(sec -> sec.scheduleVertex(
 				schedulingExecutionVertex,
-				targetTaskMan,
+				targetTaskManager,
 				targetSocket))
 			.orElse(SchedulingExecutionContainer.NULL_PLACEMENT);
 	}
 
 	@Override
-	public List<Tuple3<TaskManagerLocation, Integer, Integer>> tryScheduleInSameContainer(
+	public List<Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> tryScheduleInSameContainer(
 		SchedulingExecutionVertex sourceVertex,
 		SchedulingExecutionVertex targetVertex) {
 
@@ -192,7 +193,7 @@ public class SchedulingCluster implements SchedulingExecutionContainer {
 				return hasRemainingSlots && !maxParallelismReached;
 			})
 			.min(Comparator.comparing(sec -> sec.getResourceUsage(OPERATOR)));
-		List<Tuple3<TaskManagerLocation, Integer, Integer>> tmLocCpuIdPairList = new ArrayList<>();
+		List<Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> tmLocCpuIdPairList = new ArrayList<>();
 		if (firstPreferenceTargetNode.isPresent()) {
 			SchedulingExecutionContainer node = firstPreferenceTargetNode.get();
 			tmLocCpuIdPairList.addAll(node.tryScheduleInSameContainer(sourceVertex, targetVertex));
@@ -226,7 +227,7 @@ public class SchedulingCluster implements SchedulingExecutionContainer {
 	@Override
 	public SchedulingExecutionVertex forceSchedule(
 		SchedulingExecutionVertex schedulingExecutionVertex,
-		Tuple3<TaskManagerLocation, Integer, Integer> cpuId) {
+		Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> cpuId) {
 		String nodeIp = cpuId.f0.address().getHostAddress();
 		SchedulingExecutionVertex evictedVertex = nodes
 			.get(nodeIp)
@@ -266,9 +267,9 @@ public class SchedulingCluster implements SchedulingExecutionContainer {
 					resourceUsageMap.get(ipCpuIdParts[0]).put(ipCpuIdParts[1], val);
 				}
 			});
-			resourceUsageMap.forEach((ip, resValMap) -> {
-				nodes.get(ip).updateResourceUsage(type, resValMap);
-			});
+			resourceUsageMap.forEach((ip, resValMap) -> nodes
+				.get(ip)
+				.updateResourceUsage(type, resValMap));
 		} else {
 			nodes
 				.values()
@@ -282,8 +283,8 @@ public class SchedulingCluster implements SchedulingExecutionContainer {
 	}
 
 	@Override
-	public Map<SchedulingExecutionVertex, Tuple3<TaskManagerLocation, Integer, Integer>> getCurrentCpuAssignment() {
-		Map<SchedulingExecutionVertex, Tuple3<TaskManagerLocation, Integer, Integer>> currentlyAssignedCpus = new HashMap<>();
+	public Map<SchedulingExecutionVertex, Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> getCurrentCpuAssignment() {
+		Map<SchedulingExecutionVertex, Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> currentlyAssignedCpus = new HashMap<>();
 		getSubContainers()
 			.forEach(subContainer -> currentlyAssignedCpus.putAll(subContainer.getCurrentCpuAssignment()));
 		return currentlyAssignedCpus;

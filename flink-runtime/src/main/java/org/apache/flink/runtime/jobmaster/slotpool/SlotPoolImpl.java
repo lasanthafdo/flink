@@ -41,10 +41,10 @@ import org.apache.flink.runtime.resourcemanager.SlotRequest;
 import org.apache.flink.runtime.resourcemanager.exceptions.UnfulfillableSlotRequestException;
 import org.apache.flink.runtime.taskexecutor.slot.SlotOffer;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
-import org.apache.flink.util.clock.Clock;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.FlinkException;
 import org.apache.flink.util.Preconditions;
+import org.apache.flink.util.clock.Clock;
 
 import org.apache.flink.shaded.guava18.com.google.common.collect.Iterables;
 
@@ -319,7 +319,11 @@ public class SlotPoolImpl implements SlotPool {
 		checkNotNull(resourceManagerGateway);
 		checkNotNull(pendingRequest);
 
-		log.info("Requesting new slot [{}] and profile {} from resource manager.", pendingRequest.getSlotRequestId(), pendingRequest.getResourceProfile());
+		log.info(
+			"Requesting new slot [{}] at {} with profile {} from resource manager.",
+			pendingRequest.getSlotRequestId(),
+			pendingRequest.getResourceProfile().getResourceLocation(),
+			pendingRequest.getResourceProfile());
 
 		final AllocationID allocationId = new AllocationID();
 
@@ -418,8 +422,13 @@ public class SlotPoolImpl implements SlotPool {
 
 		componentMainThreadExecutor.assertRunningInMainThread();
 
-		final PendingRequest pendingRequest = PendingRequest.createStreamingRequest(slotRequestId, resourceProfile);
-
+		final PendingRequest pendingRequest = PendingRequest.createStreamingRequest(
+			slotRequestId,
+			resourceProfile);
+		log.debug(
+			"Created pending request with target location {} from requested location {}",
+			pendingRequest.getResourceProfile().getResourceLocation(),
+			resourceProfile.getResourceLocation());
 		// register request timeout
 		FutureUtils
 			.orTimeout(

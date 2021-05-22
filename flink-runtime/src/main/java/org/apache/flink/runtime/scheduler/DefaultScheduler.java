@@ -47,6 +47,7 @@ import org.apache.flink.runtime.rest.handler.legacy.backpressure.BackPressureSta
 import org.apache.flink.runtime.scheduler.agent.SchedulingAgent;
 import org.apache.flink.runtime.scheduler.agent.SchedulingAgentUtils;
 import org.apache.flink.runtime.scheduler.strategy.ExecutionVertexID;
+import org.apache.flink.runtime.scheduler.strategy.QActorCriticSchedulingStrategy;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategy;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategyFactory;
 import org.apache.flink.runtime.shuffle.ShuffleMaster;
@@ -401,7 +402,7 @@ public class DefaultScheduler extends SchedulerBase implements SchedulerOperatio
 	}
 
 	private List<SlotExecutionVertexAssignment> allocateSlots(final List<ExecutionVertexDeploymentOption> executionVertexDeploymentOptions) {
-		if (schedulingAgent != null) {
+		if (schedulingStrategy instanceof QActorCriticSchedulingStrategy) {
 			return executionSlotAllocator.allocateSlotsFor(executionVertexDeploymentOptions
 				.stream()
 				.map(ExecutionVertexDeploymentOption::getExecutionVertexId)
