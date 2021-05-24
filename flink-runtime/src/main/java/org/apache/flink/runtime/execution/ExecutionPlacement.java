@@ -18,7 +18,7 @@
 
 package org.apache.flink.runtime.execution;
 
-import org.apache.flink.runtime.instance.SlotSharingGroupId;
+import org.apache.flink.runtime.jobmanager.scheduler.SlotSharingGroup;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 
 import java.io.Serializable;
@@ -31,17 +31,17 @@ public class ExecutionPlacement implements Serializable {
 	private static final long serialVersionUID = -786800431659013391L;
 
 	private final TaskManagerLocation taskManagerLocation;
-	private final SlotSharingGroupId slotSharingGroupId;
+	private final SlotSharingGroup slotSharingGroup;
 	private final int cpuId;
 	private final int socketId;
 	private final boolean taskPerCore;
 
 	public ExecutionPlacement(
 		TaskManagerLocation taskManagerLocation,
-		SlotSharingGroupId slotSharingGroupId,
+		SlotSharingGroup slotSharingGroup,
 		int cpuId, int socketId, boolean taskPerCore) {
 		this.taskManagerLocation = taskManagerLocation;
-		this.slotSharingGroupId = slotSharingGroupId;
+		this.slotSharingGroup = slotSharingGroup;
 		this.cpuId = cpuId;
 		this.socketId = socketId;
 		this.taskPerCore = taskPerCore;
@@ -63,7 +63,7 @@ public class ExecutionPlacement implements Serializable {
 		return taskPerCore;
 	}
 
-	public SlotSharingGroupId getSlotSharingGroupId() {
-		return slotSharingGroupId;
+	public SlotSharingGroup getSlotSharingGroup() {
+		return slotSharingGroup;
 	}
 }

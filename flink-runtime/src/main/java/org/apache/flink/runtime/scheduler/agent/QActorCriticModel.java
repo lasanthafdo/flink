@@ -22,7 +22,7 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.api.java.tuple.Tuple4;
-import org.apache.flink.runtime.instance.SlotSharingGroupId;
+import org.apache.flink.runtime.jobmanager.scheduler.SlotSharingGroup;
 import org.apache.flink.runtime.scheduler.strategy.ExecutionVertexID;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 
@@ -296,7 +296,7 @@ public class QActorCriticModel {
 		return insertSuccess;
 	}
 
-	public Tuple2<Integer, Integer> getStateFor(List<Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> cpuAssignment) {
+	public Tuple2<Integer, Integer> getStateFor(List<Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer>> cpuAssignment) {
 		List<Integer> cpuAssignmentStateVector = cpuAssignment
 			.stream()
 			.map(operatorLoc -> sockAddrToSockIdMap.get(getSocketAddress(

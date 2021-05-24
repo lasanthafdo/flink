@@ -1067,9 +1067,7 @@ public class Task implements Runnable, TaskSlotPayload, TaskActions, PartitionPr
 			// counted as finished when this happens
 			// errors here will only be logged
 			try {
-				if (getExecutionState() != ExecutionState.HALTED) {
-					metrics.close();
-				}
+				metrics.close();
 			} catch (Throwable t) {
 				LOG.error(
 					"Error during metrics de-registration of task {} ({}).",

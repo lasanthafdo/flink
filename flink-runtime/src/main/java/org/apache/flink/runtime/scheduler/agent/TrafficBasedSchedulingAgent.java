@@ -20,7 +20,7 @@ package org.apache.flink.runtime.scheduler.agent;
 
 import org.apache.flink.api.java.tuple.Tuple4;
 import org.apache.flink.runtime.executiongraph.ExecutionGraph;
-import org.apache.flink.runtime.instance.SlotSharingGroupId;
+import org.apache.flink.runtime.jobmanager.scheduler.SlotSharingGroup;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionContainer;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategy;
@@ -133,12 +133,12 @@ public class TrafficBasedSchedulingAgent extends AbstractSchedulingAgent {
 		}
 	}
 
-	private List<Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> getTrafficBasedPlacementAction() {
+	private List<Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer>> getTrafficBasedPlacementAction() {
 		SchedulingExecutionContainer topLevelContainer = getTopLevelContainer();
 		topLevelContainer.releaseAllExecutionVertices();
 		Set<SchedulingExecutionVertex> unassignedVertices = new HashSet<>();
 		Set<SchedulingExecutionVertex> assignedVertices = new HashSet<>();
-		Map<Integer, Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> placementAction = new HashMap<>();
+		Map<Integer, Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer>> placementAction = new HashMap<>();
 		AtomicInteger placementIndex = new AtomicInteger(1);
 
 		orderedEdgeList.forEach(schedulingExecutionEdge -> {
@@ -149,7 +149,7 @@ public class TrafficBasedSchedulingAgent extends AbstractSchedulingAgent {
 			boolean targetVertexAssigned = assignedVertices.contains(targetVertex);
 
 			if (!sourceVertexAssigned && !targetVertexAssigned) {
-				List<Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> cpuIds = topLevelContainer
+				List<Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer>> cpuIds = topLevelContainer
 					.tryScheduleInSameContainer(
 						sourceVertex, targetVertex);
 				if (cpuIds.size() >= 2) {
@@ -172,7 +172,7 @@ public class TrafficBasedSchedulingAgent extends AbstractSchedulingAgent {
 			}
 		});
 		unassignedVertices.forEach(schedulingExecutionVertex -> {
-			Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> cpuId = topLevelContainer
+			Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer> cpuId = topLevelContainer
 				.scheduleVertex(
 					schedulingExecutionVertex);
 			if (cpuId.f0 == null) {
@@ -197,10 +197,10 @@ public class TrafficBasedSchedulingAgent extends AbstractSchedulingAgent {
 		SchedulingExecutionContainer topLevelContainer,
 		Set<SchedulingExecutionVertex> unassignedVertices,
 		Set<SchedulingExecutionVertex> assignedVertices,
-		Map<Integer, Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> placementAction,
+		Map<Integer, Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer>> placementAction,
 		AtomicInteger placementIndex,
 		SchedulingExecutionVertex sourceVertex) {
-		Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> operatorPlacementInfo = topLevelContainer
+		Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer> operatorPlacementInfo = topLevelContainer
 			.scheduleVertex(
 				sourceVertex);
 		if (operatorPlacementInfo.f0 != null) {

@@ -21,7 +21,7 @@ package org.apache.flink.runtime.scheduler.strategy;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.api.java.tuple.Tuple4;
 import org.apache.flink.runtime.executiongraph.ExecutionVertex;
-import org.apache.flink.runtime.instance.SlotSharingGroupId;
+import org.apache.flink.runtime.jobmanager.scheduler.SlotSharingGroup;
 import org.apache.flink.runtime.jobmaster.SlotInfo;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 
@@ -38,7 +38,7 @@ public interface SchedulingExecutionContainer {
 	String FREQ = "FREQ";
 	String CPU_ID_DELIMITER = ":";
 
-	Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> NULL_PLACEMENT = new Tuple4<>(
+	Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer> NULL_PLACEMENT = new Tuple4<>(
 		null,
 		null,
 		-1,
@@ -67,7 +67,7 @@ public interface SchedulingExecutionContainer {
 	 *
 	 * @return a {@link Tuple3} consisting of the TaskManagerLocation, CPU ID, and socket ID
 	 */
-	Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> scheduleVertex(
+	Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer> scheduleVertex(
 		SchedulingExecutionVertex schedulingExecutionVertex);
 
 	/**
@@ -75,7 +75,7 @@ public interface SchedulingExecutionContainer {
 	 *
 	 * @return a {@link Tuple3} consisting of the TaskManagerLocation, CPU ID, and socket ID
 	 */
-	Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> scheduleVertex(
+	Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer> scheduleVertex(
 		SchedulingExecutionVertex schedulingExecutionVertex,
 		TaskManagerLocation targetTaskMan,
 		Integer targetSocket);
@@ -87,7 +87,7 @@ public interface SchedulingExecutionContainer {
 	 * @return a list of {@link Tuple4} objects that include the task manager location,
 	 * 	slot sharing group id, CPU ID, and socket ID in the case of a successful schedule
 	 */
-	List<Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> tryScheduleInSameContainer(
+	List<Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer>> tryScheduleInSameContainer(
 		SchedulingExecutionVertex sourceVertex,
 		SchedulingExecutionVertex targetVertex);
 
@@ -119,7 +119,7 @@ public interface SchedulingExecutionContainer {
 	 */
 	SchedulingExecutionVertex forceSchedule(
 		SchedulingExecutionVertex schedulingExecutionVertex,
-		Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> cpuId);
+		Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer> cpuId);
 
 	/**
 	 * @return the remaining number of slots
@@ -150,7 +150,7 @@ public interface SchedulingExecutionContainer {
 	 * @return the current assignment of each {@link SchedulingExecutionVertex} in this
 	 *    {@link SchedulingExecutionContainer}
 	 */
-	Map<SchedulingExecutionVertex, Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> getCurrentCpuAssignment();
+	Map<SchedulingExecutionVertex, Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer>> getCurrentCpuAssignment();
 
 	/**
 	 * @return the status of the {@link SchedulingExecutionContainer} as a String

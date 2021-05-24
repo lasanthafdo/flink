@@ -31,8 +31,7 @@ import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.executiongraph.Execution;
 import org.apache.flink.runtime.executiongraph.ExecutionGraph;
 import org.apache.flink.runtime.executiongraph.ExecutionVertex;
-import org.apache.flink.runtime.instance.SlotSharingGroupId;
-import org.apache.flink.runtime.jobgraph.JobVertexID;
+import org.apache.flink.runtime.jobmanager.scheduler.SlotSharingGroup;
 import org.apache.flink.runtime.jobmaster.SlotInfo;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.resourcemanager.ResourceManagerGateway;
@@ -84,8 +83,8 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	protected final int nProcessingUnits;
 	protected final int nVertices;
 	protected int nSchedulingSlots;
-	protected List<Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> suggestedPlacementAction;
-	protected List<Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> currentPlacementAction;
+	protected List<Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer>> suggestedPlacementAction;
+	protected List<Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer>> currentPlacementAction;
 	protected ScheduledFuture<?> updateExecutor;
 	protected final ExecutionGraph executionGraph;
 	protected final Map<Tuple3<ExecutionVertexID, String, Integer>, Integer> orderedOperatorMap = new HashMap<>();
@@ -94,7 +93,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	protected final Map<String, Tuple2<TaskManagerLocation, Integer>> taskManLocSlotCountMap = new HashMap<>();
 	protected final CpuLayout cpuLayout;
 	protected final boolean taskPerCore;
-	protected final int maxParallelism;
+	protected final int maxOperatorsInMultiTaskSlot;
 
 	private final Map<String, Double> interOpEdgeThroughput;
 	private final Map<String, SchedulingExecutionEdge> edgeMap;
@@ -117,7 +116,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		ExecutionGraph executionGraph,
 		SchedulingStrategy schedulingStrategy,
 		long waitTimeout,
-		int numRetries, int maxParallelism, boolean taskPerCore) {
+		int numRetries, int maxOperatorsInMultiTaskSlot, boolean taskPerCore) {
 
 		this.executionGraph = checkNotNull(executionGraph);
 		this.schedulingStrategy = checkNotNull(schedulingStrategy);
@@ -140,7 +139,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 
 		this.waitTimeout = waitTimeout;
 		this.numRetries = numRetries;
-		this.maxParallelism = maxParallelism;
+		this.maxOperatorsInMultiTaskSlot = maxOperatorsInMultiTaskSlot;
 		this.currentPlacementAction = new ArrayList<>();
 		this.nVertices = executionGraph.getTotalNumberOfVertices();
 		this.suggestedPlacementAction = new ArrayList<>();
@@ -195,7 +194,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		this.schedulingCluster = new SchedulingCluster(
 			tmList,
 			this.cpuLayout,
-			this.maxParallelism,
+			this.maxOperatorsInMultiTaskSlot,
 			this.taskPerCore,
 			log);
 		taskManLocSlotCountMap.forEach((tmResourceId, tmLocNumSlotsTuple) -> {
@@ -352,32 +351,28 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 						Tuple2<String, Integer> tmIdCpuIdTuple = placementInfoEntry.getValue();
 						TaskManagerLocation tmLoc = null;
 						Tuple2<TaskManagerLocation, Integer> taskManSlotCount = taskManLocSlotCountMap
-							.get(
-								tmIdCpuIdTuple.f0);
+							.get(tmIdCpuIdTuple.f0);
 						if (taskManSlotCount != null) {
 							tmLoc = taskManSlotCount.f0;
 						}
 						Integer cpuId = tmIdCpuIdTuple.f1;
 						Integer socketId = cpuLayout.socketId(cpuId);
 						SchedulingExecutionVertex vertex = currentOperators.get(operatorId);
-						SlotSharingGroupId slotSharingGroupId = null;
+						SlotSharingGroup slotSharingGroup = null;
 						if (vertex != null) {
-							JobVertexID jobVertexID = vertex.getId().getJobVertexId();
-							slotSharingGroupId = new SlotSharingGroupId(
-								jobVertexID.getUpperPart(),
-								jobVertexID.getUpperPart());
+							slotSharingGroup = vertex.getExecutionPlacement().getSlotSharingGroup();
 						}
 						if (tmLoc != null && cpuId >= 0 && socketId >= 0 && vertex != null) {
 							schedulingCluster.forceSchedule(
 								vertex,
-								new Tuple4<>(tmLoc, slotSharingGroupId, cpuId, socketId));
+								new Tuple4<>(tmLoc, slotSharingGroup, cpuId, socketId));
 						} else {
 							log.warn(
 								"Could not update placement information for operator {} running on task "
 									+ "manager at {} on slot group {}, with CPU ID {}, running on socket ID {}",
 								operatorId,
 								tmLoc,
-								slotSharingGroupId,
+								slotSharingGroup,
 								cpuId,
 								socketId);
 						}
@@ -455,7 +450,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 		logCurrentStatusInformation();
 	}
 
-	private String getCpuIdAsString(Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> cpuIdTuple) {
+	private String getCpuIdAsString(Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer> cpuIdTuple) {
 		if (cpuIdTuple != null) {
 			String tmAddress = "127.0.0.1";
 			if (cpuIdTuple.f0 != null) {
@@ -470,7 +465,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	private void updateMaxEdgeThroughputMatrices(
 		Map<String, Double> currentInterOpEdgeThroughput) {
 
-		Map<SchedulingExecutionVertex, Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> currentCpuAssignment = schedulingCluster
+		Map<SchedulingExecutionVertex, Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer>> currentCpuAssignment = schedulingCluster
 			.getCurrentCpuAssignment();
 		currentInterOpEdgeThroughput.forEach((edgeId, edgeRate) -> {
 			SchedulingExecutionEdge edge = edgeMap.get(edgeId);
@@ -526,7 +521,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	}
 
 	@Override
-	public List<Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> getPlacementSolution() {
+	public List<Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer>> getPlacementSolution() {
 		return suggestedPlacementAction;
 	}
 
@@ -558,10 +553,10 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 
 	protected void updateCurrentPlacementInformation() {
 		//TODO Change Tuple4<> to a proper class
-		Map<SchedulingExecutionVertex, Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> cpuAssignmentMap = getTopLevelContainer()
+		Map<SchedulingExecutionVertex, Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer>> cpuAssignmentMap = getTopLevelContainer()
 			.getCurrentCpuAssignment();
 
-		Map<Integer, Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> currentPlacementTemp = new HashMap<>();
+		Map<Integer, Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer>> currentPlacementTemp = new HashMap<>();
 		if (cpuAssignmentMap != null && !cpuAssignmentMap.isEmpty()) {
 			log.info(
 				"nVertices : {}, CPU Assignment map size {}",
@@ -571,14 +566,14 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 				log.info(
 					"Execution Vertex {} assigned to cpu {} [socket {}] at {}",
 					executionVertex.getTaskName() + ":" + executionVertex.getSubTaskIndex(),
-					assignment.f1,
 					assignment.f2,
+					assignment.f3,
 					assignment.f0 == null ? "null" : assignment.f0.address().getHostAddress()));
 			AtomicInteger vertexCount = new AtomicInteger(1);
 			IterableUtils
 				.toStream(schedulingTopology.getVertices())
 				.forEachOrdered(schedulingExecutionVertex -> {
-					Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> currentVertexAssignment = cpuAssignmentMap
+					Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer> currentVertexAssignment = cpuAssignmentMap
 						.get(schedulingExecutionVertex);
 					if (currentVertexAssignment == null) {
 						log.warn(
@@ -592,8 +587,8 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 							currentVertexAssignment.f0 != null ? currentVertexAssignment.f0
 								.address()
 								.getHostAddress() : "null",
-							currentVertexAssignment.f2,
-							currentVertexAssignment.f1);
+							currentVertexAssignment.f3,
+							currentVertexAssignment.f2);
 					}
 					currentPlacementTemp.put(
 						vertexCount.getAndIncrement(), currentVertexAssignment);
@@ -610,7 +605,7 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 	}
 
 	@Override
-	public boolean isValidPlacementAction(List<Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> suggestedPlacementAction) {
+	public boolean isValidPlacementAction(List<Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer>> suggestedPlacementAction) {
 		List<Integer> suggestedCpuIds = suggestedPlacementAction
 			.stream()
 			.map(placementInfo -> placementInfo.f2)
@@ -680,11 +675,11 @@ public abstract class AbstractSchedulingAgent implements SchedulingAgent, Schedu
 
 	public void logPlacementAction(
 		Tuple2<Integer, Integer> actionId,
-		List<Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> placementAction) {
+		List<Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer>> placementAction) {
 		if (placementAction != null && !placementAction.isEmpty()) {
 			StringBuilder logMessage = new StringBuilder();
 			for (int i = 0; i < placementAction.size(); i++) {
-				Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> currentOpPlacement =
+				Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer> currentOpPlacement =
 					placementAction.get(i);
 				logMessage
 					.append("[")

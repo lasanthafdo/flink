@@ -62,7 +62,7 @@ public final class ExecutionVertexSchedulingRequirementsMapper {
 
 		final AllocationID latestPriorAllocation = executionVertex.getLatestPriorAllocation();
 		final SlotSharingGroup slotSharingGroup = executionVertex
-			.getJobVertex()
+			.getExecutionPlacement()
 			.getSlotSharingGroup();
 		String ipAddress = executionVertex
 			.getExecutionPlacement()

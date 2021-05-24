@@ -29,7 +29,7 @@ public class CpuIdGauge implements Gauge<Integer> {
 
 	// ------------------------------------------------------------------------
 
-	private Integer lastCpuId = 0;
+	private Integer lastCpuId = -1;
 	private Supplier<Integer> cpuIdSupplier;
 
 	// ------------------------------------------------------------------------

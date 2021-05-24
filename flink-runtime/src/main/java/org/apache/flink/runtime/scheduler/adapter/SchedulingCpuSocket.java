@@ -19,7 +19,7 @@
 package org.apache.flink.runtime.scheduler.adapter;
 
 import org.apache.flink.api.java.tuple.Tuple4;
-import org.apache.flink.runtime.instance.SlotSharingGroupId;
+import org.apache.flink.runtime.jobmanager.scheduler.SlotSharingGroup;
 import org.apache.flink.runtime.jobmaster.SlotInfo;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionContainer;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingExecutionVertex;
@@ -91,7 +91,7 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 	}
 
 	@Override
-	public Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> scheduleVertex(
+	public Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer> scheduleVertex(
 		SchedulingExecutionVertex schedulingExecutionVertex) {
 		int cpuId = cpuAssignmentMap
 			.entrySet()
@@ -113,7 +113,7 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 	}
 
 	@Override
-	public Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> scheduleVertex(
+	public Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer> scheduleVertex(
 		SchedulingExecutionVertex schedulingExecutionVertex,
 		TaskManagerLocation targetTaskMan,
 		Integer targetSocket) {
@@ -124,7 +124,7 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 	}
 
 	@Override
-	public List<Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> tryScheduleInSameContainer(
+	public List<Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer>> tryScheduleInSameContainer(
 		SchedulingExecutionVertex sourceVertex,
 		SchedulingExecutionVertex targetVertex) {
 
@@ -141,7 +141,7 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 
 			cpuIdList.removeIf(id -> id != sourceCpuId && id != targetCpuId);
 		}
-		List<Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> tmLocCpuIdPairList = new ArrayList<>(
+		List<Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer>> tmLocCpuIdPairList = new ArrayList<>(
 			cpuIdList.size());
 		cpuIdList.forEach(cpuId -> tmLocCpuIdPairList.add(new Tuple4<>(
 			null,
@@ -181,7 +181,7 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 	@Override
 	public SchedulingExecutionVertex forceSchedule(
 		SchedulingExecutionVertex schedulingExecutionVertex,
-		Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> cpuId) {
+		Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer> cpuId) {
 		if (cpuAssignmentMap.containsKey(cpuId.f2)) {
 			SchedulingExecutionVertex currentlyAssignedVertex = cpuAssignmentMap.get(cpuId.f2);
 			if (currentlyAssignedVertex != null) {
@@ -279,7 +279,7 @@ public class SchedulingCpuSocket implements SchedulingExecutionContainer {
 	}
 
 	@Override
-	public Map<SchedulingExecutionVertex, Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> getCurrentCpuAssignment() {
+	public Map<SchedulingExecutionVertex, Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer>> getCurrentCpuAssignment() {
 		return cpuAssignmentMap
 			.entrySet()
 			.stream()

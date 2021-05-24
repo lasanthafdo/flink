@@ -21,8 +21,8 @@ package org.apache.flink.runtime.scheduler.strategy;
 import org.apache.flink.api.java.tuple.Tuple4;
 import org.apache.flink.runtime.execution.ExecutionPlacement;
 import org.apache.flink.runtime.execution.ExecutionState;
-import org.apache.flink.runtime.instance.SlotSharingGroupId;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
+import org.apache.flink.runtime.jobmanager.scheduler.SlotSharingGroup;
 import org.apache.flink.runtime.scheduler.DeploymentOption;
 import org.apache.flink.runtime.scheduler.ExecutionVertexDeploymentOption;
 import org.apache.flink.runtime.scheduler.SchedulerOperations;
@@ -140,11 +140,11 @@ public class QActorCriticSchedulingStrategy implements SchedulingStrategy {
 
 	private void setupDefaultPlacement() {
 		if (topLevelContainer != null) {
-			List<Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> resolvedPlacementAction = new ArrayList<>();
+			List<Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer>> resolvedPlacementAction = new ArrayList<>();
 			schedulingTopology
 				.getVertices()
 				.forEach(schedulingExecutionVertex -> {
-					Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> placementInfo = topLevelContainer
+					Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer> placementInfo = topLevelContainer
 						.scheduleVertex(
 							schedulingExecutionVertex);
 					schedulingExecutionVertex.setExecutionPlacement(
@@ -164,17 +164,17 @@ public class QActorCriticSchedulingStrategy implements SchedulingStrategy {
 
 	private void setupDerivedPlacement(@NotNull SchedulingRuntimeState runtimeState) {
 		SchedulingExecutionContainer topLevelContainer = runtimeState.getTopLevelContainer();
-		List<Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> placementAction = runtimeState
+		List<Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer>> placementAction = runtimeState
 			.getPlacementSolution();
-		List<Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> resolvedPlacementAction = new ArrayList<>();
+		List<Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer>> resolvedPlacementAction = new ArrayList<>();
 		if (runtimeState.isValidPlacementAction(placementAction)) {
 			topLevelContainer.releaseAllExecutionVertices();
 			AtomicInteger placementIndex = new AtomicInteger(0);
 			schedulingTopology.getVertices().forEach(schedulingExecutionVertex -> {
-				Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> placementSuggestion = placementAction
+				Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer> placementSuggestion = placementAction
 					.get(
 						placementIndex.getAndIncrement());
-				Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> placementInfo = topLevelContainer
+				Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer> placementInfo = topLevelContainer
 					.scheduleVertex(
 						schedulingExecutionVertex,
 						placementSuggestion.f0,
@@ -196,7 +196,7 @@ public class QActorCriticSchedulingStrategy implements SchedulingStrategy {
 	}
 
 	private void logPlacementAction(
-		List<Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer>> placementAction) {
+		List<Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer>> placementAction) {
 		if (placementAction != null && !placementAction.isEmpty()) {
 			StringBuilder logMessage = new StringBuilder();
 			List<SchedulingExecutionVertex> executionVertices = StreamSupport
@@ -204,17 +204,26 @@ public class QActorCriticSchedulingStrategy implements SchedulingStrategy {
 				.collect(
 					Collectors.toList());
 			for (int i = 0; i < placementAction.size(); i++) {
-				Tuple4<TaskManagerLocation, SlotSharingGroupId, Integer, Integer> currentOpPlacement =
+				Tuple4<TaskManagerLocation, SlotSharingGroup, Integer, Integer> currentOpPlacement =
 					placementAction.get(i);
-				logMessage.append("\n[").append(executionVertices.get(i).getTaskName())
-					.append(" / ").append(executionVertices.get(i).getSubTaskIndex())
-					.append("(").append(executionVertices.get(i).getId()).append(")")
+				logMessage
+					.append("\n[")
+					.append(executionVertices.get(i).getTaskName())
+					.append(" / ")
+					.append(executionVertices.get(i).getSubTaskIndex())
+					.append(" (")
+					.append(executionVertices.get(i).getId())
+					.append(")")
 					.append(" -> ")
 					.append(currentOpPlacement.f0 != null ?
 						currentOpPlacement.f0.address().getHostAddress() : "null")
-					.append(":").append(currentOpPlacement.f1)
-					.append(":").append(currentOpPlacement.f3)
-					.append(":").append(currentOpPlacement.f2).append("], ");
+					.append(":")
+					.append(currentOpPlacement.f3)
+					.append(":")
+					.append(currentOpPlacement.f2)
+					.append(" (")
+					.append(currentOpPlacement.f1.getSlotSharingGroupId())
+					.append(")], ");
 			}
 			log.info("Placement action : {} ", logMessage);
 		}
