@@ -104,30 +104,18 @@ public class DefaultExecutionSlotAllocator implements ExecutionSlotAllocator {
 				executionVertexId,
 				schedulingRequirements.getPreferredLocations(),
 				inputsLocationsRetriever).thenCompose(
-				(Collection<TaskManagerLocation> preferredLocations) -> {
-					LOG.debug(
-						"Triggering slot request for operator {} at {}",
+				(Collection<TaskManagerLocation> preferredLocations) -> slotProviderStrategy.allocateSlot(
+					slotRequestId,
+					new ScheduledUnit(
 						executionVertexId,
-						preferredLocations
-							.stream()
-							.map(taskManagerLocation -> taskManagerLocation
-								.address()
-								.getHostAddress())
-							.collect(
-								Collectors.toList()));
-					return slotProviderStrategy.allocateSlot(
-						slotRequestId,
-						new ScheduledUnit(
-							executionVertexId,
-							slotSharingGroupId,
-							schedulingRequirements.getCoLocationConstraint()),
-						SlotProfile.priorAllocation(
-							schedulingRequirements.getTaskResourceProfile(),
-							schedulingRequirements.getPhysicalSlotResourceProfile(),
-							preferredLocations,
-							Collections.singletonList(schedulingRequirements.getPreviousAllocationId()),
-							allPreviousAllocationIds));
-				});
+						slotSharingGroupId,
+						schedulingRequirements.getCoLocationConstraint()),
+					SlotProfile.priorAllocation(
+						schedulingRequirements.getTaskResourceProfile(),
+						schedulingRequirements.getPhysicalSlotResourceProfile(),
+						preferredLocations,
+						Collections.singletonList(schedulingRequirements.getPreviousAllocationId()),
+						allPreviousAllocationIds)));
 
 			SlotExecutionVertexAssignment slotExecutionVertexAssignment =
 				new SlotExecutionVertexAssignment(executionVertexId, slotFuture);

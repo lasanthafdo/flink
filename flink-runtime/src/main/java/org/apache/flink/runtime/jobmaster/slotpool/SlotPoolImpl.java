@@ -425,10 +425,6 @@ public class SlotPoolImpl implements SlotPool {
 		final PendingRequest pendingRequest = PendingRequest.createStreamingRequest(
 			slotRequestId,
 			resourceProfile);
-		log.debug(
-			"Created pending request with target location {} from requested location {}",
-			pendingRequest.getResourceProfile().getResourceLocation(),
-			resourceProfile.getResourceLocation());
 		// register request timeout
 		FutureUtils
 			.orTimeout(

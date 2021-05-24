@@ -103,9 +103,9 @@ public class TaskDeploymentDescriptorFactory {
 			subtaskIndex,
 			attemptNumber,
 			targetSlotNumber,
-			executionPlacement.isTaskPerCore(),
+			executionPlacement != null && executionPlacement.isTaskPerCore(),
 			pinToCpu,
-			executionPlacement.getCpuId(),
+			executionPlacement != null ? executionPlacement.getCpuId() : -1,
 			taskRestore,
 			new ArrayList<>(producedPartitions),
 			createInputGateDeploymentDescriptors());

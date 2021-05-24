@@ -242,8 +242,6 @@ public class SchedulerImpl implements Scheduler {
 		if (allocationTimeout == null) {
 			return slotPool.requestNewAllocatedBatchSlot(slotRequestId, slotProfile.getPhysicalSlotResourceProfile());
 		} else {
-			log.debug("Requesting slot at {} for slot request id {}",
-				slotProfile.getPhysicalSlotResourceProfile().getResourceLocation(), slotRequestId);
 			return slotPool.requestNewAllocatedSlot(
 				slotRequestId,
 				slotProfile.getPhysicalSlotResourceProfile(),

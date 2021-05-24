@@ -785,12 +785,9 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 			}
 
 			if (LOG.isInfoEnabled()) {
-				if (getAssignedResourceLocation().address().getHostAddress()
-					.equals(vertex
-						.getExecutionPlacement()
-						.getTaskManagerLocation()
-						.address()
-						.getHostAddress())) {
+				if (vertex.getExecutionPlacement() == null || getAssignedResourceLocation()
+					.address().getHostAddress().equals(vertex.getExecutionPlacement()
+						.getTaskManagerLocation().address().getHostAddress())) {
 					LOG.info(String.format(
 						"Deploying %s (attempt #%d) to %s",
 						vertex.getTaskNameWithSubtaskIndex(),

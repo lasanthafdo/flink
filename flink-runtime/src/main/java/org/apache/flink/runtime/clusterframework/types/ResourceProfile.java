@@ -276,7 +276,11 @@ public class ResourceProfile implements Serializable {
 	}
 
 	public String getResourceLocation() {
-		return ((LocationResource) resourceLocation).getLocation();
+		if (resourceLocation != null) {
+			return ((LocationResource) resourceLocation).getLocation();
+		} else {
+			return null;
+		}
 	}
 
 	/**
